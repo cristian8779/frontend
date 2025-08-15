@@ -1,0 +1,80 @@
+name: crud
+description: "A new Flutter project."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.7.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  http: ^1.3.0
+  shared_preferences: ^2.5.2
+  provider: ^6.1.2
+  jwt_decoder: ^2.0.1
+  intl: ^0.20.2
+  image_picker: ^1.1.2
+  cached_network_image: ^3.4.1
+  app_links: ^6.4.0
+  google_sign_in: ^6.1.5
+  flutter_dotenv: ^5.2.1
+  pin_code_fields: ^8.0.0
+  local_auth: ^2.1.7
+  flutter_secure_storage: ^9.0.0
+  mime: ^1.0.4
+  shimmer: ^2.0.0
+  connectivity_plus: ^5.0.2 # O la versión más reciente
+  lottie: ^2.0.0
+  fluttertoast: ^8.0.9
+  carousel_slider: ^5.0.0 
+  palette_generator: ^0.3.3+3
+
+
+ 
+  
+
+
+
+
+
+
+
+
+
+
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.3
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/bola.png"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/bola.png"
+  remove_alpha_ios: true
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/icono.jpg
+    - assets/google.png
+    - assets/password.png
+    - assets/avatar.png
+    - assets/bienvenida.png
+    - assets/control.png
+    - assets/no hay.jpg
+    - assets/imagen.png
+    - assets/producto.png
+    - assets/venta.png
+    - assets/bola.png
+    - assets/caja.png
+    - assets/anuncio.png
+    - assets/animations/Success.json
+    - .env
