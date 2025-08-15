@@ -43,65 +43,124 @@ class ConfiguracionScreen extends StatelessWidget {
 
   const ConfiguracionScreen({Key? key, required this.rol}) : super(key: key);
 
+  // Función para obtener dimensiones responsivas
+  Map<String, double> _getResponsiveDimensions(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isTablet = screenWidth >= 768;
+    final isDesktop = screenWidth >= 1024;
+    
+    if (isDesktop) {
+      return {
+        'horizontalPadding': 32.0,
+        'maxWidth': 800.0,
+        'headerIconSize': 48.0,
+        'headerTitleSize': 28.0,
+        'headerSubtitleSize': 17.0,
+        'sectionTitleSize': 15.0,
+        'optionTitleSize': 19.0,
+        'optionSubtitleSize': 16.0,
+        'appBarTitleSize': 22.0,
+        'appBarIconSize': 22.0,
+      };
+    } else if (isTablet) {
+      return {
+        'horizontalPadding': 28.0,
+        'maxWidth': 600.0,
+        'headerIconSize': 44.0,
+        'headerTitleSize': 26.0,
+        'headerSubtitleSize': 16.0,
+        'sectionTitleSize': 14.0,
+        'optionTitleSize': 18.0,
+        'optionSubtitleSize': 15.0,
+        'appBarTitleSize': 21.0,
+        'appBarIconSize': 21.0,
+      };
+    } else {
+      return {
+        'horizontalPadding': 24.0,
+        'maxWidth': double.infinity,
+        'headerIconSize': 40.0,
+        'headerTitleSize': 24.0,
+        'headerSubtitleSize': 15.0,
+        'sectionTitleSize': 13.0,
+        'optionTitleSize': 17.0,
+        'optionSubtitleSize': 14.0,
+        'appBarTitleSize': 20.0,
+        'appBarIconSize': 20.0,
+      };
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final String rolNormalizado = rol.trim();
 
-    return Scaffold(
-      backgroundColor: backgroundColor,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildAppBar(context),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 24),
-                    _buildHeader(),
-                    const SizedBox(height: 40),
-                    
-                    // Sección de cuenta
-                    _buildSectionHeader("Mi Cuenta"),
-                    const SizedBox(height: 16),
-                    
-                    if (rolNormalizado == "admin" || rolNormalizado == "superAdmin")
-                      _buildPasswordOption(context),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final dimensions = _getResponsiveDimensions(context);
+        
+        return Scaffold(
+          backgroundColor: backgroundColor,
+          body: SafeArea(
+            child: Column(
+              children: [
+                _buildAppBar(context, dimensions),
+                Expanded(
+                  child: Center(
+                    child: Container(
+                      constraints: BoxConstraints(maxWidth: dimensions['maxWidth']!),
+                      child: SingleChildScrollView(
+                        padding: EdgeInsets.symmetric(horizontal: dimensions['horizontalPadding']!),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 24),
+                            _buildHeader(dimensions),
+                            const SizedBox(height: 40),
+                            
+                            // Sección de cuenta
+                            _buildSectionHeader("Mi Cuenta", dimensions),
+                            const SizedBox(height: 16),
+                            
+                            if (rolNormalizado == "admin" || rolNormalizado == "superAdmin")
+                              _buildPasswordOption(context, dimensions),
 
-                    // Opciones avanzadas solo para superAdmin
-                    if (rolNormalizado == "superAdmin") ...[
-                      const SizedBox(height: 32),
-                      _buildSectionHeader("Panel de Control"),
-                      const SizedBox(height: 16),
-                      _buildAdvancedOptions(context),
-                    ],
+                            // Opciones avanzadas solo para superAdmin
+                            if (rolNormalizado == "superAdmin") ...[
+                              const SizedBox(height: 32),
+                              _buildSectionHeader("Panel de Control", dimensions),
+                              const SizedBox(height: 16),
+                              _buildAdvancedOptions(context, dimensions),
+                            ],
 
-                    const SizedBox(height: 32),
-                    
-                    // Sección de sesión
-                    _buildSectionHeader("Sesión"),
-                    const SizedBox(height: 16),
-                    
-                    if (rolNormalizado == "admin" || rolNormalizado == "superAdmin")
-                      _buildLogoutOption(context),
+                            const SizedBox(height: 32),
+                            
+                            // Sección de sesión
+                            _buildSectionHeader("Sesión", dimensions),
+                            const SizedBox(height: 16),
+                            
+                            if (rolNormalizado == "admin" || rolNormalizado == "superAdmin")
+                              _buildLogoutOption(context, dimensions),
 
-                    const SizedBox(height: 40),
-                    _buildVersionInfo(),
-                    const SizedBox(height: 24),
-                  ],
+                            const SizedBox(height: 40),
+                            _buildVersionInfo(dimensions),
+                            const SizedBox(height: 24),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
 
-Widget _buildAppBar(BuildContext context) {
+Widget _buildAppBar(BuildContext context, Map<String, double> dimensions) {
   return Container(
     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
     decoration: BoxDecoration(
@@ -123,22 +182,22 @@ Widget _buildAppBar(BuildContext context) {
           ),
           child: IconButton(
             onPressed: () => Navigator.pop(context),
-            icon: const Icon(
+            icon: Icon(
               Icons.arrow_back_ios_new_rounded,
-              color: Color(0xFF374151),
+              color: const Color(0xFF374151),
+              size: dimensions['appBarIconSize']!,
             ),
-            iconSize: 20,
             padding: const EdgeInsets.all(8),
           ),
         ),
         const SizedBox(width: 16),
-        const Expanded(
+        Expanded(
           child: Text(
             'Configuración',
             style: TextStyle(
-              fontSize: 20,
+              fontSize: dimensions['appBarTitleSize']!,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF1A1A1A),
+              color: const Color(0xFF1A1A1A),
               letterSpacing: -0.5,
             ),
           ),
@@ -160,7 +219,7 @@ Widget _buildAppBar(BuildContext context) {
   );
 }
 
-Widget _buildHeader() {
+Widget _buildHeader(Map<String, double> dimensions) {
   return Container(
     width: double.infinity,
     padding: const EdgeInsets.all(28),
@@ -207,17 +266,17 @@ Widget _buildHeader() {
           ),
           child: Icon(
             Icons.manage_accounts_outlined,
-            size: 40,
+            size: dimensions['headerIconSize']!,
             color: primaryColor,
           ),
         ),
         const SizedBox(height: 20),
-        const Text(
+        Text(
           'Centro de Control',
           style: TextStyle(
-            fontSize: 24,
+            fontSize: dimensions['headerTitleSize']!,
             fontWeight: FontWeight.w800,
-            color: Color(0xFF1A1A1A),
+            color: const Color(0xFF1A1A1A),
             letterSpacing: -0.8,
           ),
         ),
@@ -225,7 +284,7 @@ Widget _buildHeader() {
         Text(
           'Administra tu cuenta y las configuraciones del sistema',
           style: TextStyle(
-            fontSize: 15,
+            fontSize: dimensions['headerSubtitleSize']!,
             color: textSecondary,
             fontWeight: FontWeight.w500,
             height: 1.4,
@@ -237,7 +296,7 @@ Widget _buildHeader() {
   );
 }
 
-Widget _buildSectionHeader(String title) {
+Widget _buildSectionHeader(String title, Map<String, double> dimensions) {
   return Container(
     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
     child: Row(
@@ -254,7 +313,7 @@ Widget _buildSectionHeader(String title) {
         Text(
           title.toUpperCase(),
           style: TextStyle(
-            fontSize: 13,
+            fontSize: dimensions['sectionTitleSize']!,
             color: textPrimary,
             fontWeight: FontWeight.w700,
             letterSpacing: 1.2,
@@ -265,7 +324,7 @@ Widget _buildSectionHeader(String title) {
   );
 }
 
-Widget _buildPasswordOption(BuildContext context) {
+Widget _buildPasswordOption(BuildContext context, Map<String, double> dimensions) {
   return _buildModernOption(
     icon: Icons.lock_outline_rounded,
     iconColor: const Color(0xFF3B82F6),
@@ -273,13 +332,14 @@ Widget _buildPasswordOption(BuildContext context) {
     title: "Cambiar contraseña",
     subtitle: "Actualiza tu contraseña de acceso",
     hasNewBadge: false,
+    dimensions: dimensions,
     onTap: () {
       Navigator.pushNamed(context, '/forgot');
     },
   );
 }
 
-Widget _buildAdvancedOptions(BuildContext context) {
+Widget _buildAdvancedOptions(BuildContext context, Map<String, double> dimensions) {
   return Column(
     children: [
       _buildModernOption(
@@ -289,6 +349,7 @@ Widget _buildAdvancedOptions(BuildContext context) {
         title: "Ver administradores",
         subtitle: "Gestionar usuarios administrativos",
         hasNewBadge: false,
+        dimensions: dimensions,
         onTap: () {
           Navigator.pushNamed(context, '/ver-admins');
         },
@@ -301,6 +362,7 @@ Widget _buildAdvancedOptions(BuildContext context) {
         title: "Invitar usuarios",
         subtitle: "Enviar invitaciones a nuevos miembros",
         hasNewBadge: true,
+        dimensions: dimensions,
         onTap: () {
           Navigator.pushNamed(context, '/invitaciones');
         },
@@ -309,7 +371,7 @@ Widget _buildAdvancedOptions(BuildContext context) {
   );
 }
 
-Widget _buildLogoutOption(BuildContext context) {
+Widget _buildLogoutOption(BuildContext context, Map<String, double> dimensions) {
   return _buildModernOption(
     icon: Icons.logout_rounded,
     iconColor: const Color(0xFFEF4444),
@@ -318,8 +380,9 @@ Widget _buildLogoutOption(BuildContext context) {
     subtitle: "Salir de tu cuenta actual",
     hasNewBadge: false,
     isDangerous: true,
+    dimensions: dimensions,
     onTap: () async {
-      final shouldLogout = await _showLogoutConfirmation(context);
+      final shouldLogout = await _showLogoutConfirmation(context, dimensions);
 
       if (shouldLogout == true) {
         final authProvider = Provider.of<AuthProvider>(context, listen: false);
@@ -335,7 +398,7 @@ Widget _buildLogoutOption(BuildContext context) {
   );
 }
 
-Future<bool?> _showLogoutConfirmation(BuildContext context) {
+Future<bool?> _showLogoutConfirmation(BuildContext context, Map<String, double> dimensions) {
   return showDialog<bool>(
     context: context,
     barrierDismissible: false,
@@ -358,21 +421,23 @@ Future<bool?> _showLogoutConfirmation(BuildContext context) {
             ),
           ),
           const SizedBox(width: 12),
-          const Text(
-            '¿Cerrar sesión?',
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 18,
-              color: Color(0xFF1A1A1A),
+          Flexible(
+            child: Text(
+              '¿Cerrar sesión?',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: dimensions['optionTitleSize']! - 1,
+                color: const Color(0xFF1A1A1A),
+              ),
             ),
           ),
         ],
       ),
-      content: const Text(
+      content: Text(
         'Tu sesión actual será cerrada y deberás iniciar sesión nuevamente para acceder al sistema.',
         style: TextStyle(
-          fontSize: 15,
-          color: Color(0xFF6B7280),
+          fontSize: dimensions['optionSubtitleSize']! + 1,
+          color: const Color(0xFF6B7280),
           height: 1.5,
         ),
       ),
@@ -388,7 +453,7 @@ Future<bool?> _showLogoutConfirmation(BuildContext context) {
             style: TextStyle(
               color: textSecondary,
               fontWeight: FontWeight.w600,
-              fontSize: 15,
+              fontSize: dimensions['optionSubtitleSize']! + 1,
             ),
           ),
         ),
@@ -402,11 +467,11 @@ Future<bool?> _showLogoutConfirmation(BuildContext context) {
             elevation: 0,
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           ),
-          child: const Text(
+          child: Text(
             'Cerrar sesión',
             style: TextStyle(
               fontWeight: FontWeight.w600,
-              fontSize: 15,
+              fontSize: dimensions['optionSubtitleSize']! + 1,
             ),
           ),
         ),
@@ -415,7 +480,7 @@ Future<bool?> _showLogoutConfirmation(BuildContext context) {
   );
 }
 
-Widget _buildVersionInfo() {
+Widget _buildVersionInfo(Map<String, double> dimensions) {
   return Center(
     child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
@@ -453,7 +518,7 @@ Widget _buildVersionInfo() {
               Text(
                 "Versión 1.0.0",
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: dimensions['optionSubtitleSize']!,
                   color: textPrimary,
                   fontWeight: FontWeight.w700,
                 ),
@@ -461,7 +526,7 @@ Widget _buildVersionInfo() {
               Text(
                 "Build 2024.08",
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: dimensions['optionSubtitleSize']! - 2,
                   color: textSecondary,
                   fontWeight: FontWeight.w500,
                 ),
@@ -481,6 +546,7 @@ Widget _buildModernOption({
   required String title,
   required String subtitle,
   required bool hasNewBadge,
+  required Map<String, double> dimensions,
   bool isDangerous = false,
   required VoidCallback onTap,
 }) {
@@ -536,7 +602,7 @@ Widget _buildModernOption({
                         child: Text(
                           title,
                           style: TextStyle(
-                            fontSize: 17,
+                            fontSize: dimensions['optionTitleSize']!,
                             fontWeight: FontWeight.w700,
                             color: textPrimary,
                             letterSpacing: -0.3,
@@ -567,7 +633,7 @@ Widget _buildModernOption({
                   Text(
                     subtitle,
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: dimensions['optionSubtitleSize']!,
                       color: textSecondary,
                       fontWeight: FontWeight.w500,
                       height: 1.3,

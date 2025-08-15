@@ -128,7 +128,7 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
               children: [
                 Icon(Icons.warning_amber_rounded, color: Colors.orange[600], size: 28),
                 const SizedBox(width: 12),
-                const Text('¿Descartar cambios?'),
+                const Flexible(child: Text('¿Descartar cambios?')),
               ],
             ),
             content: const Text(
@@ -231,7 +231,11 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
             : const Color(0xFF38A169),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
+        margin: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+        ),
         elevation: 8,
         duration: duration ?? Duration(seconds: isError ? 4 : 3),
         action: isError
@@ -246,56 +250,27 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
   }
 
   Future<void> seleccionarImagen() async {
-  HapticFeedback.lightImpact();
+    HapticFeedback.lightImpact();
 
-  final picker = ImagePicker();
-  try {
-    final pickedFile = await picker.pickImage(
-      source: ImageSource.gallery, // 📌 Directo a la galería
-      imageQuality: 85,
-      maxWidth: 1200,
-      maxHeight: 1200,
-    );
+    final picker = ImagePicker();
+    try {
+      final pickedFile = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+        maxWidth: 1200,
+        maxHeight: 1200,
+      );
 
-    if (pickedFile != null) {
-      setState(() {
-        imagenSeleccionada = File(pickedFile.path);
-        _hasUnsavedChanges = true;
-      });
-      HapticFeedback.mediumImpact();
+      if (pickedFile != null) {
+        setState(() {
+          imagenSeleccionada = File(pickedFile.path);
+          _hasUnsavedChanges = true;
+        });
+        HapticFeedback.mediumImpact();
+      }
+    } catch (e) {
+      _showSnackBar('Error al seleccionar imagen: $e', isError: true);
     }
-  } catch (e) {
-    _showSnackBar('Error al seleccionar imagen: $e', isError: true);
-  }
-}
-
-
-  Widget _buildImageSourceOption({
-    required IconData icon,
-    required String label,
-    required ImageSource source,
-  }) {
-    return InkWell(
-      onTap: () => Navigator.pop(context, source),
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          border: Border.all(color: const Color(0xFFE5E7EB)),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, size: 32, color: const Color(0xFF6366F1)),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: const TextStyle(fontWeight: FontWeight.w500),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   Future<void> actualizarProducto() async {
@@ -362,11 +337,27 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
     return null;
   }
 
+  // Función helper para obtener tamaños responsivos
+  double _getResponsiveSize(BuildContext context, double baseSize) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    if (screenWidth > 600) return baseSize * 1.2; // Tablets
+    if (screenWidth < 360) return baseSize * 0.9; // Pantallas pequeñas
+    return baseSize;
+  }
+
+  // Función helper para obtener padding responsivo
+  EdgeInsets _getResponsivePadding(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    if (screenWidth > 600) return const EdgeInsets.all(32); // Tablets
+    if (screenWidth < 360) return const EdgeInsets.all(12); // Pantallas pequeñas
+    return const EdgeInsets.all(20); // Por defecto
+  }
+
   Widget _buildSectionHeader(String title, IconData icon) {
     return SlideTransition(
       position: _slideAnimation,
       child: Container(
-        margin: const EdgeInsets.only(top: 32, bottom: 16),
+        margin: const EdgeInsets.only(top: 24, bottom: 16),
         child: Row(
           children: [
             Container(
@@ -378,20 +369,22 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
               child: Icon(
                 icon,
                 color: const Color(0xFF6366F1),
-                size: 20,
+                size: _getResponsiveSize(context, 20),
               ),
             ),
-            const SizedBox(width: 12),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF1F2937),
-                letterSpacing: -0.5,
+            SizedBox(width: _getResponsiveSize(context, 12)),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontSize: _getResponsiveSize(context, 18),
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF1F2937),
+                  letterSpacing: -0.5,
+                ),
               ),
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: _getResponsiveSize(context, 12)),
             Expanded(
               child: Container(
                 height: 1,
@@ -423,28 +416,34 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
     FocusNode? nextFocus,
   }) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
+      margin: EdgeInsets.only(bottom: _getResponsiveSize(context, 20)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF374151),
+              Flexible(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: _getResponsiveSize(context, 14),
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF374151),
+                  ),
                 ),
               ),
               if (obligatorio)
-                const Text(
+                Text(
                   ' *',
-                  style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    color: const Color(0xFFEF4444),
+                    fontWeight: FontWeight.w600,
+                    fontSize: _getResponsiveSize(context, 14),
+                  ),
                 ),
             ],
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: _getResponsiveSize(context, 8)),
           TextFormField(
             controller: controller,
             focusNode: focusNode,
@@ -466,17 +465,29 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
               label,
               isNumeric: tipo == TextInputType.number,
             ),
+            style: TextStyle(fontSize: _getResponsiveSize(context, 16)),
             decoration: InputDecoration(
               hintText: hint,
+              hintStyle: TextStyle(fontSize: _getResponsiveSize(context, 14)),
               prefixIcon: icon != null
                   ? Padding(
-                      padding: const EdgeInsets.only(left: 16, right: 12),
-                      child: Icon(icon, color: const Color(0xFF9CA3AF), size: 20),
+                      padding: EdgeInsets.only(
+                        left: _getResponsiveSize(context, 16),
+                        right: _getResponsiveSize(context, 12),
+                      ),
+                      child: Icon(
+                        icon,
+                        color: const Color(0xFF9CA3AF),
+                        size: _getResponsiveSize(context, 20),
+                      ),
                     )
                   : null,
               suffixIcon: controller.text.isNotEmpty
                   ? IconButton(
-                      icon: const Icon(Icons.clear, size: 20),
+                      icon: Icon(
+                        Icons.clear,
+                        size: _getResponsiveSize(context, 20),
+                      ),
                       onPressed: () {
                         controller.clear();
                         _onFieldChanged();
@@ -486,7 +497,10 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
                   : null,
               filled: true,
               fillColor: Colors.white,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: _getResponsiveSize(context, 16),
+                vertical: _getResponsiveSize(context, 16),
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
@@ -524,28 +538,34 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
     String? hint,
   }) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
+      margin: EdgeInsets.only(bottom: _getResponsiveSize(context, 20)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF374151),
+              Flexible(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: _getResponsiveSize(context, 14),
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF374151),
+                  ),
                 ),
               ),
               if (obligatorio)
-                const Text(
+                Text(
                   ' *',
-                  style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    color: const Color(0xFFEF4444),
+                    fontWeight: FontWeight.w600,
+                    fontSize: _getResponsiveSize(context, 14),
+                  ),
                 ),
             ],
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: _getResponsiveSize(context, 8)),
           DropdownButtonFormField<T>(
             value: value,
             items: items,
@@ -554,17 +574,29 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
               setState(() => _hasUnsavedChanges = true);
             },
             validator: (val) => obligatorio && val == null ? 'Campo obligatorio' : null,
+            style: TextStyle(fontSize: _getResponsiveSize(context, 16), color: Colors.black),
             decoration: InputDecoration(
               hintText: hint,
+              hintStyle: TextStyle(fontSize: _getResponsiveSize(context, 14)),
               prefixIcon: icon != null
                   ? Padding(
-                      padding: const EdgeInsets.only(left: 16, right: 12),
-                      child: Icon(icon, color: const Color(0xFF9CA3AF), size: 20),
+                      padding: EdgeInsets.only(
+                        left: _getResponsiveSize(context, 16),
+                        right: _getResponsiveSize(context, 12),
+                      ),
+                      child: Icon(
+                        icon,
+                        color: const Color(0xFF9CA3AF),
+                        size: _getResponsiveSize(context, 20),
+                      ),
                     )
                   : null,
               filled: true,
               fillColor: Colors.white,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: _getResponsiveSize(context, 16),
+                vertical: _getResponsiveSize(context, 16),
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
@@ -586,27 +618,33 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
 
   Widget _buildCategorySelector() {
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
+      margin: EdgeInsets.only(bottom: _getResponsiveSize(context, 20)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Text(
-                'Categoría',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF374151),
+              Flexible(
+                child: Text(
+                  'Categoría',
+                  style: TextStyle(
+                    fontSize: _getResponsiveSize(context, 14),
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF374151),
+                  ),
                 ),
               ),
-              const Text(
+              Text(
                 ' *',
-                style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  color: const Color(0xFFEF4444),
+                  fontWeight: FontWeight.w600,
+                  fontSize: _getResponsiveSize(context, 14),
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: _getResponsiveSize(context, 8)),
           Container(
             decoration: BoxDecoration(
               color: Colors.white,
@@ -615,41 +653,61 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
             ),
             child: _isLoadingCategories
                 ? Container(
-                    padding: const EdgeInsets.all(20),
+                    padding: EdgeInsets.all(_getResponsiveSize(context, 20)),
                     child: Row(
                       children: [
                         SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
+                          width: _getResponsiveSize(context, 20),
+                          height: _getResponsiveSize(context, 20),
+                          child: const CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: const Color(0xFF6366F1),
+                            color: Color(0xFF6366F1),
                           ),
                         ),
-                        const SizedBox(width: 16),
-                        const Text('Cargando categorías...'),
+                        SizedBox(width: _getResponsiveSize(context, 16)),
+                        Flexible(
+                          child: Text(
+                            'Cargando categorías...',
+                            style: TextStyle(fontSize: _getResponsiveSize(context, 14)),
+                          ),
+                        ),
                       ],
                     ),
                   )
                 : _categoryError != null
                     ? Container(
-                        padding: const EdgeInsets.all(20),
+                        padding: EdgeInsets.all(_getResponsiveSize(context, 20)),
                         child: Column(
                           children: [
                             Row(
                               children: [
-                                const Icon(Icons.error_outline, color: Color(0xFFEF4444)),
-                                const SizedBox(width: 12),
-                                Expanded(child: Text(_categoryError!)),
+                                Icon(
+                                  Icons.error_outline,
+                                  color: const Color(0xFFEF4444),
+                                  size: _getResponsiveSize(context, 20),
+                                ),
+                                SizedBox(width: _getResponsiveSize(context, 12)),
+                                Expanded(
+                                  child: Text(
+                                    _categoryError!,
+                                    style: TextStyle(fontSize: _getResponsiveSize(context, 14)),
+                                  ),
+                                ),
                               ],
                             ),
-                            const SizedBox(height: 12),
+                            SizedBox(height: _getResponsiveSize(context, 12)),
                             SizedBox(
                               width: double.infinity,
                               child: TextButton.icon(
                                 onPressed: _cargarProducto,
-                                icon: const Icon(Icons.refresh),
-                                label: const Text('Reintentar'),
+                                icon: Icon(
+                                  Icons.refresh,
+                                  size: _getResponsiveSize(context, 18),
+                                ),
+                                label: Text(
+                                  'Reintentar',
+                                  style: TextStyle(fontSize: _getResponsiveSize(context, 14)),
+                                ),
                               ),
                             ),
                           ],
@@ -657,24 +715,42 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
                       )
                     : DropdownButtonFormField<Map<String, dynamic>>(
                         value: categoriaSeleccionada,
+                        style: TextStyle(
+                          fontSize: _getResponsiveSize(context, 16),
+                          color: Colors.black,
+                        ),
                         decoration: InputDecoration(
-                          prefixIcon: const Padding(
-                            padding: EdgeInsets.only(left: 16, right: 12),
-                            child: Icon(Icons.category_outlined, color: Color(0xFF9CA3AF), size: 20),
+                          prefixIcon: Padding(
+                            padding: EdgeInsets.only(
+                              left: _getResponsiveSize(context, 16),
+                              right: _getResponsiveSize(context, 12),
+                            ),
+                            child: Icon(
+                              Icons.category_outlined,
+                              color: const Color(0xFF9CA3AF),
+                              size: _getResponsiveSize(context, 20),
+                            ),
                           ),
                           hintText: 'Seleccionar categoría',
+                          hintStyle: TextStyle(fontSize: _getResponsiveSize(context, 14)),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide.none,
                           ),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: _getResponsiveSize(context, 16),
+                            vertical: _getResponsiveSize(context, 16),
+                          ),
                           filled: true,
                           fillColor: Colors.white,
                         ),
                         items: categorias.map((cat) {
                           return DropdownMenuItem<Map<String, dynamic>>(
                             value: cat,
-                            child: Text(cat['nombre']),
+                            child: Text(
+                              cat['nombre'],
+                              style: TextStyle(fontSize: _getResponsiveSize(context, 16)),
+                            ),
                           );
                         }).toList(),
                         onChanged: (val) {
@@ -693,41 +769,51 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
   }
 
   Widget _buildImageSelector() {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final imageHeight = _showPreview ? screenHeight * 0.3 : screenHeight * 0.2;
+    
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
+      margin: EdgeInsets.only(bottom: _getResponsiveSize(context, 20)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Text(
-                'Imagen del producto',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF374151),
+              Expanded(
+                child: Text(
+                  'Imagen del producto',
+                  style: TextStyle(
+                    fontSize: _getResponsiveSize(context, 14),
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF374151),
+                  ),
                 ),
               ),
-              const Spacer(),
               if (imagenSeleccionada != null || producto?['imagen'] != null)
                 TextButton.icon(
                   onPressed: () {
                     setState(() => _showPreview = !_showPreview);
                   },
-                  icon: Icon(_showPreview ? Icons.visibility_off : Icons.visibility),
-                  label: Text(_showPreview ? 'Ocultar' : 'Vista previa'),
+                  icon: Icon(
+                    _showPreview ? Icons.visibility_off : Icons.visibility,
+                    size: _getResponsiveSize(context, 18),
+                  ),
+                  label: Text(
+                    _showPreview ? 'Ocultar' : 'Vista previa',
+                    style: TextStyle(fontSize: _getResponsiveSize(context, 12)),
+                  ),
                   style: TextButton.styleFrom(
                     foregroundColor: const Color(0xFF6366F1),
                   ),
                 ),
             ],
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: _getResponsiveSize(context, 8)),
           GestureDetector(
             onTap: seleccionarImagen,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 300),
-              height: _showPreview ? 300 : 200,
+              height: imageHeight.clamp(150.0, 400.0),
               width: double.infinity,
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -765,13 +851,20 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
                               );
                             },
                             errorBuilder: (context, error, stackTrace) {
-                              return const Center(
+                              return Center(
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Icon(Icons.error_outline, size: 40, color: Color(0xFFEF4444)),
-                                    SizedBox(height: 8),
-                                    Text('Error cargando imagen'),
+                                    Icon(
+                                      Icons.error_outline,
+                                      size: _getResponsiveSize(context, 40),
+                                      color: const Color(0xFFEF4444),
+                                    ),
+                                    SizedBox(height: _getResponsiveSize(context, 8)),
+                                    Text(
+                                      'Error cargando imagen',
+                                      style: TextStyle(fontSize: _getResponsiveSize(context, 14)),
+                                    ),
                                   ],
                                 ),
                               );
@@ -798,8 +891,8 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
           ),
         ),
         Positioned(
-          top: 12,
-          right: 12,
+          top: _getResponsiveSize(context, 12),
+          right: _getResponsiveSize(context, 12),
           child: Container(
             decoration: BoxDecoration(
               color: Colors.black.withOpacity(0.7),
@@ -809,12 +902,23 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
               mainAxisSize: MainAxisSize.min,
               children: [
                 IconButton(
-                  icon: const Icon(Icons.edit, color: Colors.white, size: 16),
+                  icon: Icon(
+                    Icons.edit,
+                    color: Colors.white,
+                    size: _getResponsiveSize(context, 16),
+                  ),
                   onPressed: seleccionarImagen,
-                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  constraints: BoxConstraints(
+                    minWidth: _getResponsiveSize(context, 32),
+                    minHeight: _getResponsiveSize(context, 32),
+                  ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.white, size: 16),
+                  icon: Icon(
+                    Icons.delete,
+                    color: Colors.white,
+                    size: _getResponsiveSize(context, 16),
+                  ),
                   onPressed: () {
                     setState(() {
                       imagenSeleccionada = null;
@@ -822,20 +926,22 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
                     });
                     HapticFeedback.lightImpact();
                   },
-                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  constraints: BoxConstraints(
+                    minWidth: _getResponsiveSize(context, 32),
+                    minHeight: _getResponsiveSize(context, 32),
+                  ),
                 ),
               ],
             ),
           ),
         ),
-        // Overlay con información de la imagen
         if (_showPreview)
           Positioned(
-            bottom: 12,
-            left: 12,
-            right: 12,
+            bottom: _getResponsiveSize(context, 12),
+            left: _getResponsiveSize(context, 12),
+            right: _getResponsiveSize(context, 12),
             child: Container(
-              padding: const EdgeInsets.all(12),
+              padding: EdgeInsets.all(_getResponsiveSize(context, 12)),
               decoration: BoxDecoration(
                 color: Colors.black.withOpacity(0.7),
                 borderRadius: BorderRadius.circular(8),
@@ -844,9 +950,9 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
                 imagenSeleccionada != null
                     ? 'Imagen nueva seleccionada'
                     : 'Imagen actual del producto',
-                style: const TextStyle(
+                style: TextStyle(
                   color: Colors.white,
-                  fontSize: 12,
+                  fontSize: _getResponsiveSize(context, 12),
                   fontWeight: FontWeight.w500,
                 ),
                 textAlign: TextAlign.center,
@@ -862,41 +968,44 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Container(
-          padding: const EdgeInsets.all(20),
+          padding: EdgeInsets.all(_getResponsiveSize(context, 20)),
           decoration: BoxDecoration(
             color: const Color(0xFF6366F1).withOpacity(0.1),
             shape: BoxShape.circle,
           ),
-          child: const Icon(
+          child: Icon(
             Icons.cloud_upload_outlined,
-            size: 40,
-            color: Color(0xFF6366F1),
+            size: _getResponsiveSize(context, 40),
+            color: const Color(0xFF6366F1),
           ),
         ),
-        const SizedBox(height: 16),
-        const Text(
+        SizedBox(height: _getResponsiveSize(context, 16)),
+        Text(
           'Seleccionar imagen',
           style: TextStyle(
-            fontSize: 16,
+            fontSize: _getResponsiveSize(context, 16),
             fontWeight: FontWeight.w600,
-            color: Color(0xFF374151),
+            color: const Color(0xFF374151),
           ),
         ),
-        const SizedBox(height: 4),
-        const Text(
-          'Toca para cambiar o seleccionar nueva imagen',
-          style: TextStyle(
-            fontSize: 14,
-            color: Color(0xFF6B7280),
+        SizedBox(height: _getResponsiveSize(context, 4)),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: _getResponsiveSize(context, 16)),
+          child: Text(
+            'Toca para cambiar o seleccionar nueva imagen',
+            style: TextStyle(
+              fontSize: _getResponsiveSize(context, 14),
+              color: const Color(0xFF6B7280),
+            ),
+            textAlign: TextAlign.center,
           ),
-          textAlign: TextAlign.center,
         ),
-        const SizedBox(height: 8),
-        const Text(
+        SizedBox(height: _getResponsiveSize(context, 8)),
+        Text(
           'PNG, JPG hasta 5MB',
           style: TextStyle(
-            fontSize: 12,
-            color: Color(0xFF9CA3AF),
+            fontSize: _getResponsiveSize(context, 12),
+            color: const Color(0xFF9CA3AF),
           ),
         ),
       ],
@@ -905,13 +1014,13 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
 
   Widget _buildStatusSwitch() {
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
+      margin: EdgeInsets.only(bottom: _getResponsiveSize(context, 20)),
       child: Material(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         elevation: 0,
         child: Container(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(_getResponsiveSize(context, 16)),
           decoration: BoxDecoration(
             border: Border.all(color: const Color(0xFFE5E7EB)),
             borderRadius: BorderRadius.circular(12),
@@ -920,7 +1029,7 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
             children: [
               AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
-                padding: const EdgeInsets.all(8),
+                padding: EdgeInsets.all(_getResponsiveSize(context, 8)),
                 decoration: BoxDecoration(
                   color: (disponible ? const Color(0xFF10B981) : const Color(0xFFEF4444))
                       .withOpacity(0.1),
@@ -929,20 +1038,20 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
                 child: Icon(
                   disponible ? Icons.check_circle_outline : Icons.cancel_outlined,
                   color: disponible ? const Color(0xFF10B981) : const Color(0xFFEF4444),
-                  size: 24,
+                  size: _getResponsiveSize(context, 24),
                 ),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: _getResponsiveSize(context, 12)),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Disponibilidad del producto',
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: _getResponsiveSize(context, 14),
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF374151),
+                        color: const Color(0xFF374151),
                       ),
                     ),
                     Text(
@@ -950,7 +1059,7 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
                           ? 'Producto disponible para venta' 
                           : 'Producto no disponible para venta',
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: _getResponsiveSize(context, 12),
                         color: const Color(0xFF6B7280),
                       ),
                     ),
@@ -982,8 +1091,8 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
 
   Widget _buildQuickStats() {
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      padding: const EdgeInsets.all(16),
+      margin: EdgeInsets.only(bottom: _getResponsiveSize(context, 20)),
+      padding: EdgeInsets.all(_getResponsiveSize(context, 16)),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -992,35 +1101,72 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Resumen del producto',
             style: TextStyle(
-              fontSize: 14,
+              fontSize: _getResponsiveSize(context, 14),
               fontWeight: FontWeight.w600,
-              color: Color(0xFF374151),
+              color: const Color(0xFF374151),
             ),
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _buildStatItem(
-                'Estado',
-                estadoSeleccionado?.toUpperCase() ?? 'NO DEFINIDO',
-                estadoSeleccionado == 'activo' ? Colors.green : Colors.orange,
-              ),
-              const SizedBox(width: 16),
-              _buildStatItem(
-                'Disponible',
-                disponible ? 'SÍ' : 'NO',
-                disponible ? Colors.green : Colors.red,
-              ),
-              const SizedBox(width: 16),
-              _buildStatItem(
-                'Stock',
-                stockController.text.isEmpty ? '0' : stockController.text,
-                Colors.blue,
-              ),
-            ],
+          SizedBox(height: _getResponsiveSize(context, 12)),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth > 400) {
+                return Row(
+                  children: [
+                    _buildStatItem(
+                      'Estado',
+                      estadoSeleccionado?.toUpperCase() ?? 'NO DEFINIDO',
+                      estadoSeleccionado == 'activo' ? Colors.green : Colors.orange,
+                    ),
+                    SizedBox(width: _getResponsiveSize(context, 16)),
+                    _buildStatItem(
+                      'Disponible',
+                      disponible ? 'SÍ' : 'NO',
+                      disponible ? Colors.green : Colors.red,
+                    ),
+                    SizedBox(width: _getResponsiveSize(context, 16)),
+                    _buildStatItem(
+                      'Stock',
+                      stockController.text.isEmpty ? '0' : stockController.text,
+                      Colors.blue,
+                    ),
+                  ],
+                );
+              } else {
+                return Column(
+                  children: [
+                    Row(
+                      children: [
+                        _buildStatItem(
+                          'Estado',
+                          estadoSeleccionado?.toUpperCase() ?? 'NO DEFINIDO',
+                          estadoSeleccionado == 'activo' ? Colors.green : Colors.orange,
+                        ),
+                        SizedBox(width: _getResponsiveSize(context, 16)),
+                        _buildStatItem(
+                          'Disponible',
+                          disponible ? 'SÍ' : 'NO',
+                          disponible ? Colors.green : Colors.red,
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: _getResponsiveSize(context, 12)),
+                    Row(
+                      children: [
+                        _buildStatItem(
+                          'Stock',
+                          stockController.text.isEmpty ? '0' : stockController.text,
+                          Colors.blue,
+                        ),
+                        const Spacer(),
+                      ],
+                    ),
+                  ],
+                );
+              }
+            },
           ),
         ],
       ),
@@ -1034,14 +1180,17 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
         children: [
           Text(
             label,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Color(0xFF6B7280),
+            style: TextStyle(
+              fontSize: _getResponsiveSize(context, 12),
+              color: const Color(0xFF6B7280),
             ),
           ),
-          const SizedBox(height: 4),
+          SizedBox(height: _getResponsiveSize(context, 4)),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: EdgeInsets.symmetric(
+              horizontal: _getResponsiveSize(context, 8),
+              vertical: _getResponsiveSize(context, 4),
+            ),
             decoration: BoxDecoration(
               color: color.withOpacity(0.1),
               borderRadius: BorderRadius.circular(6),
@@ -1049,7 +1198,7 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
             child: Text(
               value,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: _getResponsiveSize(context, 12),
                 fontWeight: FontWeight.w600,
                 color: color,
               ),
@@ -1063,12 +1212,14 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
   Widget _buildActionButtons() {
     return Column(
       children: [
-        // Botón principal de actualizar
         Container(
-          margin: const EdgeInsets.only(top: 20, bottom: 12),
+          margin: EdgeInsets.only(
+            top: _getResponsiveSize(context, 20),
+            bottom: _getResponsiveSize(context, 12),
+          ),
           child: SizedBox(
             width: double.infinity,
-            height: 56,
+            height: _getResponsiveSize(context, 56),
             child: AnimatedBuilder(
               animation: _pulseAnimation,
               builder: (context, child) {
@@ -1091,28 +1242,37 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
+                                width: _getResponsiveSize(context, 20),
+                                height: _getResponsiveSize(context, 20),
+                                child: const CircularProgressIndicator(
                                   strokeWidth: 2.5,
                                   valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                 ),
                               ),
-                              const SizedBox(width: 16),
-                              const Text(
+                              SizedBox(width: _getResponsiveSize(context, 16)),
+                              Text(
                                 'Actualizando producto...',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                                style: TextStyle(
+                                  fontSize: _getResponsiveSize(context, 16),
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ],
                           )
                         : Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Icon(Icons.save_outlined, size: 22),
-                              const SizedBox(width: 12),
-                              const Text(
+                              Icon(
+                                Icons.save_outlined,
+                                size: _getResponsiveSize(context, 22),
+                              ),
+                              SizedBox(width: _getResponsiveSize(context, 12)),
+                              Text(
                                 'Actualizar Producto',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                                style: TextStyle(
+                                  fontSize: _getResponsiveSize(context, 16),
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ],
                           ),
@@ -1122,8 +1282,6 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
             ),
           ),
         ),
-        
-        // Botón secundario para resetear cambios
         if (_hasUnsavedChanges)
           SizedBox(
             width: double.infinity,
@@ -1153,14 +1311,20 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
                 );
                 
                 if (confirm == true) {
-                  _cargarProducto(); // Recargar datos originales
+                  _cargarProducto();
                 }
               },
-              icon: const Icon(Icons.refresh_outlined),
-              label: const Text('Descartar cambios'),
+              icon: Icon(
+                Icons.refresh_outlined,
+                size: _getResponsiveSize(context, 18),
+              ),
+              label: Text(
+                'Descartar cambios',
+                style: TextStyle(fontSize: _getResponsiveSize(context, 14)),
+              ),
               style: TextButton.styleFrom(
                 foregroundColor: Colors.orange[600],
-                padding: const EdgeInsets.symmetric(vertical: 12),
+                padding: EdgeInsets.symmetric(vertical: _getResponsiveSize(context, 12)),
               ),
             ),
           ),
@@ -1172,11 +1336,11 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           'Editar Producto',
           style: TextStyle(
             fontWeight: FontWeight.w700,
-            fontSize: 20,
+            fontSize: _getResponsiveSize(context, 20),
             letterSpacing: -0.5,
           ),
         ),
@@ -1192,42 +1356,48 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
           ),
         ),
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: const Color(0xFF6366F1).withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Center(
-                child: CircularProgressIndicator(
-                  color: Color(0xFF6366F1),
-                  strokeWidth: 3,
+      body: SafeArea(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: _getResponsiveSize(context, 80),
+                height: _getResponsiveSize(context, 80),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6366F1).withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: CircularProgressIndicator(
+                    color: const Color(0xFF6366F1),
+                    strokeWidth: _getResponsiveSize(context, 3),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'Cargando producto...',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF374151),
+              SizedBox(height: _getResponsiveSize(context, 24)),
+              Text(
+                'Cargando producto...',
+                style: TextStyle(
+                  fontSize: _getResponsiveSize(context, 18),
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF374151),
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Obteniendo información del producto',
-              style: TextStyle(
-                fontSize: 14,
-                color: Color(0xFF6B7280),
+              SizedBox(height: _getResponsiveSize(context, 8)),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: _getResponsiveSize(context, 32)),
+                child: Text(
+                  'Obteniendo información del producto',
+                  style: TextStyle(
+                    fontSize: _getResponsiveSize(context, 14),
+                    color: const Color(0xFF6B7280),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1244,11 +1414,11 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
       child: Scaffold(
         backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
-          title: const Text(
+          title: Text(
             'Editar Producto',
             style: TextStyle(
               fontWeight: FontWeight.w700,
-              fontSize: 20,
+              fontSize: _getResponsiveSize(context, 20),
               letterSpacing: -0.5,
             ),
           ),
@@ -1266,8 +1436,11 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
           actions: [
             if (_hasUnsavedChanges)
               Container(
-                margin: const EdgeInsets.only(right: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                margin: EdgeInsets.only(right: _getResponsiveSize(context, 8)),
+                padding: EdgeInsets.symmetric(
+                  horizontal: _getResponsiveSize(context, 8),
+                  vertical: _getResponsiveSize(context, 4),
+                ),
                 decoration: BoxDecoration(
                   color: Colors.orange.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
@@ -1278,13 +1451,13 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
                     Icon(
                       Icons.circle,
                       color: Colors.orange,
-                      size: 8,
+                      size: _getResponsiveSize(context, 8),
                     ),
-                    const SizedBox(width: 4),
-                    const Text(
+                    SizedBox(width: _getResponsiveSize(context, 4)),
+                    Text(
                       'Sin guardar',
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: _getResponsiveSize(context, 12),
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -1293,29 +1466,44 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
               ),
             IconButton(
               onPressed: () {
-                // Mostrar ayuda o información
                 showDialog(
                   context: context,
                   builder: (context) => AlertDialog(
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    title: const Row(
+                    title: Row(
                       children: [
-                        Icon(Icons.help_outline, color: Color(0xFF6366F1)),
-                        SizedBox(width: 12),
-                        Text('Ayuda'),
+                        Icon(
+                          Icons.help_outline,
+                          color: const Color(0xFF6366F1),
+                          size: _getResponsiveSize(context, 24),
+                        ),
+                        SizedBox(width: _getResponsiveSize(context, 12)),
+                        const Flexible(child: Text('Ayuda')),
                       ],
                     ),
-                    content: const Column(
+                    content: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('• Todos los campos marcados con * son obligatorios'),
-                        SizedBox(height: 8),
-                        Text('• La imagen es opcional pero recomendada'),
-                        SizedBox(height: 8),
-                        Text('• El precio debe ser mayor a 0'),
-                        SizedBox(height: 8),
-                        Text('• Los cambios se guardan automáticamente como borrador'),
+                        Text(
+                          '• Todos los campos marcados con * son obligatorios',
+                          style: TextStyle(fontSize: _getResponsiveSize(context, 14)),
+                        ),
+                        SizedBox(height: _getResponsiveSize(context, 8)),
+                        Text(
+                          '• La imagen es opcional pero recomendada',
+                          style: TextStyle(fontSize: _getResponsiveSize(context, 14)),
+                        ),
+                        SizedBox(height: _getResponsiveSize(context, 8)),
+                        Text(
+                          '• El precio debe ser mayor a 0',
+                          style: TextStyle(fontSize: _getResponsiveSize(context, 14)),
+                        ),
+                        SizedBox(height: _getResponsiveSize(context, 8)),
+                        Text(
+                          '• Los cambios se detectan automáticamente',
+                          style: TextStyle(fontSize: _getResponsiveSize(context, 14)),
+                        ),
                       ],
                     ),
                     actions: [
@@ -1327,116 +1515,120 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
                   ),
                 );
               },
-              icon: const Icon(Icons.help_outline),
+              icon: Icon(
+                Icons.help_outline,
+                size: _getResponsiveSize(context, 24),
+              ),
             ),
           ],
         ),
-        body: Form(
-          key: _formKey,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildSectionHeader('Información Básica', Icons.info_outline),
-                
-                _buildImageSelector(),
-                
-                _buildTextField(
-                  label: 'Nombre del producto',
-                  controller: nombreController,
-                  focusNode: nombreFocus,
-                  icon: Icons.inventory_2_outlined,
-                  hint: 'Ej: Camiseta básica de algodón',
-                  nextFocus: descripcionFocus,
-                ),
-                
-                _buildTextField(
-                  label: 'Descripción',
-                  controller: descripcionController,
-                  focusNode: descripcionFocus,
-                  icon: Icons.description_outlined,
-                  maxLines: 3,
-                  hint: 'Describe las características, materiales, etc...',
-                  nextFocus: precioFocus,
-                ),
-                
-                _buildCategorySelector(),
-                
-                _buildDropdownField<String>(
-                  label: 'Subcategoría',
-                  value: subcategoriaSeleccionada,
-                  items: subcategorias
-                      .map((sub) => DropdownMenuItem<String>(
-                            value: sub.toLowerCase(),
-                            child: Text(sub),
-                          ))
-                      .toList(),
-                  onChanged: (val) => setState(() => subcategoriaSeleccionada = val),
-                  icon: Icons.category,
-                  hint: 'Seleccionar subcategoría',
-                ),
-                
-                _buildSectionHeader('Información Comercial', Icons.attach_money_outlined),
-                
-                _buildTextField(
-                  label: 'Precio',
-                  controller: precioController,
-                  focusNode: precioFocus,
-                  icon: Icons.payments_outlined,
-                  tipo: TextInputType.number,
-                  hint: 'Ej: 25000',
-                  nextFocus: stockFocus,
-                ),
-                
-                _buildTextField(
-                  label: 'Stock disponible',
-                  controller: stockController,
-                  focusNode: stockFocus,
-                  icon: Icons.inventory_outlined,
-                  tipo: TextInputType.number,
-                  obligatorio: false,
-                  hint: 'Cantidad disponible (opcional)',
-                ),
-                
-                _buildSectionHeader('Configuración', Icons.settings_outlined),
-                
-                _buildQuickStats(),
-                
-                _buildStatusSwitch(),
-                
-                _buildDropdownField<String>(
-                  label: 'Estado del producto',
-                  value: estadoSeleccionado,
-                  items: estados
-                      .map((e) => DropdownMenuItem<String>(
-                            value: e,
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 8,
-                                  height: 8,
-                                  decoration: BoxDecoration(
-                                    color: e == 'activo' ? Colors.green : Colors.orange,
-                                    shape: BoxShape.circle,
+        body: SafeArea(
+          child: Form(
+            key: _formKey,
+            child: SingleChildScrollView(
+              padding: _getResponsivePadding(context),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSectionHeader('Información Básica', Icons.info_outline),
+                  
+                  _buildImageSelector(),
+                  
+                  _buildTextField(
+                    label: 'Nombre del producto',
+                    controller: nombreController,
+                    focusNode: nombreFocus,
+                    icon: Icons.inventory_2_outlined,
+                    hint: 'Ej: Camiseta básica de algodón',
+                    nextFocus: descripcionFocus,
+                  ),
+                  
+                  _buildTextField(
+                    label: 'Descripción',
+                    controller: descripcionController,
+                    focusNode: descripcionFocus,
+                    icon: Icons.description_outlined,
+                    maxLines: 3,
+                    hint: 'Describe las características, materiales, etc...',
+                    nextFocus: precioFocus,
+                  ),
+                  
+                  _buildCategorySelector(),
+                  
+                  _buildDropdownField<String>(
+                    label: 'Subcategoría',
+                    value: subcategoriaSeleccionada,
+                    items: subcategorias
+                        .map((sub) => DropdownMenuItem<String>(
+                              value: sub.toLowerCase(),
+                              child: Text(sub),
+                            ))
+                        .toList(),
+                    onChanged: (val) => setState(() => subcategoriaSeleccionada = val),
+                    icon: Icons.category,
+                    hint: 'Seleccionar subcategoría',
+                  ),
+                  
+                  _buildSectionHeader('Información Comercial', Icons.attach_money_outlined),
+                  
+                  _buildTextField(
+                    label: 'Precio',
+                    controller: precioController,
+                    focusNode: precioFocus,
+                    icon: Icons.payments_outlined,
+                    tipo: TextInputType.number,
+                    hint: 'Ej: 25000',
+                    nextFocus: stockFocus,
+                  ),
+                  
+                  _buildTextField(
+                    label: 'Stock disponible',
+                    controller: stockController,
+                    focusNode: stockFocus,
+                    icon: Icons.inventory_outlined,
+                    tipo: TextInputType.number,
+                    obligatorio: false,
+                    hint: 'Cantidad disponible (opcional)',
+                  ),
+                  
+                  _buildSectionHeader('Configuración', Icons.settings_outlined),
+                  
+                  _buildQuickStats(),
+                  
+                  _buildStatusSwitch(),
+                  
+                  _buildDropdownField<String>(
+                    label: 'Estado del producto',
+                    value: estadoSeleccionado,
+                    items: estados
+                        .map((e) => DropdownMenuItem<String>(
+                              value: e,
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: _getResponsiveSize(context, 8),
+                                    height: _getResponsiveSize(context, 8),
+                                    decoration: BoxDecoration(
+                                      color: e == 'activo' ? Colors.green : Colors.orange,
+                                      shape: BoxShape.circle,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(e.toUpperCase()),
-                              ],
-                            ),
-                          ))
-                      .toList(),
-                  onChanged: (val) => setState(() => estadoSeleccionado = val),
-                  icon: Icons.toggle_on_outlined,
-                  hint: 'Seleccionar estado',
-                ),
-                
-                _buildActionButtons(),
-                
-                // Espacio adicional para el botón flotante
-                const SizedBox(height: 20),
-              ],
+                                  SizedBox(width: _getResponsiveSize(context, 8)),
+                                  Text(e.toUpperCase()),
+                                ],
+                              ),
+                            ))
+                        .toList(),
+                    onChanged: (val) => setState(() => estadoSeleccionado = val),
+                    icon: Icons.toggle_on_outlined,
+                    hint: 'Seleccionar estado',
+                  ),
+                  
+                  _buildActionButtons(),
+                  
+                  SizedBox(height: _getResponsiveSize(context, 20)),
+                ],
+              ),
             ),
           ),
         ),
@@ -1444,3 +1636,4 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
     );
   }
 }
+                                

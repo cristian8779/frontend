@@ -302,34 +302,90 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     
     // Sistema de colores mejorado
     final colorScheme = _AppColorScheme.of(context, isDark);
+    
+    // Sistema responsive
+    final responsive = _ResponsiveHelper(size);
 
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Scaffold(
         backgroundColor: colorScheme.background,
         resizeToAvoidBottomInset: true,
-        appBar: _buildAppBar(colorScheme),
+        appBar: _buildAppBar(colorScheme, responsive),
         body: SafeArea(
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 300),
             padding: EdgeInsets.only(bottom: bottomInset > 0 ? 20 : 0),
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: FadeTransition(
-                opacity: _fadeAnimation,
-                child: SlideTransition(
-                  position: _slideAnimation,
+            child: responsive.isTablet || responsive.isDesktop
+                ? _buildDesktopLayout(colorScheme, responsive)
+                : _buildMobileLayout(colorScheme, responsive),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Layout para móviles
+  Widget _buildMobileLayout(_AppColorScheme colorScheme, _ResponsiveHelper responsive) {
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: EdgeInsets.symmetric(horizontal: responsive.padding),
+      child: FadeTransition(
+        opacity: _fadeAnimation,
+        child: SlideTransition(
+          position: _slideAnimation,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              SizedBox(height: responsive.verticalSpacing),
+              _buildHeroIllustration(colorScheme, responsive),
+              SizedBox(height: responsive.verticalSpacing * 1.5),
+              _buildMainCard(colorScheme, responsive),
+              SizedBox(height: responsive.verticalSpacing),
+              _buildBackButton(colorScheme, responsive),
+              SizedBox(height: responsive.verticalSpacing * 1.5),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Layout para tablets y desktop
+  Widget _buildDesktopLayout(_AppColorScheme colorScheme, _ResponsiveHelper responsive) {
+    return Center(
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth: responsive.maxCardWidth,
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: EdgeInsets.symmetric(horizontal: responsive.padding),
+          child: FadeTransition(
+            opacity: _fadeAnimation,
+            child: SlideTransition(
+              position: _slideAnimation,
+              child: Card(
+                elevation: responsive.isDesktop ? 24 : 16,
+                shadowColor: colorScheme.primary.withOpacity(0.1),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(responsive.borderRadius * 1.5),
+                ),
+                color: colorScheme.surface,
+                child: Padding(
+                  padding: EdgeInsets.all(responsive.cardPadding),
                   child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      const SizedBox(height: 20),
-                      _buildHeroIllustration(size, colorScheme),
-                      const SizedBox(height: 40),
-                      _buildMainCard(colorScheme),
-                      const SizedBox(height: 32),
-                      _buildBackButton(colorScheme),
-                      const SizedBox(height: 40),
+                      SizedBox(height: responsive.verticalSpacing),
+                      _buildHeroIllustration(colorScheme, responsive),
+                      SizedBox(height: responsive.verticalSpacing * 1.5),
+                      _buildMainCard(colorScheme, responsive, isInsideCard: true),
+                      SizedBox(height: responsive.verticalSpacing),
+                      _buildBackButton(colorScheme, responsive),
+                      SizedBox(height: responsive.verticalSpacing),
                     ],
                   ),
                 ),
@@ -341,7 +397,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     );
   }
 
-  PreferredSizeWidget _buildAppBar(_AppColorScheme colorScheme) {
+  PreferredSizeWidget _buildAppBar(_AppColorScheme colorScheme, _ResponsiveHelper responsive) {
     return AppBar(
       backgroundColor: Colors.transparent,
       elevation: 0,
@@ -349,7 +405,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
         icon: Icon(
           Icons.arrow_back_ios_new_rounded,
           color: colorScheme.onBackground,
-          size: 22,
+          size: responsive.iconSize,
         ),
         onPressed: () {
           HapticFeedback.lightImpact();
@@ -364,13 +420,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     );
   }
 
-  Widget _buildHeroIllustration(Size size, _AppColorScheme colorScheme) {
+  Widget _buildHeroIllustration(_AppColorScheme colorScheme, _ResponsiveHelper responsive) {
     return Hero(
       tag: 'password_illustration',
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 500),
-        width: size.width * 0.55,
-        height: size.width * 0.55,
+        width: responsive.heroSize,
+        height: responsive.heroSize,
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
@@ -384,7 +440,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
           boxShadow: [
             BoxShadow(
               color: colorScheme.primary.withOpacity(0.1),
-              blurRadius: 30,
+              blurRadius: responsive.shadowBlur,
               spreadRadius: 5,
             ),
           ],
@@ -392,7 +448,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
         child: Center(
           child: Icon(
             Icons.shield_outlined,
-            size: size.width * 0.22,
+            size: responsive.heroIconSize,
             color: colorScheme.primary,
           ),
         ),
@@ -400,7 +456,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     );
   }
 
-  Widget _buildMainCard(_AppColorScheme colorScheme) {
+  Widget _buildMainCard(_AppColorScheme colorScheme, _ResponsiveHelper responsive, {bool isInsideCard = false}) {
     return AnimatedBuilder(
       animation: _shakeAnimation,
       builder: (context, child) {
@@ -409,10 +465,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
           offset: Offset(shake, 0),
           child: Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
+            padding: EdgeInsets.all(responsive.cardPadding),
+            decoration: isInsideCard ? null : BoxDecoration(
               color: colorScheme.surface,
-              borderRadius: BorderRadius.circular(28),
+              borderRadius: BorderRadius.circular(responsive.borderRadius),
               border: Border.all(
                 color: colorScheme.outline.withOpacity(0.1),
                 width: 1,
@@ -420,14 +476,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(colorScheme.isDark ? 0.3 : 0.08),
-                  blurRadius: 25,
+                  blurRadius: responsive.shadowBlur,
                   offset: const Offset(0, 10),
                   spreadRadius: 0,
                 ),
                 if (!colorScheme.isDark)
                   BoxShadow(
                     color: Colors.black.withOpacity(0.04),
-                    blurRadius: 50,
+                    blurRadius: responsive.shadowBlur * 2,
                     offset: const Offset(0, 20),
                   ),
               ],
@@ -437,16 +493,16 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildTitle(colorScheme),
-                  const SizedBox(height: 12),
-                  _buildSubtitle(colorScheme),
-                  const SizedBox(height: 36),
-                  _buildEmailField(colorScheme),
-                  const SizedBox(height: 36),
-                  _buildSubmitButton(colorScheme),
+                  _buildTitle(colorScheme, responsive),
+                  SizedBox(height: responsive.verticalSpacing * 0.5),
+                  _buildSubtitle(colorScheme, responsive),
+                  SizedBox(height: responsive.verticalSpacing * 1.5),
+                  _buildEmailField(colorScheme, responsive),
+                  SizedBox(height: responsive.verticalSpacing * 1.5),
+                  _buildSubmitButton(colorScheme, responsive),
                   if (!_canResend && _resendCountdown > 0) ...[
-                    const SizedBox(height: 20),
-                    _buildResendInfo(colorScheme),
+                    SizedBox(height: responsive.verticalSpacing),
+                    _buildResendInfo(colorScheme, responsive),
                   ],
                 ],
               ),
@@ -457,14 +513,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     );
   }
 
-  Widget _buildTitle(_AppColorScheme colorScheme) {
+  Widget _buildTitle(_AppColorScheme colorScheme, _ResponsiveHelper responsive) {
     return RichText(
       text: TextSpan(
         children: [
           TextSpan(
             text: "Recuperar ",
             style: TextStyle(
-              fontSize: 28,
+              fontSize: responsive.titleSize,
               fontWeight: FontWeight.w700,
               color: colorScheme.onSurface,
               height: 1.2,
@@ -474,7 +530,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
           TextSpan(
             text: "contraseña",
             style: TextStyle(
-              fontSize: 28,
+              fontSize: responsive.titleSize,
               fontWeight: FontWeight.w700,
               color: colorScheme.primary,
               height: 1.2,
@@ -486,11 +542,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     );
   }
 
-  Widget _buildSubtitle(_AppColorScheme colorScheme) {
+  Widget _buildSubtitle(_AppColorScheme colorScheme, _ResponsiveHelper responsive) {
     return Text(
       "Te enviaremos un código de verificación seguro para restablecer tu contraseña.",
       style: TextStyle(
-        fontSize: 16,
+        fontSize: responsive.bodySize,
         color: colorScheme.onSurfaceVariant,
         height: 1.5,
         letterSpacing: 0.1,
@@ -498,7 +554,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     );
   }
 
-  Widget _buildEmailField(_AppColorScheme colorScheme) {
+  Widget _buildEmailField(_AppColorScheme colorScheme, _ResponsiveHelper responsive) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -506,14 +562,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
           children: [
             Icon(
               Icons.email_outlined,
-              size: 16,
+              size: responsive.smallIconSize,
               color: colorScheme.primary,
             ),
-            const SizedBox(width: 8),
+            SizedBox(width: responsive.horizontalSpacing * 0.5),
             Text(
               "Correo electrónico",
               style: TextStyle(
-                fontSize: 15,
+                fontSize: responsive.labelSize,
                 fontWeight: FontWeight.w600,
                 color: colorScheme.onSurface,
                 letterSpacing: 0.1,
@@ -521,11 +577,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: responsive.verticalSpacing * 0.5),
         AnimatedContainer(
           duration: const Duration(milliseconds: 300),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(responsive.inputRadius),
             border: Border.all(
               color: _emailError != null
                   ? colorScheme.error.withOpacity(0.6)
@@ -544,7 +600,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
             textInputAction: TextInputAction.done,
             onFieldSubmitted: (_) => _sendResetEmail(),
             style: TextStyle(
-              fontSize: 16,
+              fontSize: responsive.inputTextSize,
               color: colorScheme.onSurface,
               letterSpacing: 0.2,
             ),
@@ -552,36 +608,39 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
               hintText: 'ejemplo@correo.com',
               hintStyle: TextStyle(
                 color: colorScheme.onSurfaceVariant.withOpacity(0.6),
-                fontSize: 16,
+                fontSize: responsive.inputTextSize,
               ),
               filled: true,
               fillColor: colorScheme.isDark 
                   ? colorScheme.onSurface.withOpacity(0.05)
                   : colorScheme.surfaceVariant,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 18,
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: responsive.inputPadding,
+                vertical: responsive.inputPadding * 0.9,
               ),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(responsive.inputRadius),
                 borderSide: BorderSide.none,
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(responsive.inputRadius),
                 borderSide: BorderSide.none,
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(responsive.inputRadius),
                 borderSide: BorderSide.none,
               ),
               prefixIcon: Padding(
-                padding: const EdgeInsets.only(left: 16, right: 12),
+                padding: EdgeInsets.only(
+                  left: responsive.inputPadding,
+                  right: responsive.inputPadding * 0.6,
+                ),
                 child: Icon(
                   Icons.alternate_email_rounded,
                   color: emailFocusNode.hasFocus 
                       ? colorScheme.primary 
                       : colorScheme.onSurfaceVariant.withOpacity(0.6),
-                  size: 20,
+                  size: responsive.iconSize,
                 ),
               ),
               suffixIcon: AnimatedSwitcher(
@@ -589,8 +648,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                 child: emailController.text.isNotEmpty
                     ? Container(
                         key: ValueKey(_isEmailValid),
-                        margin: const EdgeInsets.only(right: 12),
-                        padding: const EdgeInsets.all(8),
+                        margin: EdgeInsets.only(right: responsive.inputPadding * 0.6),
+                        padding: EdgeInsets.all(responsive.inputPadding * 0.4),
                         decoration: BoxDecoration(
                           color: (_isEmailValid ? Colors.green : colorScheme.error).withOpacity(0.15),
                           borderRadius: BorderRadius.circular(20),
@@ -602,7 +661,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                           color: _isEmailValid
                               ? Colors.green[600]
                               : colorScheme.error,
-                          size: 16,
+                          size: responsive.smallIconSize,
                         ),
                       )
                     : null,
@@ -615,20 +674,20 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
           height: _emailError != null ? null : 0,
           child: _emailError != null
               ? Padding(
-                  padding: const EdgeInsets.only(top: 8),
+                  padding: EdgeInsets.only(top: responsive.verticalSpacing * 0.4),
                   child: Row(
                     children: [
                       Icon(
                         Icons.info_outline_rounded,
-                        size: 16,
+                        size: responsive.smallIconSize,
                         color: colorScheme.error,
                       ),
-                      const SizedBox(width: 8),
+                      SizedBox(width: responsive.horizontalSpacing * 0.5),
                       Expanded(
                         child: Text(
                           _emailError!,
                           style: TextStyle(
-                            fontSize: 13,
+                            fontSize: responsive.captionSize,
                             color: colorScheme.error,
                             fontWeight: FontWeight.w500,
                           ),
@@ -643,12 +702,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     );
   }
 
-  Widget _buildSubmitButton(_AppColorScheme colorScheme) {
+  Widget _buildSubmitButton(_AppColorScheme colorScheme, _ResponsiveHelper responsive) {
     return ScaleTransition(
       scale: _buttonScale,
       child: SizedBox(
         width: double.infinity,
-        height: 58,
+        height: responsive.buttonHeight,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           child: ElevatedButton(
@@ -663,10 +722,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                   ? colorScheme.primary.withOpacity(0.7)
                   : colorScheme.primary,
               foregroundColor: Colors.white,
-              elevation: _isLoading ? 0 : 12,
+              elevation: _isLoading ? 0 : (responsive.isDesktop ? 16 : 12),
               shadowColor: colorScheme.primary.withOpacity(0.4),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(responsive.inputRadius),
               ),
               padding: EdgeInsets.zero,
             ),
@@ -678,8 +737,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         SizedBox(
-                          width: 18,
-                          height: 18,
+                          width: responsive.loadingSize,
+                          height: responsive.loadingSize,
                           child: CircularProgressIndicator(
                             strokeWidth: 2.5,
                             valueColor: AlwaysStoppedAnimation<Color>(
@@ -687,11 +746,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                             ),
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        SizedBox(width: responsive.horizontalSpacing * 0.75),
                         Text(
                           "Enviando código...",
                           style: TextStyle(
-                            fontSize: 16,
+                            fontSize: responsive.buttonTextSize,
                             fontWeight: FontWeight.w600,
                             color: Colors.white.withOpacity(0.9),
                           ),
@@ -702,16 +761,16 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                       key: const ValueKey('send'),
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.send_rounded,
-                          size: 20,
+                          size: responsive.iconSize,
                           color: Colors.white,
                         ),
-                        const SizedBox(width: 10),
-                        const Text(
+                        SizedBox(width: responsive.horizontalSpacing * 0.625),
+                        Text(
                           "Enviar código",
                           style: TextStyle(
-                            fontSize: 16,
+                            fontSize: responsive.buttonTextSize,
                             fontWeight: FontWeight.w600,
                             letterSpacing: 0.1,
                           ),
@@ -725,12 +784,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     );
   }
 
-  Widget _buildResendInfo(_AppColorScheme colorScheme) {
+  Widget _buildResendInfo(_AppColorScheme colorScheme, _ResponsiveHelper responsive) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(responsive.inputPadding),
       decoration: BoxDecoration(
         color: colorScheme.primary.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(responsive.inputRadius * 0.75),
         border: Border.all(
           color: colorScheme.primary.withOpacity(0.2),
           width: 1,
@@ -740,15 +799,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
         children: [
           Icon(
             Icons.access_time_rounded,
-            size: 18,
+            size: responsive.iconSize,
             color: colorScheme.primary,
           ),
-          const SizedBox(width: 10),
+          SizedBox(width: responsive.horizontalSpacing * 0.625),
           Expanded(
             child: Text(
               "Podrás solicitar un nuevo código en ${_resendCountdown}s",
               style: TextStyle(
-                fontSize: 14,
+                fontSize: responsive.captionSize,
                 color: colorScheme.primary,
                 fontWeight: FontWeight.w500,
               ),
@@ -759,7 +818,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     );
   }
 
-  Widget _buildBackButton(_AppColorScheme colorScheme) {
+  Widget _buildBackButton(_AppColorScheme colorScheme, _ResponsiveHelper responsive) {
     return TextButton.icon(
       onPressed: () {
         HapticFeedback.lightImpact();
@@ -768,28 +827,75 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
       icon: Icon(
         Icons.arrow_back_rounded,
         color: colorScheme.onSurfaceVariant,
-        size: 18,
+        size: responsive.iconSize,
       ),
       label: Text(
         "Volver al inicio de sesión",
         style: TextStyle(
           color: colorScheme.onSurfaceVariant,
           fontWeight: FontWeight.w500,
-          fontSize: 15,
+          fontSize: responsive.labelSize,
           letterSpacing: 0.1,
         ),
       ),
       style: TextButton.styleFrom(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 20,
-          vertical: 14,
+        padding: EdgeInsets.symmetric(
+          horizontal: responsive.inputPadding,
+          vertical: responsive.inputPadding * 0.7,
         ),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(responsive.inputRadius * 0.75),
         ),
       ),
     );
   }
+}
+
+// Helper para responsive design
+class _ResponsiveHelper {
+  final Size size;
+  
+  _ResponsiveHelper(this.size);
+  
+  // Breakpoints
+  bool get isMobile => size.width < 600;
+  bool get isTablet => size.width >= 600 && size.width < 1024;
+  bool get isDesktop => size.width >= 1024;
+  
+  // Dimensiones adaptativas
+  double get padding => isMobile ? 24 : (isTablet ? 32 : 40);
+  double get cardPadding => isMobile ? 24 : (isTablet ? 32 : 40);
+  double get verticalSpacing => isMobile ? 20 : (isTablet ? 24 : 28);
+  double get horizontalSpacing => isMobile ? 16 : (isTablet ? 20 : 24);
+  
+  // Tamaños de fuente
+  double get titleSize => isMobile ? 28 : (isTablet ? 32 : 36);
+  double get bodySize => isMobile ? 16 : (isTablet ? 17 : 18);
+  double get labelSize => isMobile ? 15 : (isTablet ? 16 : 17);
+  double get buttonTextSize => isMobile ? 16 : (isTablet ? 17 : 18);
+  double get inputTextSize => isMobile ? 16 : (isTablet ? 17 : 18);
+  double get captionSize => isMobile ? 13 : (isTablet ? 14 : 15);
+  
+  // Tamaños de iconos
+  double get iconSize => isMobile ? 20 : (isTablet ? 22 : 24);
+  double get smallIconSize => isMobile ? 16 : (isTablet ? 18 : 20);
+  double get loadingSize => isMobile ? 18 : (isTablet ? 20 : 22);
+  
+  // Dimensiones de componentes
+  double get buttonHeight => isMobile ? 54 : (isTablet ? 58 : 62);
+  double get inputPadding => isMobile ? 18 : (isTablet ? 20 : 22);
+  double get borderRadius => isMobile ? 16 : (isTablet ? 18 : 20);
+  double get inputRadius => isMobile ? 14 : (isTablet ? 16 : 18);
+  
+  // Hero illustration
+  double get heroSize => isMobile ? size.width * 0.45 : (isTablet ? 200 : 240);
+  double get heroIconSize => isMobile ? size.width * 0.18 : (isTablet ? 80 : 96);
+  
+  // Sombras
+  double get shadowBlur => isMobile ? 20 : (isTablet ? 25 : 30);
+  
+  // Ancho máximo para desktop
+  double get maxCardWidth => isDesktop ? 480 : double.infinity;
 }
 
 // Sistema de colores mejorado
@@ -950,10 +1056,13 @@ class _NotificationWidgetState extends State<_NotificationWidget>
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final responsive = _ResponsiveHelper(size);
+    
     return Positioned(
       top: MediaQuery.of(context).padding.top + 16,
-      left: 20,
-      right: 20,
+      left: responsive.padding * 0.8,
+      right: responsive.padding * 0.8,
       child: SlideTransition(
         position: _slideAnimation,
         child: FadeTransition(
@@ -971,7 +1080,7 @@ class _NotificationWidgetState extends State<_NotificationWidget>
                   }
                 },
                 child: Container(
-                  padding: const EdgeInsets.all(20),
+                  padding: EdgeInsets.all(responsive.inputPadding),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
@@ -981,17 +1090,17 @@ class _NotificationWidgetState extends State<_NotificationWidget>
                         backgroundColor.withOpacity(0.9),
                       ],
                     ),
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(responsive.borderRadius),
                     boxShadow: [
                       BoxShadow(
                         color: backgroundColor.withOpacity(0.3),
-                        blurRadius: 20,
+                        blurRadius: responsive.shadowBlur,
                         offset: const Offset(0, 8),
                         spreadRadius: 0,
                       ),
                       BoxShadow(
                         color: Colors.black.withOpacity(0.1),
-                        blurRadius: 40,
+                        blurRadius: responsive.shadowBlur * 2,
                         offset: const Offset(0, 16),
                       ),
                     ],
@@ -1002,38 +1111,38 @@ class _NotificationWidgetState extends State<_NotificationWidget>
                       Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.all(8),
+                            padding: EdgeInsets.all(responsive.horizontalSpacing * 0.5),
                             decoration: BoxDecoration(
                               color: Colors.white.withOpacity(0.25),
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(responsive.inputRadius * 0.75),
                             ),
                             child: Icon(
                               widget.icon,
                               color: Colors.white,
-                              size: 22,
+                              size: responsive.iconSize,
                             ),
                           ),
-                          const SizedBox(width: 16),
+                          SizedBox(width: responsive.horizontalSpacing),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
                                   widget.message,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     color: Colors.white,
-                                    fontSize: 16,
+                                    fontSize: responsive.bodySize,
                                     fontWeight: FontWeight.w600,
                                     letterSpacing: 0.1,
                                   ),
                                 ),
                                 if (widget.subtitle != null) ...[
-                                  const SizedBox(height: 4),
+                                  SizedBox(height: responsive.verticalSpacing * 0.2),
                                   Text(
                                     widget.subtitle!,
                                     style: TextStyle(
                                       color: Colors.white.withOpacity(0.9),
-                                      fontSize: 14,
+                                      fontSize: responsive.captionSize,
                                       fontWeight: FontWeight.w400,
                                       letterSpacing: 0.1,
                                     ),
@@ -1042,26 +1151,26 @@ class _NotificationWidgetState extends State<_NotificationWidget>
                               ],
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          SizedBox(width: responsive.horizontalSpacing * 0.5),
                           GestureDetector(
                             onTap: widget.onDismiss,
                             child: Container(
-                              padding: const EdgeInsets.all(4),
+                              padding: EdgeInsets.all(responsive.horizontalSpacing * 0.25),
                               decoration: BoxDecoration(
                                 color: Colors.white.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(responsive.horizontalSpacing * 0.5),
                               ),
                               child: Icon(
                                 Icons.close_rounded,
                                 color: Colors.white.withOpacity(0.9),
-                                size: 18,
+                                size: responsive.smallIconSize,
                               ),
                             ),
                           ),
                         ],
                       ),
                       // Barra de progreso para mostrar tiempo restante
-                      const SizedBox(height: 12),
+                      SizedBox(height: responsive.verticalSpacing * 0.6),
                       Container(
                         height: 3,
                         width: double.infinity,

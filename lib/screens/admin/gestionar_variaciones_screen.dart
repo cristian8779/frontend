@@ -129,12 +129,17 @@ class _GestionarVariacionesScreenState extends State<GestionarVariacionesScreen>
     return 'Alto';
   }
 
-  Widget _buildStockChip(int stock) {
+  Widget _buildStockChip(int stock, [bool isTablet = false]) {
     final color = _getStockColor(stock);
     final label = _getStockLabel(stock);
+    final fontSize = isTablet ? 14.0 : 12.0;
+    final dotSize = isTablet ? 8.0 : 6.0;
+    final padding = isTablet ? 
+        const EdgeInsets.symmetric(horizontal: 12, vertical: 6) :
+        const EdgeInsets.symmetric(horizontal: 8, vertical: 4);
     
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: padding,
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
@@ -144,19 +149,19 @@ class _GestionarVariacionesScreenState extends State<GestionarVariacionesScreen>
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 6,
-            height: 6,
+            width: dotSize,
+            height: dotSize,
             decoration: BoxDecoration(
               color: color,
               shape: BoxShape.circle,
             ),
           ),
-          const SizedBox(width: 4),
+          SizedBox(width: isTablet ? 6 : 4),
           Text(
             '$stock ($label)',
             style: TextStyle(
               color: color,
-              fontSize: 12,
+              fontSize: fontSize,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -166,13 +171,515 @@ class _GestionarVariacionesScreenState extends State<GestionarVariacionesScreen>
   }
 
   Widget _buildShimmerItem() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-      child: Shimmer.fromColors(
-        baseColor: Colors.grey.shade300,
-        highlightColor: Colors.grey.shade100,
-        child: Container(
-          padding: const EdgeInsets.all(16),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isTablet = constraints.maxWidth > 600;
+        final horizontalMargin = isTablet ? constraints.maxWidth * 0.1 : 20.0;
+        final imageSize = isTablet ? 80.0 : 60.0;
+        final contentPadding = isTablet ? 24.0 : 16.0;
+        
+        return Container(
+          margin: EdgeInsets.symmetric(horizontal: horizontalMargin, vertical: 8),
+          child: Shimmer.fromColors(
+            baseColor: Colors.grey.shade300,
+            highlightColor: Colors.grey.shade100,
+            child: Container(
+              padding: EdgeInsets.all(contentPadding),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: imageSize,
+                    height: imageSize,
+                    decoration: BoxDecoration(
+                      color: Colors.grey,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  SizedBox(width: isTablet ? 24 : 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          height: isTablet ? 20 : 16,
+                          width: isTablet ? 160 : 120,
+                          color: Colors.grey,
+                          margin: const EdgeInsets.only(bottom: 8),
+                        ),
+                        Container(
+                          height: isTablet ? 18 : 14,
+                          width: isTablet ? 100 : 80,
+                          color: Colors.grey,
+                          margin: const EdgeInsets.only(bottom: 8),
+                        ),
+                        Container(
+                          height: isTablet ? 16 : 12,
+                          width: isTablet ? 120 : 100,
+                          color: Colors.grey,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    children: [
+                      Container(
+                        width: isTablet ? 40 : 32,
+                        height: isTablet ? 40 : 32,
+                        color: Colors.grey,
+                        margin: const EdgeInsets.only(bottom: 8),
+                      ),
+                      Container(
+                        width: isTablet ? 40 : 32,
+                        height: isTablet ? 40 : 32,
+                        color: Colors.grey,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildVariacionItem(Map<String, dynamic> variacion, Animation<double> animation) {
+    final Map<String, dynamic>? colorData = variacion['color'];
+    final String color = colorData?['nombre'] ?? 'Sin color';
+    final String talla = variacion['tallaNumero']?.toString() ?? variacion['tallaLetra'] ?? 'Sin talla';
+    final int stock = variacion['stock'] ?? 0;
+    final double precio = (variacion['precio'] != null) 
+        ? double.tryParse(variacion['precio'].toString()) ?? 0.0 
+        : 0.0;
+    final List<dynamic>? imagenes = variacion['imagenes'];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isTablet = constraints.maxWidth > 600;
+        final horizontalMargin = isTablet ? constraints.maxWidth * 0.1 : 20.0;
+        final imageSize = isTablet ? 80.0 : 60.0;
+        final contentPadding = isTablet ? 24.0 : 16.0;
+        final titleFontSize = isTablet ? 18.0 : 16.0;
+        final priceFontSize = isTablet ? 17.0 : 15.0;
+        final iconSize = isTablet ? 24.0 : 20.0;
+        final actionButtonSize = isTablet ? 48.0 : 40.0;
+        
+        return SizeTransition(
+          sizeFactor: animation,
+          axis: Axis.vertical,
+          child: Dismissible(
+            key: Key(variacion['_id'] ?? UniqueKey().toString()),
+            direction: DismissDirection.endToStart,
+            background: Container(
+              margin: EdgeInsets.symmetric(horizontal: horizontalMargin, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.red.shade600,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              alignment: Alignment.centerRight,
+              padding: EdgeInsets.symmetric(horizontal: isTablet ? 32 : 24),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.delete_outline, color: Colors.white, size: isTablet ? 32 : 28),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Eliminar',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: isTablet ? 14 : 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            confirmDismiss: (direction) => _showDeleteDialog(),
+            onDismissed: (direction) {
+              final index = _variaciones.indexWhere((v) => v['_id'] == variacion['_id']);
+              if (index != -1) _deleteVariacion(index);
+            },
+            child: Container(
+              margin: EdgeInsets.symmetric(horizontal: horizontalMargin, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Padding(
+                padding: EdgeInsets.all(contentPadding),
+                child: Row(
+                  children: [
+                    // Imagen
+                    Container(
+                      width: imageSize,
+                      height: imageSize,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: (imagenes != null && imagenes.isNotEmpty)
+                            ? Image.network(
+                                imagenes[0]['url'] ?? '',
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Container(
+                                  color: Colors.grey.shade100,
+                                  child: Icon(
+                                    Icons.broken_image_outlined,
+                                    color: Colors.grey.shade400,
+                                    size: isTablet ? 28 : 24,
+                                  ),
+                                ),
+                                loadingBuilder: (context, child, loadingProgress) {
+                                  if (loadingProgress == null) return child;
+                                  return Container(
+                                    color: Colors.grey.shade100,
+                                    child: Center(
+                                      child: SizedBox(
+                                        width: isTablet ? 24 : 20,
+                                        height: isTablet ? 24 : 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          valueColor: AlwaysStoppedAnimation<Color>(
+                                            const Color(0xFF3A86FF),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              )
+                            : Container(
+                                color: Colors.grey.shade100,
+                                child: Icon(
+                                  Icons.image_not_supported_outlined,
+                                  color: Colors.grey.shade400,
+                                  size: isTablet ? 28 : 24,
+                                ),
+                              ),
+                      ),
+                    ),
+                    
+                    SizedBox(width: isTablet ? 24 : 16),
+                    
+                    // Información principal
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Título
+                          Text(
+                            '$color - $talla',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: titleFontSize,
+                              color: Color(0xFF2D3748),
+                            ),
+                          ),
+                          
+                          SizedBox(height: isTablet ? 12 : 8),
+                          
+                          // Precio
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.attach_money,
+                                size: isTablet ? 18 : 16,
+                                color: Colors.grey.shade600,
+                              ),
+                              Text(
+                                precio.toStringAsFixed(2),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: priceFontSize,
+                                  color: const Color(0xFF3A86FF),
+                                ),
+                              ),
+                            ],
+                          ),
+                          
+                          SizedBox(height: isTablet ? 12 : 8),
+                          
+                          // Stock
+                          _buildStockChip(stock, isTablet),
+                        ],
+                      ),
+                    ),
+                    
+                    // Acciones
+                    Column(
+                      children: [
+                        Container(
+                          width: actionButtonSize,
+                          height: actionButtonSize,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF3A86FF).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: IconButton(
+                            icon: Icon(
+                              Icons.edit_outlined,
+                              color: Color(0xFF3A86FF),
+                              size: iconSize,
+                            ),
+                            tooltip: 'Editar variación',
+                            onPressed: _navigateToCrearVariacion,
+                            splashRadius: isTablet ? 24 : 20,
+                          ),
+                        ),
+                        
+                        SizedBox(height: isTablet ? 12 : 8),
+                        
+                        Container(
+                          width: actionButtonSize,
+                          height: actionButtonSize,
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: IconButton(
+                            icon: Icon(
+                              Icons.delete_outline,
+                              color: Colors.red.shade600,
+                              size: iconSize,
+                            ),
+                            tooltip: 'Eliminar variación',
+                            onPressed: () {
+                              final index = _variaciones.indexWhere(
+                                (v) => v['_id'] == variacion['_id']
+                              );
+                              if (index != -1) _confirmDelete(index);
+                            },
+                            splashRadius: isTablet ? 24 : 20,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<bool?> _showDeleteDialog() {
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final isTablet = constraints.maxWidth > 600;
+            final titleFontSize = isTablet ? 20.0 : 18.0;
+            final contentFontSize = isTablet ? 16.0 : 14.0;
+            final iconSize = isTablet ? 28.0 : 24.0;
+            final buttonPadding = isTablet ? 
+                const EdgeInsets.symmetric(horizontal: 24, vertical: 16) :
+                const EdgeInsets.symmetric(horizontal: 20, vertical: 12);
+            final spacingMedium = isTablet ? 16.0 : 12.0;
+            
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  Container(
+                    padding: EdgeInsets.all(isTablet ? 12 : 8),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.warning_outlined,
+                      color: Colors.red.shade600,
+                      size: iconSize,
+                    ),
+                  ),
+                  SizedBox(width: spacingMedium),
+                  Expanded(
+                    child: Text(
+                      'Confirmar eliminación',
+                      style: TextStyle(
+                        fontSize: titleFontSize, 
+                        fontWeight: FontWeight.w600
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              content: Text(
+                '¿Está seguro que desea eliminar esta variación? Esta acción no se puede deshacer.',
+                style: TextStyle(
+                  color: Color(0xFF718096),
+                  fontSize: contentFontSize,
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.grey.shade600,
+                    padding: buttonPadding,
+                  ),
+                  child: Text(
+                    'Cancelar',
+                    style: TextStyle(fontSize: contentFontSize),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(ctx).pop(true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red.shade600,
+                    foregroundColor: Colors.white,
+                    padding: buttonPadding,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: Text(
+                    'Eliminar',
+                    style: TextStyle(fontSize: contentFontSize),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _confirmDelete(int index) async {
+    final confirmed = await _showDeleteDialog();
+    if (confirmed == true) {
+      _deleteVariacion(index);
+    }
+  }
+
+  Widget _buildEmptyState() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isTablet = constraints.maxWidth > 600;
+        final iconSize = isTablet ? 80.0 : 64.0;
+        final titleFontSize = isTablet ? 28.0 : 24.0;
+        final subtitleFontSize = isTablet ? 18.0 : 16.0;
+        final buttonPadding = isTablet ? 
+            const EdgeInsets.symmetric(horizontal: 32, vertical: 20) :
+            const EdgeInsets.symmetric(horizontal: 24, vertical: 16);
+        final containerPadding = isTablet ? 48.0 : 32.0;
+        final spacingLarge = isTablet ? 32.0 : 24.0;
+        final spacingMedium = isTablet ? 12.0 : 8.0;
+        final spacingXLarge = isTablet ? 48.0 : 32.0;
+        
+        return Center(
+          child: Container(
+            padding: EdgeInsets.all(containerPadding),
+            constraints: BoxConstraints(
+              maxWidth: isTablet ? 600 : double.infinity,
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: EdgeInsets.all(spacingLarge),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF3A86FF).withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.inventory_2_outlined,
+                    size: iconSize,
+                    color: Color(0xFF3A86FF),
+                  ),
+                ),
+                
+                SizedBox(height: spacingLarge),
+                
+                Text(
+                  'No hay variaciones',
+                  style: TextStyle(
+                    fontSize: titleFontSize,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF2D3748),
+                  ),
+                ),
+                
+                SizedBox(height: spacingMedium),
+                
+                Text(
+                  'Agrega la primera variación de tu producto para empezar a vender',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: subtitleFontSize,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+                
+                SizedBox(height: spacingXLarge),
+                
+                ElevatedButton.icon(
+                  onPressed: _navigateToCrearVariacion,
+                  icon: Icon(Icons.add, size: isTablet ? 24 : 20),
+                  label: Text(
+                    'Nueva variación',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: isTablet ? 18 : 16,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF3A86FF),
+                    foregroundColor: Colors.white,
+                    padding: buttonPadding,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildHeader() {
+    if (_variaciones.isEmpty) return const SizedBox.shrink();
+    
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isTablet = constraints.maxWidth > 600;
+        final horizontalMargin = isTablet ? constraints.maxWidth * 0.1 : 20.0;
+        final contentPadding = isTablet ? 24.0 : 16.0;
+        final iconSize = isTablet ? 28.0 : 24.0;
+        final titleFontSize = isTablet ? 20.0 : 18.0;
+        final subtitleFontSize = isTablet ? 16.0 : 14.0;
+        final spacingMedium = isTablet ? 20.0 : 16.0;
+        
+        return Container(
+          margin: EdgeInsets.all(horizontalMargin),
+          padding: EdgeInsets.all(contentPadding),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
@@ -187,524 +694,125 @@ class _GestionarVariacionesScreenState extends State<GestionarVariacionesScreen>
           child: Row(
             children: [
               Container(
-                width: 60,
-                height: 60,
+                padding: EdgeInsets.all(isTablet ? 16 : 12),
                 decoration: BoxDecoration(
-                  color: Colors.grey,
+                  color: const Color(0xFF3A86FF).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
+                child: Icon(
+                  Icons.inventory_2_outlined,
+                  color: Color(0xFF3A86FF),
+                  size: iconSize,
+                ),
               ),
-              const SizedBox(width: 16),
+              
+              SizedBox(width: spacingMedium),
+              
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      height: 16,
-                      width: 120,
-                      color: Colors.grey,
-                      margin: const EdgeInsets.only(bottom: 8),
+                    Text(
+                      '${_variaciones.length} variaciones',
+                      style: TextStyle(
+                        fontSize: titleFontSize,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF2D3748),
+                      ),
                     ),
-                    Container(
-                      height: 14,
-                      width: 80,
-                      color: Colors.grey,
-                      margin: const EdgeInsets.only(bottom: 8),
-                    ),
-                    Container(
-                      height: 12,
-                      width: 100,
-                      color: Colors.grey,
+                    Text(
+                      'Desliza hacia la izquierda para eliminar',
+                      style: TextStyle(
+                        fontSize: subtitleFontSize,
+                        color: Colors.grey.shade600,
+                      ),
                     ),
                   ],
                 ),
               ),
-              Column(
-                children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    color: Colors.grey,
-                    margin: const EdgeInsets.only(bottom: 8),
-                  ),
-                  Container(
-                    width: 32,
-                    height: 32,
-                    color: Colors.grey,
-                  ),
-                ],
-              ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildVariacionItem(Map<String, dynamic> variacion, Animation<double> animation) {
-    final Map<String, dynamic>? colorData = variacion['color'];
-    final String color = colorData?['nombre'] ?? 'Sin color';
-    final String talla = variacion['tallaNumero']?.toString() ?? variacion['tallaLetra'] ?? 'Sin talla';
-    final int stock = variacion['stock'] ?? 0;
-    final double precio = (variacion['precio'] != null) 
-        ? double.tryParse(variacion['precio'].toString()) ?? 0.0 
-        : 0.0;
-    final List<dynamic>? imagenes = variacion['imagenes'];
-
-    return SizeTransition(
-      sizeFactor: animation,
-      axis: Axis.vertical,
-      child: Dismissible(
-        key: Key(variacion['_id'] ?? UniqueKey().toString()),
-        direction: DismissDirection.endToStart,
-        background: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.red.shade600,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          alignment: Alignment.centerRight,
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.delete_outline, color: Colors.white, size: 28),
-              const SizedBox(height: 4),
-              const Text(
-                'Eliminar',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
-        ),
-        confirmDismiss: (direction) => _showDeleteDialog(),
-        onDismissed: (direction) {
-          final index = _variaciones.indexWhere((v) => v['_id'] == variacion['_id']);
-          if (index != -1) _deleteVariacion(index);
-        },
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.08),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                // Imagen
-                Container(
-                  width: 60,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade200),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: (imagenes != null && imagenes.isNotEmpty)
-                        ? Image.network(
-                            imagenes[0]['url'] ?? '',
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(
-                              color: Colors.grey.shade100,
-                              child: Icon(
-                                Icons.broken_image_outlined,
-                                color: Colors.grey.shade400,
-                                size: 24,
-                              ),
-                            ),
-                            loadingBuilder: (context, child, loadingProgress) {
-                              if (loadingProgress == null) return child;
-                              return Container(
-                                color: Colors.grey.shade100,
-                                child: Center(
-                                  child: SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                        const Color(0xFF3A86FF),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          )
-                        : Container(
-                            color: Colors.grey.shade100,
-                            child: Icon(
-                              Icons.image_not_supported_outlined,
-                              color: Colors.grey.shade400,
-                              size: 24,
-                            ),
-                          ),
-                  ),
-                ),
-                
-                const SizedBox(width: 16),
-                
-                // Información principal
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Título
-                      Text(
-                        '$color - $talla',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
-                          color: Color(0xFF2D3748),
-                        ),
-                      ),
-                      
-                      const SizedBox(height: 8),
-                      
-                      // Precio
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.attach_money,
-                            size: 16,
-                            color: Colors.grey.shade600,
-                          ),
-                          Text(
-                            precio.toStringAsFixed(2),
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 15,
-                              color: const Color(0xFF3A86FF),
-                            ),
-                          ),
-                        ],
-                      ),
-                      
-                      const SizedBox(height: 8),
-                      
-                      // Stock
-                      _buildStockChip(stock),
-                    ],
-                  ),
-                ),
-                
-                // Acciones
-                Column(
-                  children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF3A86FF).withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: IconButton(
-                        icon: const Icon(
-                          Icons.edit_outlined,
-                          color: Color(0xFF3A86FF),
-                          size: 20,
-                        ),
-                        tooltip: 'Editar variación',
-                        onPressed: _navigateToCrearVariacion,
-                        splashRadius: 20,
-                      ),
-                    ),
-                    
-                    const SizedBox(height: 8),
-                    
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: IconButton(
-                        icon: Icon(
-                          Icons.delete_outline,
-                          color: Colors.red.shade600,
-                          size: 20,
-                        ),
-                        tooltip: 'Eliminar variación',
-                        onPressed: () {
-                          final index = _variaciones.indexWhere(
-                            (v) => v['_id'] == variacion['_id']
-                          );
-                          if (index != -1) _confirmDelete(index);
-                        },
-                        splashRadius: 20,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<bool?> _showDeleteDialog() {
-    return showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                Icons.warning_outlined,
-                color: Colors.red.shade600,
-                size: 24,
-              ),
-            ),
-            const SizedBox(width: 12),
-            const Text(
-              'Confirmar eliminación',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
-        content: const Text(
-          '¿Está seguro que desea eliminar esta variación? Esta acción no se puede deshacer.',
-          style: TextStyle(color: Color(0xFF718096)),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.grey.shade600,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            ),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red.shade600,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            child: const Text('Eliminar'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _confirmDelete(int index) async {
-    final confirmed = await _showDeleteDialog();
-    if (confirmed == true) {
-      _deleteVariacion(index);
-    }
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Container(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: const Color(0xFF3A86FF).withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.inventory_2_outlined,
-                size: 64,
-                color: Color(0xFF3A86FF),
-              ),
-            ),
-            
-            const SizedBox(height: 24),
-            
-            const Text(
-              'No hay variaciones',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF2D3748),
-              ),
-            ),
-            
-            const SizedBox(height: 8),
-            
-            Text(
-              'Agrega la primera variación de tu producto para empezar a vender',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey.shade600,
-              ),
-            ),
-            
-            const SizedBox(height: 32),
-            
-            ElevatedButton.icon(
-              onPressed: _navigateToCrearVariacion,
-              icon: const Icon(Icons.add, size: 20),
-              label: const Text(
-                'Crear primera variación',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF3A86FF),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 2,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    if (_variaciones.isEmpty) return const SizedBox.shrink();
-    
-    return Container(
-      margin: const EdgeInsets.all(20),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF3A86FF).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.inventory_2_outlined,
-              color: Color(0xFF3A86FF),
-              size: 24,
-            ),
-          ),
-          
-          const SizedBox(width: 16),
-          
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${_variaciones.length} variaciones',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF2D3748),
-                  ),
-                ),
-                Text(
-                  'Desliza hacia la izquierda para eliminar',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey.shade600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF7FAFC),
-      appBar: AppBar(
-        title: const Text(
-          'Gestionar Variaciones',
-          style: TextStyle(fontWeight: FontWeight.w600),
-        ),
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF2D3748),
-        centerTitle: true,
-        elevation: 0,
-        systemOverlayStyle: SystemUiOverlayStyle.dark,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(
-            height: 1,
-            color: Colors.grey.shade200,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isTablet = constraints.maxWidth > 600;
+        final bottomPadding = isTablet ? 120.0 : 100.0;
+        
+        return Scaffold(
+          backgroundColor: const Color(0xFFF7FAFC),
+          appBar: AppBar(
+            title: Text(
+              'Gestionar Variaciones',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: isTablet ? 20 : 18,
+              ),
+            ),
+            backgroundColor: Colors.white,
+            foregroundColor: const Color(0xFF2D3748),
+            centerTitle: true,
+            elevation: 0,
+            systemOverlayStyle: SystemUiOverlayStyle.dark,
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(1),
+              child: Container(
+                height: 1,
+                color: Colors.grey.shade200,
+              ),
+            ),
           ),
-        ),
-      ),
-      body: _isLoading
-          ? ListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              itemCount: 6,
-              itemBuilder: (_, __) => _buildShimmerItem(),
-            )
-          : _variaciones.isEmpty
-              ? _buildEmptyState()
-              : Column(
-                  children: [
-                    _buildHeader(),
-                    Expanded(
-                      child: RefreshIndicator(
-                        onRefresh: _loadVariaciones,
-                        color: const Color(0xFF3A86FF),
-                        backgroundColor: Colors.white,
-                        child: AnimatedList(
-                          key: _listKey,
-                          padding: const EdgeInsets.only(bottom: 100),
-                          initialItemCount: _variaciones.length,
-                          itemBuilder: (context, index, animation) {
-                            return _buildVariacionItem(_variaciones[index], animation);
-                          },
+          body: _isLoading
+              ? ListView.builder(
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  itemCount: 6,
+                  itemBuilder: (_, __) => _buildShimmerItem(),
+                )
+              : _variaciones.isEmpty
+                  ? _buildEmptyState()
+                  : Column(
+                      children: [
+                        _buildHeader(),
+                        Expanded(
+                          child: RefreshIndicator(
+                            onRefresh: _loadVariaciones,
+                            color: const Color(0xFF3A86FF),
+                            backgroundColor: Colors.white,
+                            child: AnimatedList(
+                              key: _listKey,
+                              padding: EdgeInsets.only(bottom: bottomPadding),
+                              initialItemCount: _variaciones.length,
+                              itemBuilder: (context, index, animation) {
+                                return _buildVariacionItem(_variaciones[index], animation);
+                              },
+                            ),
+                          ),
                         ),
-                      ),
+                      ],
                     ),
-                  ],
-                ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _navigateToCrearVariacion,
-        tooltip: 'Agregar variación',
-        backgroundColor: const Color(0xFF3A86FF),
-        foregroundColor: Colors.white,
-        elevation: 4,
-        icon: const Icon(Icons.add),
-        label: const Text(
-          'Nueva variación',
-          style: TextStyle(fontWeight: FontWeight.w600),
-        ),
-      ),
+          // Solo mostrar el FloatingActionButton cuando hay variaciones
+          floatingActionButton: _variaciones.isNotEmpty ? FloatingActionButton.extended(
+            onPressed: _navigateToCrearVariacion,
+            tooltip: 'Agregar variación',
+            backgroundColor: const Color(0xFF3A86FF),
+            foregroundColor: Colors.white,
+            elevation: 4,
+            icon: Icon(Icons.add, size: isTablet ? 24 : 20),
+            label: Text(
+              'Nueva variación',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: isTablet ? 16 : 14,
+              ),
+            ),
+          ) : null,
+        );
+      },
     );
   }
 }
