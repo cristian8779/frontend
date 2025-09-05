@@ -2,17 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:flutter/services.dart'; // 👈 agregado para controlar la orientación
 
 // Providers
 import 'providers/auth_provider.dart';
 
-// Pantallas de autenticación
+// Widgets de búsqueda
+import 'widgets/buscador.dart';
+import 'widgets/pantalla_busqueda.dart';
+
+// Splash
+import 'splash/splash_wrapper.dart';
+
+// Otras pantallas que tengas
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/forgot_password_screen.dart';
 import 'screens/auth/new_password_screen.dart';
 import 'screens/auth/verificar_codigo_screen.dart';
-
-// Pantallas de administrador y superadmin
 import 'screens/admin/bienvenida_admin_screen.dart';
 import 'screens/admin/control_panel_screen.dart';
 import 'screens/admin/create_category_screen.dart';
@@ -26,22 +32,27 @@ import 'screens/admin/gestion_anuncios_screen.dart';
 import 'screens/admin/anuncios_screen.dart';
 import 'screens/admin/pantalla_rol.dart';
 import 'screens/admin/invitaciones.dart';
-
-// Pantalla de usuario
 import 'screens/usuario/bienvenida_usuario_screen.dart';
+import 'screens/usuario/favorito.dart';
+import 'screens/usuario/historial/historial_screen.dart';
 
-// Configuración
 import 'screens/configuracion/ver_admins_page.dart';
-
-// Splash
-import 'splash/splash_wrapper.dart';
-
-// Pantallas separadas para deeplinks
 import 'screens/producto/producto_screen.dart';
 import 'screens/categoria/categoria_screen.dart';
+import 'screens/cart/cart_page.dart';
+import 'screens/profile/profile_page.dart';
+import 'screens/bold_payment_page.dart';
+import 'screens/more/more_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 👇 Aquí bloqueamos la orientación a vertical
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp, // Solo vertical normal
+    // DeviceOrientation.portraitDown, // si quieres también vertical invertido, descomenta
+  ]);
+
   await dotenv.load(fileName: ".env");
   await initializeDateFormatting('es_ES', null);
 
@@ -77,8 +88,6 @@ class MyApp extends StatelessWidget {
             scaffoldBackgroundColor: Colors.white,
           ),
           home: const SplashScreenWrapper(),
-
-          // ✅ Rutas estáticas
           routes: {
             '/login': (_) => const LoginScreen(),
             '/forgot': (_) => const ForgotPasswordScreen(),
@@ -91,36 +100,40 @@ class MyApp extends StatelessWidget {
             '/crear-producto': (_) => const CrearProductoScreen(),
             '/anuncios-activos': (_) => const AnunciosScreen(),
             '/pantalla-rol': (_) => const PantallaRol(),
-            '/invitaciones': (_) => const InvitacionRolScreen(rolActual: 'superAdmin'),
-
+            '/invitaciones': (_) =>
+                const InvitacionRolScreen(rolActual: 'superAdmin'),
+            '/bienvenida': (_) => const BienvenidaUsuarioScreen(),
+            '/favorites': (_) => FavoritesPage(),
+            '/cart': (_) => const CartPage(),
+            '/profile': (_) => const ProfilePage(),
+            '/more': (_) => const MorePage(),
+            '/historial': (_) => const HistorialScreen(),
           },
-
-          // ✅ Rutas dinámicas y deeplinks
           onGenerateRoute: (settings) {
             final args = settings.arguments;
             final uri = Uri.tryParse(settings.name ?? '');
 
-            // Manejo de deeplinks
             if (uri != null && uri.pathSegments.isNotEmpty) {
               switch (uri.pathSegments[0]) {
                 case 'producto':
                   if (uri.pathSegments.length > 1) {
                     return MaterialPageRoute(
-                      builder: (_) => ProductoScreen(productId: uri.pathSegments[1]),
+                      builder: (_) =>
+                          ProductoScreen(productId: uri.pathSegments[1]),
                     );
                   }
                   break;
                 case 'categoria':
                   if (uri.pathSegments.length > 1) {
                     return MaterialPageRoute(
-                      builder: (_) => CategoriaScreen(categoriaId: uri.pathSegments[1]),
+                      builder: (_) =>
+                          CategoriaScreen(categoriaId: uri.pathSegments[1]),
                     );
                   }
                   break;
               }
             }
 
-            // Manejo de rutas con argumentos
             switch (settings.name) {
               case '/verificar-codigo':
                 if (args is Map<String, dynamic> && args['email'] != null) {
@@ -182,9 +195,25 @@ class MyApp extends StatelessWidget {
                   );
                 }
                 break;
+
+              case '/bold-payment':
+                if (args is Map<String, dynamic> &&
+                    args['totalPrice'] != null &&
+                    args['totalItems'] != null) {
+                  final double totalPrice = (args['variationPrice'] != null)
+                      ? args['variationPrice'].toDouble()
+                      : args['totalPrice'].toDouble();
+
+                  return MaterialPageRoute(
+                    builder: (_) => BoldPaymentPage(
+                      totalPrice: totalPrice,
+                      totalItems: args['totalItems'],
+                    ),
+                  );
+                }
+                break;
             }
 
-            // Página por defecto si no se encuentra ruta
             return MaterialPageRoute(
               builder: (_) => const Scaffold(
                 body: Center(

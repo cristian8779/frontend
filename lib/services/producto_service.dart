@@ -82,13 +82,27 @@ class ProductoService {
     required double precio,
     required String categoria,
     String? subcategoria,
-    int stock = 0,
+    int stock = 1, // ✅ Cambiar valor por defecto a 1 en lugar de 0
     bool disponible = true,
     required String estado,
     required File imagenLocal,
   }) async {
-    if (nombre.isEmpty || descripcion.isEmpty || precio <= 0 || stock < 0) {
-      throw Exception('❌ Los campos del producto son inválidos.');
+    // ✅ Validaciones mejoradas
+    if (nombre.trim().isEmpty) {
+      throw Exception('El nombre del producto es obligatorio');
+    }
+    
+    if (descripcion.trim().isEmpty) {
+      throw Exception('La descripción del producto es obligatoria');
+    }
+    
+    if (precio <= 0) {
+      throw Exception('El precio debe ser mayor a 0');
+    }
+    
+    // ✅ CORRECCIÓN PRINCIPAL: Validar que el stock sea mayor a 0
+    if (stock <= 0) {
+      throw Exception('El stock debe ser mayor a 0. Si no tienes inventario exacto, puedes poner 1 y ajustarlo después.');
     }
 
     final token = await _obtenerTokenValido();
@@ -101,12 +115,22 @@ class ProductoService {
       ..fields['precio'] = precio.toString()
       ..fields['categoria'] = categoria
       ..fields['subcategoria'] = subcategoria ?? ''
-      ..fields['stock'] = stock.toString()
+      ..fields['stock'] = stock.toString() // ✅ Ahora siempre será > 0
       ..fields['disponible'] = disponible.toString()
       ..fields['estado'] = estado
       ..files.add(await http.MultipartFile.fromPath('imagen', imagenLocal.path));
 
     try {
+      print('📤 Crear producto - Enviando datos:');
+      print(' - nombre: ${nombre.trim()}');
+      print(' - descripcion: ${descripcion.trim()}');
+      print(' - precio: $precio');
+      print(' - categoria: $categoria');
+      print(' - subcategoria: ${subcategoria ?? ''}');
+      print(' - stock: $stock'); // ✅ Debug para verificar el stock
+      print(' - disponible: $disponible');
+      print(' - estado: $estado');
+
       final response = await request.send().timeout(const Duration(seconds: 15));
       final responseBody = await response.stream.bytesToString();
 
@@ -116,10 +140,17 @@ class ProductoService {
         return jsonDecode(responseBody);
       } else {
         final error = jsonDecode(responseBody);
-        throw Exception(error['mensaje'] ?? '❌ Error al crear el producto');
+        // ✅ Lanzar solo el mensaje del error sin prefijo adicional
+        throw Exception(error['mensaje'] ?? 'Error al crear el producto');
       }
     } catch (e) {
-      throw Exception('❌ Error al enviar la solicitud: $e');
+      // ✅ Mejorar el manejo de errores
+      if (e.toString().contains('Exception: ')) {
+        // Si ya es una excepción formateada, mantenerla así
+        rethrow;
+      } else {
+        throw Exception('Error de conexión: $e');
+      }
     }
   }
 
@@ -200,35 +231,34 @@ class ProductoService {
     }
   }
 
- Future<Map<String, dynamic>> obtenerProductoPorId(String id) async {
-  final token = await _obtenerTokenValido();
-  final url = Uri.parse('$_baseUrl/productos/$id');
+  Future<Map<String, dynamic>> obtenerProductoPorId(String id) async {
+    final token = await _obtenerTokenValido();
+    final url = Uri.parse('$_baseUrl/productos/$id');
 
-  print('🔄 Cargando producto con ID: $id');
+    print('🔄 Cargando producto con ID: $id');
 
-  try {
-    final response = await http.get(url, headers: _getHeaders(token)).timeout(const Duration(seconds: 15));
+    try {
+      final response = await http.get(url, headers: _getHeaders(token)).timeout(const Duration(seconds: 15));
 
-    print('📥 Respuesta: ${response.body}');
+      print('📥 Respuesta: ${response.body}');
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
 
-      if (data is Map<String, dynamic> && data.containsKey('producto')) {
-        return data['producto'];
+        if (data is Map<String, dynamic> && data.containsKey('producto')) {
+          return data['producto'];
+        } else {
+          throw Exception('❌ Formato inesperado al obtener el producto.');
+        }
       } else {
-        throw Exception('❌ Formato inesperado al obtener el producto.');
+        throw Exception('❌ Error al obtener el producto: ${response.body}');
       }
-    } else {
-      throw Exception('❌ Error al obtener el producto: ${response.body}');
+    } on SocketException {
+      throw Exception('❌ Sin conexión: revisa tu Internet.');
+    } catch (e) {
+      throw Exception('❌ Error inesperado al obtener el producto: $e');
     }
-  } on SocketException {
-    throw Exception('❌ Sin conexión: revisa tu Internet.');
-  } catch (e) {
-    throw Exception('❌ Error inesperado al obtener el producto: $e');
   }
-}
-
 
   /// 🛠️ Actualizar producto con campo `estado`
   Future<Map<String, dynamic>> actualizarProducto({
@@ -238,13 +268,18 @@ class ProductoService {
     required double precio,
     required String categoria,
     String? subcategoria,
-    int stock = 0,
+    int stock = 1, // ✅ Cambiar valor por defecto a 1
     bool disponible = true,
     required String estado,
     File? imagenLocal,
   }) async {
     if (categoria.isEmpty) {
       throw Exception('❌ La categoría es obligatoria para actualizar el producto.');
+    }
+
+    // ✅ Validar stock también en actualización
+    if (stock <= 0) {
+      throw Exception('El stock debe ser mayor a 0. Si no tienes inventario exacto, puedes poner 1 y ajustarlo después.');
     }
 
     final token = await _obtenerTokenValido();
@@ -286,4 +321,30 @@ class ProductoService {
       throw Exception('❌ Ocurrió un error al actualizar el producto: $e');
     }
   }
+
+/// 🔹 NUEVO MÉTODO: Obtener filtros disponibles
+Future<Map<String, dynamic>> obtenerFiltrosDisponibles() async {
+  final token = await _obtenerTokenValido();
+  final url = Uri.parse('$_baseUrl/productos');
+
+  try {
+    final response = await http.get(url, headers: _getHeaders(token)).timeout(const Duration(seconds: 15));
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      if (data['filtrosDisponibles'] != null && data['filtrosDisponibles'] is Map<String, dynamic>) {
+        return Map<String, dynamic>.from(data['filtrosDisponibles']);
+      } else {
+        return {};
+      }
+    } else {
+      throw Exception('❌ Error al cargar filtros: ${response.body}');
+    }
+  } on SocketException {
+    throw Exception('❌ Sin conexión: revisa tu Internet.');
+  } catch (e) {
+    throw Exception('❌ Error inesperado al obtener filtros: $e');
+  }
+}
+
 }

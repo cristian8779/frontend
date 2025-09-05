@@ -16,10 +16,7 @@ class CreateCategoryScreen extends StatefulWidget {
 
 class _CreateCategoryScreenState extends State<CreateCategoryScreen> {
   final _nombreController = TextEditingController();
-  final _descripcionController = TextEditingController();
-
   String? _errorNombre;
-  String? _errorDescripcion;
 
   File? _imagenLocal;
   bool _cargando = false;
@@ -39,20 +36,11 @@ class _CreateCategoryScreenState extends State<CreateCategoryScreen> {
             : null;
       });
     });
-
-    _descripcionController.addListener(() {
-      setState(() {
-        _errorDescripcion = _descripcionController.text.trim().isEmpty
-            ? '⚠️ Este campo es obligatorio'
-            : null;
-      });
-    });
   }
 
   @override
   void dispose() {
     _nombreController.dispose();
-    _descripcionController.dispose();
     super.dispose();
   }
 
@@ -109,12 +97,9 @@ class _CreateCategoryScreenState extends State<CreateCategoryScreen> {
       _errorNombre = _nombreController.text.trim().isEmpty
           ? '⚠️ Este campo es obligatorio'
           : null;
-      _errorDescripcion = _descripcionController.text.trim().isEmpty
-          ? '⚠️ Este campo es obligatorio'
-          : null;
     });
 
-    final camposValidos = _errorNombre == null && _errorDescripcion == null;
+    final camposValidos = _errorNombre == null;
     final imagenValida = _imagenLocal != null;
 
     if (!camposValidos || !imagenValida) {
@@ -129,7 +114,6 @@ class _CreateCategoryScreenState extends State<CreateCategoryScreen> {
 
       final response = await service.crearCategoriaConImagenLocal(
         nombre: _nombreController.text,
-        descripcion: _descripcionController.text,
         imagenLocal: _imagenLocal!,
       );
 
@@ -140,7 +124,7 @@ class _CreateCategoryScreenState extends State<CreateCategoryScreen> {
           tipoAnimacion: 'assets/animations/Success.json',
           onAceptar: () {
             Navigator.pop(context); // Cierra el diálogo
-            Navigator.pop(context, true); // Cierra CreateCategoryScreen y devuelve "true"
+            Navigator.pop(context, true); // Devuelve "true"
           },
         );
       } else {
@@ -255,13 +239,6 @@ class _CreateCategoryScreenState extends State<CreateCategoryScreen> {
                   controller: _nombreController,
                   decoration: _inputDecoration('Nombre de la categoría', Icons.category)
                       .copyWith(errorText: _errorNombre),
-                ),
-                const SizedBox(height: 20),
-                TextField(
-                  controller: _descripcionController,
-                  maxLines: 2,
-                  decoration: _inputDecoration('Descripción', Icons.description)
-                      .copyWith(errorText: _errorDescripcion),
                 ),
                 const SizedBox(height: 40),
                 SizedBox(

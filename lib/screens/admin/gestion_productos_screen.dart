@@ -65,13 +65,21 @@ class _BuscadorProductosState extends State<BuscadorProductos>
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth < 360;
+    final horizontalPadding = screenWidth * 0.05; // 5% del ancho de pantalla
+    final fontSize = isSmallScreen ? 14.0 : 16.0;
+    
     return AnimatedBuilder(
       animation: _scaleAnimation,
       builder: (context, child) {
         return Transform.scale(
           scale: _scaleAnimation.value,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+            padding: EdgeInsets.symmetric(
+              horizontal: horizontalPadding.clamp(16.0, 24.0),
+              vertical: 4,
+            ),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(25),
@@ -93,15 +101,18 @@ class _BuscadorProductosState extends State<BuscadorProductos>
               controller: _controller,
               focusNode: _focusNode,
               onChanged: widget.onBusquedaChanged,
-              style: const TextStyle(fontSize: 16),
+              style: TextStyle(fontSize: fontSize),
               decoration: InputDecoration(
                 prefixIcon: Icon(
                   Icons.search,
                   color: _focusNode.hasFocus ? Colors.blue : Colors.grey[600],
-                  size: 24,
+                  size: isSmallScreen ? 20 : 24,
                 ),
                 hintText: 'Buscar productos...',
-                hintStyle: TextStyle(color: Colors.grey[500]),
+                hintStyle: TextStyle(
+                  color: Colors.grey[500],
+                  fontSize: fontSize,
+                ),
                 border: InputBorder.none,
                 suffixIcon: widget.busqueda.isNotEmpty
                     ? GestureDetector(
@@ -116,9 +127,9 @@ class _BuscadorProductosState extends State<BuscadorProductos>
                             color: Colors.grey[200],
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.close,
-                            size: 16,
+                            size: isSmallScreen ? 14 : 16,
                             color: Colors.grey,
                           ),
                         ),
@@ -398,9 +409,15 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
   }
 
   Widget _buildShimmerSearchBar() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final horizontalPadding = screenWidth * 0.05;
+    
     return Container(
       height: 56,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      padding: EdgeInsets.symmetric(
+        horizontal: horizontalPadding.clamp(16.0, 24.0),
+        vertical: 4,
+      ),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(25),
@@ -416,8 +433,13 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
   }
 
   Widget _buildShimmerStatsCard() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth < 360;
+    final cardPadding = isSmallScreen ? 12.0 : 16.0;
+    final iconSize = isSmallScreen ? 40.0 : 48.0;
+    
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(cardPadding),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -430,10 +452,11 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
         ],
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 48,
-            height: 48,
+            width: iconSize,
+            height: iconSize,
             decoration: BoxDecoration(
               color: Colors.grey.shade400,
               borderRadius: BorderRadius.circular(12),
@@ -463,8 +486,11 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
   }
 
   Widget _buildShimmerFilters() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final cardPadding = screenWidth < 360 ? 12.0 : 16.0;
+    
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(cardPadding),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -480,7 +506,7 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 180,
+            width: screenWidth * 0.4,
             height: 20,
             decoration: BoxDecoration(
               color: Colors.grey.shade400,
@@ -526,17 +552,21 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
   }
 
   Widget _buildShimmerProductGrid() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final crossAxisCount = _getCrossAxisCount(screenWidth);
+    final itemCount = crossAxisCount * 3; // 3 filas
+    
     return SizedBox(
       height: 600,
       child: GridView.builder(
         physics: const NeverScrollableScrollPhysics(),
-        itemCount: 6,
+        itemCount: itemCount,
         padding: const EdgeInsets.symmetric(vertical: 8),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-          childAspectRatio: 0.75,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: crossAxisCount,
+          crossAxisSpacing: _getGridSpacing(screenWidth),
+          mainAxisSpacing: _getGridSpacing(screenWidth),
+          childAspectRatio: _getChildAspectRatio(screenWidth),
         ),
         itemBuilder: (context, index) {
           return _buildShimmerElement(
@@ -602,6 +632,9 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
   }
 
   Widget _buildConnectionErrorState() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth < 360;
+    
     IconData icon;
     Color color;
     String title;
@@ -626,46 +659,48 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
     }
 
     return Container(
-      height: 500,
-      padding: const EdgeInsets.all(32),
+      height: screenWidth < 360 ? 400 : 500,
+      padding: EdgeInsets.all(isSmallScreen ? 24.0 : 32.0),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.all(isSmallScreen ? 20.0 : 24.0),
             decoration: BoxDecoration(
               color: color.withOpacity(0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(
               icon,
-              size: 64,
+              size: isSmallScreen ? 56 : 64,
               color: color,
             ),
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: isSmallScreen ? 20 : 24),
           Text(
             title,
-            style: const TextStyle(
-              fontSize: 22,
+            style: TextStyle(
+              fontSize: isSmallScreen ? 20 : 22,
               fontWeight: FontWeight.bold,
               color: Colors.black87,
             ),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: isSmallScreen ? 10 : 12),
           Text(
             message,
             textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: 16,
+              fontSize: isSmallScreen ? 14 : 16,
               color: Colors.grey[600],
               height: 1.5,
             ),
           ),
-          const SizedBox(height: 32),
-          Row(
-            mainAxisSize: MainAxisSize.min,
+          SizedBox(height: isSmallScreen ? 28 : 32),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            alignment: WrapAlignment.center,
             children: [
               ElevatedButton.icon(
                 onPressed: _cargarDatos,
@@ -674,14 +709,16 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
                 style: ElevatedButton.styleFrom(
                   backgroundColor: color,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isSmallScreen ? 20 : 24,
+                    vertical: isSmallScreen ? 10 : 12,
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(25),
                   ),
                 ),
               ),
-              if (_connectionState == ConnectionState.offline) ...[
-                const SizedBox(width: 12),
+              if (_connectionState == ConnectionState.offline)
                 OutlinedButton.icon(
                   onPressed: () {
                     _mostrarSnackBar(
@@ -694,13 +731,15 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
                   label: const Text('Ayuda'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: color,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isSmallScreen ? 20 : 24,
+                      vertical: isSmallScreen ? 10 : 12,
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(25),
                     ),
                   ),
                 ),
-              ],
             ],
           ),
         ],
@@ -709,8 +748,13 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
   }
 
   Widget _buildFiltrosYOrdenamiento() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth < 360;
+    final cardPadding = isSmallScreen ? 12.0 : 16.0;
+    final fontSize = isSmallScreen ? 14.0 : 16.0;
+    
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(cardPadding),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -727,64 +771,92 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
         children: [
           Row(
             children: [
-              const Icon(Icons.filter_alt_outlined, color: Colors.blue, size: 20),
-              const SizedBox(width: 8),
-              const Text(
-                'Filtros y ordenamiento',
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+              Icon(
+                Icons.filter_alt_outlined,
+                color: Colors.blue,
+                size: isSmallScreen ? 18 : 20,
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  value: categoriaSeleccionada,
-                  isExpanded: true,
-                  decoration: InputDecoration(
-                    labelText: 'Categoría',
-                    prefixIcon: const Icon(Icons.category_outlined, size: 20),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.grey[300]!),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.grey[300]!),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Colors.blue),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  ),
-                  items: [
-                    const DropdownMenuItem<String>(
-                      value: null,
-                      child: Text('Todas las categorías'),
-                    ),
-                    ...categorias.map((categoria) => DropdownMenuItem<String>(
-                      value: categoria['_id'],
-                      child: Text(
-                        categoria['nombre'] ?? 'Sin nombre',
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    )),
-                  ],
-                  onChanged: (value) {
-                    setState(() {
-                      categoriaSeleccionada = value;
-                      _filtrar();
-                    });
-                  },
+              const SizedBox(width: 8),
+              Text(
+                'Filtros y ordenamiento',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: fontSize,
+                  color: Colors.black87,
                 ),
               ),
             ],
           ),
+          SizedBox(height: isSmallScreen ? 12 : 16),
           
-          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            value: categoriaSeleccionada,
+            isExpanded: true,
+            decoration: InputDecoration(
+              labelText: 'Categoría',
+              labelStyle: TextStyle(
+                fontSize: fontSize - 1,
+                color: Colors.black87,
+              ),
+              prefixIcon: Icon(
+                Icons.category_outlined,
+                size: isSmallScreen ? 18 : 20,
+                color: Colors.grey[600],
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey[300]!),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey[300]!),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Colors.blue),
+              ),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: isSmallScreen ? 12 : 16,
+                vertical: isSmallScreen ? 10 : 12,
+              ),
+            ),
+            style: TextStyle(
+              fontSize: fontSize - 1,
+              color: Colors.black87, // Color del texto seleccionado
+            ),
+            dropdownColor: Colors.white, // Color de fondo del dropdown
+            items: [
+              DropdownMenuItem<String>(
+                value: null,
+                child: Text(
+                  'Todas las categorías',
+                  style: TextStyle(
+                    fontSize: fontSize - 1,
+                    color: Colors.black87, // Color del texto de la opción
+                  ),
+                ),
+              ),
+              ...categorias.map((categoria) => DropdownMenuItem<String>(
+                value: categoria['_id'],
+                child: Text(
+                  categoria['nombre'] ?? 'Sin nombre',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: fontSize - 1,
+                    color: Colors.black87, // Color del texto de la opción
+                  ),
+                ),
+              )),
+            ],
+            onChanged: (value) {
+              setState(() {
+                categoriaSeleccionada = value;
+                _filtrar();
+              });
+            },
+          ),
+          
+          SizedBox(height: isSmallScreen ? 12 : 16),
           
           Row(
             children: [
@@ -795,7 +867,15 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
                   isExpanded: true,
                   decoration: InputDecoration(
                     labelText: 'Ordenar por',
-                    prefixIcon: const Icon(Icons.sort, size: 20),
+                    labelStyle: TextStyle(
+                      fontSize: fontSize - 1,
+                      color: Colors.black87,
+                    ),
+                    prefixIcon: Icon(
+                      Icons.sort,
+                      size: isSmallScreen ? 18 : 20,
+                      color: Colors.grey[600],
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide(color: Colors.grey[300]!),
@@ -808,12 +888,47 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
                       borderRadius: BorderRadius.circular(12),
                       borderSide: const BorderSide(color: Colors.blue),
                     ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: isSmallScreen ? 12 : 16,
+                      vertical: isSmallScreen ? 10 : 12,
+                    ),
                   ),
-                  items: const [
-                    DropdownMenuItem(value: 'nombre', child: Text('Nombre')),
-                    DropdownMenuItem(value: 'precio', child: Text('Precio')),
-                    DropdownMenuItem(value: 'fecha', child: Text('Fecha')),
+                  style: TextStyle(
+                    fontSize: fontSize - 1,
+                    color: Colors.black87, // Color del texto seleccionado
+                  ),
+                  dropdownColor: Colors.white, // Color de fondo del dropdown
+                  items: [
+                    DropdownMenuItem(
+                      value: 'nombre',
+                      child: Text(
+                        'Nombre', 
+                        style: TextStyle(
+                          fontSize: fontSize - 1,
+                          color: Colors.black87, // Color del texto de la opción
+                        ),
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'precio',
+                      child: Text(
+                        'Precio', 
+                        style: TextStyle(
+                          fontSize: fontSize - 1,
+                          color: Colors.black87, // Color del texto de la opción
+                        ),
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'fecha',
+                      child: Text(
+                        'Fecha', 
+                        style: TextStyle(
+                          fontSize: fontSize - 1,
+                          color: Colors.black87, // Color del texto de la opción
+                        ),
+                      ),
+                    ),
                   ],
                   onChanged: (value) {
                     setState(() {
@@ -825,6 +940,8 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
               ),
               const SizedBox(width: 12),
               Container(
+                width: 48,
+                height: 48,
                 decoration: BoxDecoration(
                   color: Colors.blue.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
@@ -839,7 +956,7 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
                   icon: Icon(
                     _sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
                     color: Colors.blue,
-                    size: 20,
+                    size: isSmallScreen ? 18 : 20,
                   ),
                   tooltip: _sortAscending ? 'Ascendente' : 'Descendente',
                 ),
@@ -851,9 +968,43 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
     );
   }
 
+  // Función para obtener el número de columnas según el ancho de pantalla
+  int _getCrossAxisCount(double screenWidth) {
+    if (screenWidth < 360) return 1;  // Pantallas muy pequeñas
+    if (screenWidth < 600) return 2;  // Teléfonos normales
+    if (screenWidth < 900) return 3;  // Tablets pequeñas
+    return 4;  // Tablets grandes
+  }
+
+  // Función para obtener el espaciado del grid según el ancho de pantalla
+  double _getGridSpacing(double screenWidth) {
+    if (screenWidth < 360) return 8.0;
+    if (screenWidth < 600) return 12.0;
+    return 16.0;
+  }
+
+  // Función para obtener el aspect ratio según el ancho de pantalla
+  double _getChildAspectRatio(double screenWidth) {
+    if (screenWidth < 360) return 0.85;  // Más alto para pantallas pequeñas
+    if (screenWidth < 600) return 0.75;  // Ratio estándar
+    return 0.8;  // Ligeramente más cuadrado para pantallas grandes
+  }
+
   Widget _buildEstadisticasHeader() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final isSmallScreen = screenWidth < 360;
+    final isVerySmallScreen = screenHeight < 600;
+    
+    final cardPadding = isSmallScreen ? 12.0 : 16.0;
+    final containerPadding = isSmallScreen ? 16.0 : 20.0;
+    final iconSize = isSmallScreen ? 24.0 : 32.0;
+    final titleFontSize = isSmallScreen ? 12.0 : 14.0;
+    final numberFontSize = isSmallScreen ? 20.0 : 24.0;
+    final subtitleFontSize = isSmallScreen ? 12.0 : 14.0;
+    
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(containerPadding),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -888,7 +1039,7 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
                 }
               },
               child: Container(
-                padding: const EdgeInsets.all(16),
+                padding: EdgeInsets.all(cardPadding),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
@@ -901,37 +1052,41 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
                   ],
                 ),
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: EdgeInsets.all(isSmallScreen ? 8.0 : 12.0),
                       decoration: BoxDecoration(
                         color: Colors.blue.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.add_box_outlined,
                         color: Colors.blue,
-                        size: 32,
+                        size: iconSize,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    const Text(
+                    SizedBox(height: isSmallScreen ? 6 : 8),
+                    Text(
                       'Agregar Producto',
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
-                        fontSize: 14,
+                        fontSize: titleFontSize,
+                        color: Colors.black87,
                       ),
                       textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
               ),
             ),
           ),
-          const SizedBox(width: 16),
+          SizedBox(width: isSmallScreen ? 12 : 16),
           Expanded(
             child: Container(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(cardPadding),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
@@ -944,9 +1099,10 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
                 ],
               ),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(8),
+                    padding: EdgeInsets.all(isSmallScreen ? 6.0 : 8.0),
                     decoration: BoxDecoration(
                       color: Colors.green.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
@@ -954,22 +1110,22 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
                     child: Icon(
                       Icons.inventory_2_outlined,
                       color: Colors.green[700],
-                      size: 32,
+                      size: iconSize,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: isSmallScreen ? 6 : 8),
                   Text(
                     '${productosFiltrados.length}',
-                    style: const TextStyle(
-                      fontSize: 24,
+                    style: TextStyle(
+                      fontSize: numberFontSize,
                       fontWeight: FontWeight.bold,
                       color: Colors.green,
                     ),
                   ),
-                  const Text(
+                  Text(
                     'Productos',
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: subtitleFontSize,
                       color: Colors.grey,
                       fontWeight: FontWeight.w500,
                     ),
@@ -978,10 +1134,10 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
               ),
             ),
           ),
-          const SizedBox(width: 16),
+          SizedBox(width: isSmallScreen ? 12 : 16),
           Expanded(
             child: Container(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(cardPadding),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
@@ -994,9 +1150,10 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
                 ],
               ),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(8),
+                    padding: EdgeInsets.all(isSmallScreen ? 6.0 : 8.0),
                     decoration: BoxDecoration(
                       color: Colors.orange.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
@@ -1004,22 +1161,22 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
                     child: Icon(
                       Icons.category_outlined,
                       color: Colors.orange[700],
-                      size: 32,
+                      size: iconSize,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: isSmallScreen ? 6 : 8),
                   Text(
                     '${categorias.length}',
-                    style: const TextStyle(
-                      fontSize: 24,
+                    style: TextStyle(
+                      fontSize: numberFontSize,
                       fontWeight: FontWeight.bold,
                       color: Colors.orange,
                     ),
                   ),
-                  const Text(
+                  Text(
                     'Categorías',
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: subtitleFontSize,
                       color: Colors.grey,
                       fontWeight: FontWeight.w500,
                     ),
@@ -1034,51 +1191,63 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
   }
 
   Widget _buildEmptyState() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final isSmallScreen = screenWidth < 360;
+    final isVerySmallScreen = screenHeight < 600;
+    
+    final containerHeight = isVerySmallScreen ? 300.0 : 400.0;
+    final padding = isSmallScreen ? 24.0 : 32.0;
+    final iconSize = isSmallScreen ? 56.0 : 64.0;
+    final titleFontSize = isSmallScreen ? 18.0 : 20.0;
+    final subtitleFontSize = isSmallScreen ? 14.0 : 16.0;
+    
     return SizedBox(
-      height: 400,
+      height: containerHeight,
       child: Center(
         child: Padding(
-          padding: const EdgeInsets.all(32),
+          padding: EdgeInsets.all(padding),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                padding: const EdgeInsets.all(24),
+                padding: EdgeInsets.all(isSmallScreen ? 20.0 : 24.0),
                 decoration: BoxDecoration(
                   color: Colors.grey[100],
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
                   busqueda.isNotEmpty ? Icons.search_off : Icons.inventory_2_outlined,
-                  size: 64,
+                  size: iconSize,
                   color: Colors.grey[400],
                 ),
               ),
-              const SizedBox(height: 24),
+              SizedBox(height: isSmallScreen ? 20 : 24),
               Text(
                 busqueda.isNotEmpty || categoriaSeleccionada != null
                   ? 'No encontramos productos'
                   : 'No hay productos registrados',
-                style: const TextStyle(
-                  fontSize: 20,
+                style: TextStyle(
+                  fontSize: titleFontSize,
                   fontWeight: FontWeight.w600,
                   color: Colors.black87,
                 ),
+                textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: isSmallScreen ? 10 : 12),
               Text(
                 busqueda.isNotEmpty || categoriaSeleccionada != null
                   ? 'Intenta con otros filtros o términos de búsqueda.'
                   : 'Comienza agregando tu primer producto.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 16,
+                  fontSize: subtitleFontSize,
                   color: Colors.grey[600],
                   height: 1.4,
                 ),
               ),
               if (busqueda.isEmpty && categoriaSeleccionada == null) ...[
-                const SizedBox(height: 24),
+                SizedBox(height: isSmallScreen ? 20 : 24),
                 ElevatedButton.icon(
                   onPressed: () async {
                     final result = await Navigator.push(
@@ -1096,7 +1265,10 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isSmallScreen ? 20 : 24,
+                      vertical: isSmallScreen ? 10 : 12,
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(25),
                     ),
@@ -1111,9 +1283,16 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
   }
 
   Widget _buildProductGrid() {
+    final screenWidth = MediaQuery.of(context).size.width;
     final itemCount = productosFiltrados.length;
-    final rows = (itemCount / 2).ceil();
-    final height = rows * 280.0 + (rows - 1) * 16.0 + 16.0;
+    final crossAxisCount = _getCrossAxisCount(screenWidth);
+    final rows = (itemCount / crossAxisCount).ceil();
+    final spacing = _getGridSpacing(screenWidth);
+    final childAspectRatio = _getChildAspectRatio(screenWidth);
+    
+    // Calcular altura dinámica basada en el aspect ratio y número de filas
+    final itemHeight = (screenWidth - (spacing * (crossAxisCount + 1))) / crossAxisCount / childAspectRatio;
+    final height = (rows * itemHeight) + ((rows - 1) * spacing) + 16.0;
     
     return SizedBox(
       height: height,
@@ -1121,11 +1300,11 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
         physics: const NeverScrollableScrollPhysics(),
         itemCount: itemCount,
         padding: const EdgeInsets.symmetric(vertical: 8),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-          childAspectRatio: 0.75,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: crossAxisCount,
+          crossAxisSpacing: spacing,
+          mainAxisSpacing: spacing,
+          childAspectRatio: childAspectRatio,
         ),
         itemBuilder: (context, index) {
           final producto = productosFiltrados[index];
@@ -1166,6 +1345,9 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
   Widget _buildConnectionStatus() {
     if (_connectionState == ConnectionState.online) return const SizedBox.shrink();
     
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth < 360;
+    
     Color statusColor;
     IconData statusIcon;
     String statusText;
@@ -1186,8 +1368,11 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
     }
     
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      margin: EdgeInsets.only(bottom: isSmallScreen ? 12 : 16),
+      padding: EdgeInsets.symmetric(
+        horizontal: isSmallScreen ? 12 : 16,
+        vertical: isSmallScreen ? 10 : 12,
+      ),
       decoration: BoxDecoration(
         color: statusColor.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
@@ -1195,14 +1380,19 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
       ),
       child: Row(
         children: [
-          Icon(statusIcon, color: statusColor, size: 20),
-          const SizedBox(width: 12),
+          Icon(
+            statusIcon,
+            color: statusColor,
+            size: isSmallScreen ? 18 : 20,
+          ),
+          SizedBox(width: isSmallScreen ? 10 : 12),
           Expanded(
             child: Text(
               statusText,
               style: TextStyle(
                 color: statusColor.withOpacity(0.8),
                 fontWeight: FontWeight.w600,
+                fontSize: isSmallScreen ? 14 : 16,
               ),
             ),
           ),
@@ -1210,7 +1400,10 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
             onPressed: _cargarDatos,
             child: Text(
               'Reintentar',
-              style: TextStyle(color: statusColor),
+              style: TextStyle(
+                color: statusColor,
+                fontSize: isSmallScreen ? 14 : 16,
+              ),
             ),
           ),
         ],
@@ -1220,6 +1413,12 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final isSmallScreen = screenWidth < 360;
+    final padding = screenWidth * 0.04; // 4% del ancho de pantalla
+    final clampedPadding = padding.clamp(12.0, 20.0);
+    
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       body: RefreshIndicator(
@@ -1228,17 +1427,17 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             SliverAppBar(
-              expandedHeight: 120,
+              expandedHeight: isSmallScreen ? 100 : 120,
               floating: false,
               pinned: true,
               backgroundColor: Colors.white,
               elevation: 0,
               flexibleSpace: FlexibleSpaceBar(
-                title: const Text(
+                title: Text(
                   'Gestión de Productos',
                   style: TextStyle(
                     color: Colors.black87,
-                    fontSize: 20,
+                    fontSize: isSmallScreen ? 18 : 20,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -1259,7 +1458,7 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
             ),
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.all(16.0),
+                padding: EdgeInsets.all(clampedPadding),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1296,14 +1495,14 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
                             },
                           ),
                         ),
-                      const SizedBox(height: 24),
+                      SizedBox(height: isSmallScreen ? 20 : 24),
                       
                       // Estadísticas con shimmer
                       if (isLoading)
                         _buildShimmerElement(
                           delay: 1,
                           child: Container(
-                            padding: const EdgeInsets.all(20),
+                            padding: EdgeInsets.all(isSmallScreen ? 16 : 20),
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(20),
@@ -1318,9 +1517,9 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
                             child: Row(
                               children: [
                                 Expanded(child: _buildShimmerStatsCard()),
-                                const SizedBox(width: 16),
+                                SizedBox(width: isSmallScreen ? 12 : 16),
                                 Expanded(child: _buildShimmerStatsCard()),
-                                const SizedBox(width: 16),
+                                SizedBox(width: isSmallScreen ? 12 : 16),
                                 Expanded(child: _buildShimmerStatsCard()),
                               ],
                             ),
@@ -1331,7 +1530,7 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
                           opacity: _fadeAnimation,
                           child: _buildEstadisticasHeader(),
                         ),
-                      const SizedBox(height: 24),
+                      SizedBox(height: isSmallScreen ? 20 : 24),
                       
                       // Filtros con shimmer
                       if (isLoading)
@@ -1344,7 +1543,7 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
                           opacity: _fadeAnimation,
                           child: _buildFiltrosYOrdenamiento(),
                         ),
-                      const SizedBox(height: 24),
+                      SizedBox(height: isSmallScreen ? 20 : 24),
                       
                       // Header de productos con shimmer
                       if (isLoading)
@@ -1353,17 +1552,17 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
                           child: Row(
                             children: [
                               Container(
-                                width: 24,
-                                height: 24,
+                                width: isSmallScreen ? 20 : 24,
+                                height: isSmallScreen ? 20 : 24,
                                 decoration: BoxDecoration(
                                   color: Colors.grey.shade400,
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                               ),
-                              const SizedBox(width: 8),
+                              SizedBox(width: isSmallScreen ? 6 : 8),
                               Container(
-                                width: 200,
-                                height: 24,
+                                width: screenWidth * 0.5,
+                                height: isSmallScreen ? 20 : 24,
                                 decoration: BoxDecoration(
                                   color: Colors.grey.shade400,
                                   borderRadius: BorderRadius.circular(12),
@@ -1386,30 +1585,38 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
                           opacity: _fadeAnimation,
                           child: Row(
                             children: [
-                              const Icon(Icons.inventory, color: Colors.blue, size: 24),
-                              const SizedBox(width: 8),
-                              const Text(
-                                'Productos Registrados',
-                                style: TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black87,
+                              Icon(
+                                Icons.inventory,
+                                color: Colors.blue,
+                                size: isSmallScreen ? 20 : 24,
+                              ),
+                              SizedBox(width: isSmallScreen ? 6 : 8),
+                              Expanded(
+                                child: Text(
+                                  'Productos Registrados',
+                                  style: TextStyle(
+                                    fontSize: isSmallScreen ? 20 : 22,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black87,
+                                  ),
                                 ),
                               ),
-                              const Spacer(),
                               if (productosFiltrados.isNotEmpty) ...[
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: isSmallScreen ? 10 : 12,
+                                    vertical: isSmallScreen ? 4 : 6,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: Colors.blue.withOpacity(0.1),
                                     borderRadius: BorderRadius.circular(20),
                                   ),
                                   child: Text(
                                     '${productosFiltrados.length} resultado${productosFiltrados.length != 1 ? 's' : ''}',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       color: Colors.blue,
                                       fontWeight: FontWeight.w600,
-                                      fontSize: 12,
+                                      fontSize: isSmallScreen ? 11 : 12,
                                     ),
                                   ),
                                 ),
@@ -1417,7 +1624,7 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
                             ],
                           ),
                         ),
-                      const SizedBox(height: 16),
+                      SizedBox(height: isSmallScreen ? 12 : 16),
                       
                       // Grid de productos o estados de carga/vacío
                       if (isLoading)
@@ -1433,7 +1640,7 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
                           child: _buildProductGrid(),
                         ),
                       
-                      const SizedBox(height: 32),
+                      SizedBox(height: isSmallScreen ? 24 : 32),
                     ],
                   ],
                 ),

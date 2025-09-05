@@ -6,7 +6,7 @@ import '/models/categoria.dart';
 
 class CategoriaList extends StatelessWidget {
   final List<Map<String, dynamic>> categorias;
-  final VoidCallback onCategoriasActualizadas; // 👈 Callback para actualizar
+  final VoidCallback onCategoriasActualizadas; // Callback para actualizar
 
   const CategoriaList({
     super.key,
@@ -59,28 +59,92 @@ class CategoriaList extends StatelessWidget {
         if (categorias.isEmpty) {
           return SizedBox(
             height: dimensions['containerHeight']!,
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.category_outlined,
-                    size: dimensions['iconSize']! + 8,
-                    color: Colors.blueGrey,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'No se encontraron categorías.\n¡Puedes crear nuevas desde aquí!',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: dimensions['fontSize']! + 2,
-                      color: Colors.black54,
+            child: Row(
+              children: [
+                // Mensaje y botón alineados horizontalmente
+                Expanded(
+                  flex: 2,
+                  child: Padding(
+                    padding: EdgeInsets.only(right: dimensions['padding']!),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.category_outlined,
+                          size: dimensions['iconSize']! + 4,
+                          color: Colors.blueGrey,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'No se encontraron categorías.',
+                          style: TextStyle(
+                            fontSize: dimensions['fontSize']! + 1,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Puedes crear nuevas desde aquí',
+                          style: TextStyle(
+                            fontSize: dimensions['fontSize']! - 1,
+                            color: Colors.black54,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  _agregarCategoriaBoton(context, dimensions),
-                ],
-              ),
+                ),
+                // Botón de agregar
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    GestureDetector(
+                      onTap: () async {
+                        final creado = await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const CreateCategoryScreen(),
+                          ),
+                        );
+
+                        if (creado == true) {
+                          onCategoriasActualizadas(); // Actualiza después de crear
+                        }
+                      },
+                      child: Container(
+                        width: dimensions['itemWidth']!,
+                        height: dimensions['itemHeight']!,
+                        decoration: BoxDecoration(
+                          color: Colors.red[400],
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Colors.black26,
+                              blurRadius: 6,
+                              offset: Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          Icons.add, 
+                          color: Colors.white, 
+                          size: dimensions['iconSize']!,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      "Agregar",
+                      style: TextStyle(
+                        fontSize: dimensions['fontSize']!,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           );
         }
@@ -107,7 +171,8 @@ class CategoriaList extends StatelessWidget {
                 padding: EdgeInsets.only(right: dimensions['padding']!),
                 child: GestureDetector(
                   onTap: () async {
-                    final actualizado = await Navigator.push(
+                    // Navegar a CategoriaPreviewScreen
+                    final resultado = await Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (_) => CategoriaPreviewScreen(
@@ -116,8 +181,9 @@ class CategoriaList extends StatelessWidget {
                       ),
                     );
 
-                    if (actualizado == true) {
-                      onCategoriasActualizadas(); // 👈 Actualiza después de editar/ver
+                    // Si se retornó true, significa que hubo cambios (actualización o eliminación)
+                    if (resultado == true) {
+                      onCategoriasActualizadas(); // Actualiza la lista
                     }
                   },
                   child: Column(
@@ -193,7 +259,7 @@ class CategoriaList extends StatelessWidget {
               );
 
               if (creado == true) {
-                onCategoriasActualizadas(); // 👈 Actualiza después de crear
+                onCategoriasActualizadas(); // Actualiza después de crear
               }
             },
             child: Container(

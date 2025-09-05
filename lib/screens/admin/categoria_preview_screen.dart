@@ -28,10 +28,14 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   final ScrollController _scrollController = ScrollController();
+  
+  // Variable para mantener la categoría actualizada
+  late Categoria _categoriaActual;
 
   @override
   void initState() {
     super.initState();
+    _categoriaActual = widget.categoria; // Inicializar con la categoría original
     _productosFuture = _cargarProductosDeCategoria();
     _animationController = AnimationController(
       vsync: this,
@@ -54,31 +58,121 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
   Future<List<Producto>> _cargarProductosDeCategoria() async {
     final categoriaService = CategoriaService();
     final productosJson =
-        await categoriaService.obtenerProductosPorCategoria(widget.categoria.id);
+        await categoriaService.obtenerProductosPorCategoria(_categoriaActual.id);
     return productosJson.map((json) => Producto.fromJson(json)).toList();
   }
 
- Future<void> _refrescarProductos() async {
-  if (_isRefreshing) return;
-  setState(() {
-    _isRefreshing = true;
-    _productosFuture = _cargarProductosDeCategoria();
-  });
-  await _productosFuture;
-
-  if (_scrollController.hasClients) {
-    _scrollController.animateTo(
-      0,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
-    );
+  // Método para actualizar la información de la categoría
+  Future<void> _actualizarInformacionCategoria() async {
+    try {
+      final categoriaService = CategoriaService();
+      final categoriaJson = await categoriaService.obtenerCategoriaPorId(_categoriaActual.id);
+      
+      debugPrint('Datos obtenidos del servidor: $categoriaJson'); // Para debuggear
+      
+      if (categoriaJson != null && mounted) {
+        final categoriaActualizada = Categoria.fromJson(categoriaJson);
+        
+        debugPrint('Categoría actualizada - Nombre: ${categoriaActualizada.nombre}, Imagen: ${categoriaActualizada.imagen}'); // Para debuggear
+        
+        setState(() {
+          _categoriaActual = categoriaActualizada;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error al actualizar información de categoría: $e');
+    }
   }
 
-  setState(() {
-    _isRefreshing = false;
-  });
-}
+  // Navegar a editar categoría y esperar resultado
+  Future<void> _navegarAEditarCategoria() async {
+    try {
+      final resultado = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(
+          builder: (context) => CategoriaDetalleScreen(categoria: _categoriaActual),
+        ),
+      );
 
+      // Si se retorna true, significa que la categoría fue actualizada
+      if (resultado == true && mounted) {
+        debugPrint('La categoría fue actualizada, refrescando datos...'); // Para debuggear
+        
+        // Actualizar la información de la categoría
+        await _actualizarInformacionCategoria();
+        
+        // También refrescar la lista de productos por si cambió algo
+        setState(() {
+          _productosFuture = _cargarProductosDeCategoria();
+        });
+        
+        // Mostrar feedback visual
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.white, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text('Categoría "${_categoriaActual.nombre}" actualizada exitosamente'),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              margin: const EdgeInsets.all(16),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error al navegar a editar categoría: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text('Error al actualizar la categoría'),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _refrescarProductos() async {
+    if (_isRefreshing) return;
+    setState(() {
+      _isRefreshing = true;
+      _productosFuture = _cargarProductosDeCategoria();
+    });
+    await _productosFuture;
+
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+
+    setState(() {
+      _isRefreshing = false;
+    });
+  }
 
   Widget _buildShimmerGrid() {
     return GridView.builder(
@@ -146,7 +240,6 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
 
   @override
   Widget build(BuildContext context) {
-    final categoria = widget.categoria;
     final theme = Theme.of(context);
 
     return WillPopScope(
@@ -190,7 +283,7 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
             onLongPress: () => HapticFeedback.lightImpact(),
           ),
           title: Text(
-            categoria.nombre,
+            _categoriaActual.nombre, // Usar la categoría actualizada
             style: const TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w600,
@@ -203,27 +296,31 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
               tooltip: 'Editar categoría',
               onPressed: () {
                 HapticFeedback.lightImpact();
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) =>
-                        CategoriaDetalleScreen(categoria: categoria),
-                  ),
-                );
+                _navegarAEditarCategoria();
               },
             ),
           ],
         ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () {
+          floatingActionButton: FloatingActionButton.extended(
+          onPressed: () async {
             HapticFeedback.selectionClick();
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) =>
-                    CrearProductoScreen(categoryId: categoria.id),
-              ),
-            );
+            // Evitar navegaciones múltiples
+            if (ModalRoute.of(context)?.isCurrent == true) {
+              final productoCreado = await Navigator.push<bool>(
+                context,
+                MaterialPageRoute(
+                  builder: (context) =>
+                      CrearProductoScreen(categoryId: _categoriaActual.id),
+                ),
+              );
+              
+              // Si se creó un producto, refrescar la lista
+              if (productoCreado == true && mounted) {
+                setState(() {
+                  _productosFuture = _cargarProductosDeCategoria();
+                });
+              }
+            }
           },
           icon: const Icon(Icons.add),
           label: const Text("Agregar"),
@@ -239,7 +336,7 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
                   children: [
                     Center(
                       child: Hero(
-                        tag: 'categoria-${categoria.id}',
+                        tag: 'categoria-${_categoriaActual.id}',
                         child: ScaleTransition(
                           scale: _fadeAnimation,
                           child: Material(
@@ -260,11 +357,12 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
                                   ),
                                 ],
                               ),
-                              child: (categoria.imagen != null &&
-                                      categoria.imagen!.isNotEmpty)
+                              child: (_categoriaActual.imagen != null &&
+                                      _categoriaActual.imagen!.isNotEmpty)
                                   ? CachedNetworkImage(
-                                      imageUrl: categoria.imagen!,
+                                      imageUrl: _categoriaActual.imagen!,
                                       fit: BoxFit.contain,
+                                      key: ValueKey(_categoriaActual.imagen), // Forzar reconstrucción si cambia la imagen
                                       placeholder: (context, url) =>
                                           Shimmer.fromColors(
                                         baseColor: Colors.grey.shade200,
@@ -291,11 +389,12 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
                     const SizedBox(height: 16),
                     Center(
                       child: Text(
-                        categoria.nombre,
+                        _categoriaActual.nombre, // Usar la categoría actualizada
                         style: theme.textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.bold,
                           fontSize: 24,
                         ),
+                        textAlign: TextAlign.center,
                       ),
                     ),
                     const SizedBox(height: 24),
@@ -348,6 +447,12 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
                                       ? producto.imagenUrl
                                       : 'https://via.placeholder.com/150',
                                   precio: producto.precio,
+                                  // ✅ AGREGADO: Callback para actualizar la lista
+                                  onUpdated: () {
+                                    setState(() {
+                                      _productosFuture = _cargarProductosDeCategoria();
+                                    });
+                                  },
                                 );
                               },
                             );

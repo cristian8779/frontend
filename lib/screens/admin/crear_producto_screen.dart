@@ -1,9 +1,56 @@
 // IMPORTACIONES
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../services/producto_service.dart';
 import 'gestionar_variaciones_screen.dart';
+
+// Clase para formatear el precio en pesos colombianos
+class ColombiaCurrencyInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    if (newValue.text.isEmpty) {
+      return newValue;
+    }
+
+    // Extraer solo los números
+    String numbersOnly = newValue.text.replaceAll(RegExp(r'[^\d]'), '');
+    
+    if (numbersOnly.isEmpty) {
+      return const TextEditingValue(text: '');
+    }
+
+    // Convertir a entero para formatear
+    int value = int.parse(numbersOnly);
+    
+    // Formatear con puntos como separadores de miles
+    String formatted = _formatCurrency(value);
+    
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+
+  String _formatCurrency(int value) {
+    // Formatear el número con puntos como separadores de miles
+    String valueStr = value.toString();
+    String result = '';
+    
+    for (int i = 0; i < valueStr.length; i++) {
+      if (i > 0 && (valueStr.length - i) % 3 == 0) {
+        result += '.';
+      }
+      result += valueStr[i];
+    }
+    
+    return '\$ $result';
+  }
+}
 
 class CrearProductoScreen extends StatefulWidget {
   final String? categoryId; // Added parameter to accept category ID
@@ -30,6 +77,7 @@ class _CrearProductoScreenState extends State<CrearProductoScreen> {
   final List<String> subcategorias = ['Adulto', 'Niño'];
 
   final productoService = ProductoService();
+  final ColombiaCurrencyInputFormatter _currencyFormatter = ColombiaCurrencyInputFormatter();
 
   bool _showFab = false;
   String? _createdProductId;
@@ -50,6 +98,21 @@ class _CrearProductoScreenState extends State<CrearProductoScreen> {
     precioController.dispose();
     stockController.dispose();
     super.dispose();
+  }
+
+  // Función para extraer el valor numérico del precio formateado
+  double _extractPriceValue(String formattedPrice) {
+    if (formattedPrice.isEmpty) return 0.0;
+    
+    // Remover el símbolo de peso, espacios y puntos
+    String numbersOnly = formattedPrice
+        .replaceAll('\$', '')
+        .replaceAll(' ', '')
+        .replaceAll('.', '');
+    
+    if (numbersOnly.isEmpty) return 0.0;
+    
+    return double.tryParse(numbersOnly) ?? 0.0;
   }
 
   Future<void> cargarCategorias() async {
@@ -139,12 +202,13 @@ setState(() {
     setState(() => _isCreating = true);
 
     final int? stockGeneral = int.tryParse(stockController.text.trim());
+    final double precioValue = _extractPriceValue(precioController.text);
 
     try {
       final nuevoProducto = await productoService.crearProducto(
         nombre: nombreController.text.trim(),
         descripcion: descripcionController.text.trim(),
-        precio: double.parse(precioController.text.trim()),
+        precio: precioValue,
         stock: stockGeneral ?? 0,
         categoria: categoriaSeleccionada!['_id'],
         subcategoria: subcategoriaSeleccionada ?? '',
@@ -241,6 +305,7 @@ setState(() {
     bool obligatorio = true,
     int maxLines = 1,
     String? hint,
+    List<TextInputFormatter>? inputFormatters,
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -269,9 +334,17 @@ setState(() {
             controller: controller,
             keyboardType: tipo,
             maxLines: maxLines,
+            inputFormatters: inputFormatters,
             validator: (value) {
               if (obligatorio && (value == null || value.trim().isEmpty)) {
                 return 'Este campo es obligatorio';
+              }
+              // Validación especial para el precio
+              if (label == 'Precio' && value != null && value.isNotEmpty) {
+                double precio = _extractPriceValue(value);
+                if (precio <= 0) {
+                  return 'El precio debe ser mayor a 0';
+                }
               }
               return null;
             },
@@ -479,7 +552,8 @@ setState(() {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'PNG, JPG hasta 5MB',
+                          'PNG, JPG hasta 5MB\n📸 Foto clara y bien iluminada',
+                          textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 14,
                             color: const Color(0xFF6B7280),
@@ -715,7 +789,8 @@ setState(() {
                 controller: precioController,
                 icon: Icons.payments_outlined,
                 tipo: TextInputType.number,
-                hint: 'Ej: 10000',
+                hint: 'Ej: \$ 10.000',
+                inputFormatters: [_currencyFormatter],
               ),
               _buildTextField(
                 label: 'Stock inicial',
@@ -724,6 +799,7 @@ setState(() {
                 tipo: TextInputType.number,
                 obligatorio: false,
                 hint: 'Cantidad disponible',
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               ),
               _buildActionButton(),
             ],

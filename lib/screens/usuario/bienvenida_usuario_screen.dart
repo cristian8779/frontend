@@ -2,8 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../widgets/banner_carousel.dart';
 import '../../widgets/buscador.dart';
-import 'package:crud/utils/invitacion_dialog.dart'; // ✅ Ruta correcta
-import '../../providers/auth_provider.dart'; // ✅ Import del AuthProvider
+import '../../widgets/custom_bottom_navigation_bar.dart';
+import 'package:crud/utils/invitacion_dialog.dart';
+import '../../providers/auth_provider.dart';
+import '../../services/producto_service.dart';
+import '../../widgets/pantalla_filtros.dart';
+
+// 👇 Importa correctamente el HomeScreen y el CategoriasWidget
+import '../../widgets/CategoriasWidget.dart';
+import '../home/home_screen.dart';   // 👈 agrega esta línea
+
 
 class BienvenidaUsuarioScreen extends StatefulWidget {
   const BienvenidaUsuarioScreen({super.key});
@@ -15,14 +23,30 @@ class BienvenidaUsuarioScreen extends StatefulWidget {
 class _BienvenidaUsuarioScreenState extends State<BienvenidaUsuarioScreen> {
   final Color primaryColor = const Color(0xFFBE0C0C);
   String busqueda = '';
+  int currentBottomIndex = 0;
+  final TextEditingController _buscadorController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    // 🔹 Llamar a la verificación de invitación después de que la pantalla se construya
     WidgetsBinding.instance.addPostFrameCallback((_) {
       mostrarInvitacionDialog(context);
+      _verificarEstadoAuth();
     });
+  }
+
+  @override
+  void dispose() {
+    _buscadorController.dispose();
+    super.dispose();
+  }
+
+  // Verificar estado de autenticación
+  Future<void> _verificarEstadoAuth() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    if (!authProvider.cargando) {
+      await authProvider.actualizarEstado();
+    }
   }
 
   void onBusquedaChanged(String value) {
@@ -31,97 +55,111 @@ class _BienvenidaUsuarioScreenState extends State<BienvenidaUsuarioScreen> {
     });
   }
 
-  void onTapBuscador() {
-    print('Buscador tocado');
+  // Abrir panel de filtros en BottomSheet
+  void onTapBuscador() async {
+    Map<String, dynamic> filtrosDisponibles = {};
+    try {
+      final service = ProductoService();
+      filtrosDisponibles = await service.obtenerFiltrosDisponibles();
+    } catch (e) {
+      debugPrint('❌ Error al obtener filtros: $e');
+    }
+
+    if (filtrosDisponibles.isNotEmpty) {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        builder: (_) => FractionallySizedBox(
+          heightFactor: 0.8,
+          child: FiltrosPanel(filtros: filtrosDisponibles),
+        ),
+      );
+    }
+  }
+
+  void _onBottomNavTap(int index) {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+    setState(() {
+      currentBottomIndex = index;
+    });
+
+    switch (index) {
+      case 0:
+        break;
+      case 1:
+        if (authProvider.isAuthenticated) {
+          Navigator.pushNamed(context, '/favorites');
+        } else {
+          _mostrarMensajeLogin('Favoritos');
+        }
+        break;
+      case 2:
+        Navigator.pushNamed(context, '/cart');
+        break;
+      case 3:
+        if (authProvider.isAuthenticated) {
+          Navigator.pushNamed(context, '/profile');
+        } else {
+          _mostrarMensajeLogin('Perfil');
+        }
+        break;
+      case 4:
+        Navigator.pushNamed(context, '/more');
+        break;
+    }
+  }
+
+  void _mostrarMensajeLogin(String seccion) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Inicia sesión para acceder a $seccion'),
+        backgroundColor: primaryColor,
+        action: SnackBarAction(
+          label: 'Iniciar sesión',
+          textColor: Colors.white,
+          onPressed: () => Navigator.pushNamed(context, '/login'),
+        ),
+      ),
+    );
+
+    setState(() {
+      currentBottomIndex = 0;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
         child: Column(
           children: [
-            // 🔹 Buscador
+            // Buscador
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
               child: BuscadorProductos(
                 busqueda: busqueda,
                 onBusquedaChanged: onBusquedaChanged,
                 onTap: onTapBuscador,
+                controller: _buscadorController,
               ),
             ),
-            // 🔹 Banner de imágenes
+            // Banner
             const BannerCarousel(),
-
-            // 🔹 Botón cerrar sesión
-            Padding(
-              padding: const EdgeInsets.only(top: 16.0, bottom: 8.0),
-              child: ElevatedButton.icon(
-                onPressed: () async {
-                  await authProvider.cerrarSesion();
-                  Navigator.pushReplacementNamed(context, '/login');
-                },
-                icon: const Icon(Icons.logout, color: Colors.white),
-                label: const Text(
-                  "Cerrar sesión",
-                  style: TextStyle(fontSize: 16, color: Colors.white),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryColor,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                ),
-              ),
-            ),
-
-            // 🔹 Contenido central
+            // 👇 Aquí metemos el HomeScreen en lugar del Center vacío
             Expanded(
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.shopping_bag_rounded, size: 100, color: primaryColor),
-                      const SizedBox(height: 20),
-                      const Text(
-                        'Explora nuestros productos',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black87,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // 🔹 Barra inferior
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                border: const Border(top: BorderSide(color: Colors.black12)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: const [
-                  Icon(Icons.home_outlined, color: Colors.black54),
-                  Icon(Icons.person_outline, color: Colors.black54),
-                  Icon(Icons.shopping_cart_outlined, color: Colors.black54),
-                ],
-              ),
+              child: HomeScreen(),
             ),
           ],
         ),
+      ),
+      bottomNavigationBar: CustomBottomNavigationBar(
+        currentIndex: currentBottomIndex,
+        onTap: _onBottomNavTap,
       ),
     );
   }

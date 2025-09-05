@@ -234,8 +234,6 @@ class _ContenidoFijo extends StatelessWidget {
         'padding': 32.0,
         'titleFontSize': 28.0,
         'adminTitleFontSize': 29.0,
-        'emptyIconSize': 56.0,
-        'emptyFontSize': 18.0,
         'maxWidth': 1200.0,
       };
     } else if (isTablet) {
@@ -243,8 +241,6 @@ class _ContenidoFijo extends StatelessWidget {
         'padding': 24.0,
         'titleFontSize': 26.0,
         'adminTitleFontSize': 27.0,
-        'emptyIconSize': 52.0,
-        'emptyFontSize': 17.0,
         'maxWidth': 800.0,
       };
     } else {
@@ -252,8 +248,6 @@ class _ContenidoFijo extends StatelessWidget {
         'padding': 20.0,
         'titleFontSize': 24.0,
         'adminTitleFontSize': 25.0,
-        'emptyIconSize': 48.0,
-        'emptyFontSize': 16.0,
         'maxWidth': double.infinity,
       };
     }
@@ -285,33 +279,13 @@ class _ContenidoFijo extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 8),
+                  // 👇 Eliminamos la lógica del estado vacío aquí
                   if (isLoading)
                     const CategoriaSkeleton()
                   else if (errorMessage.isNotEmpty)
                     ErrorMessage(message: errorMessage)
-                  else if (categorias.isEmpty)
-                    Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.category_outlined,
-                            size: dimensions['emptyIconSize']!,
-                            color: Colors.blueGrey,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'No se encontraron categorías.\n¡Puedes crear nuevas desde el Panel de Administración!',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: dimensions['emptyFontSize']!,
-                              color: Colors.black54,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
                   else
+                    // 👇 Siempre mostramos CategoriaList (maneja su propio estado vacío)
                     CategoriaList(
                       categorias: categorias,
                       onCategoriasActualizadas: onCategoriasActualizadas,

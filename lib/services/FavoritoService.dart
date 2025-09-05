@@ -41,6 +41,9 @@ class FavoritoService {
       }
     } on SocketException {
       throw Exception('❌ Error de conexión: No hay Internet.');
+    } catch (e) {
+      print('Error en agregarFavorito: $e');
+      throw Exception('❌ Error inesperado: $e');
     }
   }
 
@@ -49,19 +52,37 @@ class FavoritoService {
     final token = await _obtenerToken();
 
     try {
+      print('🔍 Obteniendo favoritos desde: $_baseUrl');
+      
       final response = await http.get(
         Uri.parse(_baseUrl),
         headers: _getHeaders(token),
       ).timeout(const Duration(seconds: 15));
 
+      print('📱 Status Code: ${response.statusCode}');
+      print('📱 Response Body: ${response.body}');
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return List<Map<String, dynamic>>.from(data['favoritos'] ?? []);
+        
+        // Verificar si existe la clave 'favoritos'
+        if (data['favoritos'] != null) {
+          final favoritos = List<Map<String, dynamic>>.from(data['favoritos']);
+          print('✅ Favoritos obtenidos: ${favoritos.length} items');
+          return favoritos;
+        } else {
+          print('⚠️ No se encontró la clave favoritos en la respuesta');
+          return [];
+        }
       } else {
-        throw Exception(jsonDecode(response.body)['mensaje'] ?? '❌ Error al obtener favoritos');
+        final errorData = jsonDecode(response.body);
+        throw Exception(errorData['mensaje'] ?? '❌ Error al obtener favoritos (${response.statusCode})');
       }
     } on SocketException {
       throw Exception('❌ Sin conexión: revisa tu Internet.');
+    } catch (e) {
+      print('❌ Error en obtenerFavoritos: $e');
+      throw Exception('❌ Error al cargar favoritos: $e');
     }
   }
 
@@ -81,6 +102,29 @@ class FavoritoService {
       }
     } on SocketException {
       throw Exception('❌ Error de conexión: No hay Internet.');
+    } catch (e) {
+      print('Error en eliminarFavorito: $e');
+      throw Exception('❌ Error inesperado: $e');
+    }
+  }
+
+  /// 🔄 Método para verificar la estructura de datos
+  Future<void> debugFavoritos() async {
+    try {
+      final favoritos = await obtenerFavoritos();
+      print('🐛 DEBUG - Total favoritos: ${favoritos.length}');
+      
+      for (int i = 0; i < favoritos.length; i++) {
+        final favorito = favoritos[i];
+        print('🐛 DEBUG - Favorito $i: ${favorito.keys}');
+        
+        if (favorito['producto'] != null) {
+          final producto = favorito['producto'];
+          print('🐛 DEBUG - Producto: ${producto['nombre']} - ${producto['precio']}');
+        }
+      }
+    } catch (e) {
+      print('🐛 DEBUG ERROR: $e');
     }
   }
 }

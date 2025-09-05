@@ -5,6 +5,7 @@ class BuscadorProductos extends StatelessWidget {
   final ValueChanged<String> onBusquedaChanged;
   final VoidCallback onTap;
   final VoidCallback? onClear;
+  final TextEditingController controller;
 
   const BuscadorProductos({
     Key? key,
@@ -12,11 +13,12 @@ class BuscadorProductos extends StatelessWidget {
     required this.onBusquedaChanged,
     required this.onTap,
     this.onClear,
+    required this.controller,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final bool tieneTexto = busqueda.isNotEmpty;
+    final tieneTexto = busqueda.isNotEmpty;
 
     return Container(
       height: 48,
@@ -42,12 +44,21 @@ class BuscadorProductos extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: TextField(
-              onTap: onTap,
-              onChanged: onBusquedaChanged,
-              controller: TextEditingController(text: busqueda),
+              controller: controller,
+              onTap: () {
+                print("[BuscadorProductos] onTap disparado");
+                onTap();
+              },
+              onChanged: (value) {
+                print("[BuscadorProductos] onChanged: '$value'");
+                onBusquedaChanged(value);
+              },
               decoration: InputDecoration(
-                hintText: 'Buscar productos, marcas y más...',
-                hintStyle: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.w400),
+                hintText: 'Buscar productos',
+                hintStyle: TextStyle(
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w400,
+                ),
                 border: InputBorder.none,
                 isDense: true,
                 contentPadding: EdgeInsets.zero,
@@ -58,7 +69,11 @@ class BuscadorProductos extends StatelessWidget {
           ),
           if (tieneTexto && onClear != null)
             GestureDetector(
-              onTap: onClear,
+              onTap: () {
+                print("[BuscadorProductos] onClear disparado");
+                onClear!();
+                onBusquedaChanged('');
+              },
               child: Icon(Icons.clear, color: Colors.grey.shade500, size: 20),
             ),
         ],

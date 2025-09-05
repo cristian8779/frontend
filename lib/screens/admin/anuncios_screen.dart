@@ -512,7 +512,9 @@ class _AnunciosScreenState extends State<AnunciosScreen>
           ],
         ),
       ),
-      floatingActionButton: _buildFloatingActionButton(),
+      floatingActionButton: (!_isLoading && _anuncios.isEmpty)
+          ? null
+          : _buildFloatingActionButton(),
     );
   }
 
@@ -1571,28 +1573,6 @@ class _AnunciosScreenState extends State<AnunciosScreen>
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(AppStyles.radiusMax),
                   ),
-                ),
-              ),
-            ),
-            
-            const SizedBox(height: AppStyles.spacingMedium),
-            
-            // Texto de ayuda adicional
-            TextButton.icon(
-              onPressed: () {
-                // Aquí podrías navegar a una página de ayuda o tutorial
-                _mostrarToast("¡Pronto tendremos una guía completa!", success: true);
-              },
-              icon: Icon(
-                Icons.help_outline_rounded,
-                size: 16,
-                color: AppStyles.textTertiary,
-              ),
-              label: Text(
-                "¿Necesitas ayuda?",
-                style: TextStyle(
-                  color: AppStyles.textTertiary,
-                  fontSize: 14,
                 ),
               ),
             ),

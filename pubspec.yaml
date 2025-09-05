@@ -30,6 +30,7 @@ dependencies:
   fluttertoast: ^8.0.9
   carousel_slider: ^5.0.0 
   palette_generator: ^0.3.3+3
+  flutter_inappwebview: ^6.0.0 
 
 
  

@@ -32,14 +32,16 @@ class _BannerCarouselState extends State<BannerCarousel> {
     _loadAnuncios();
   }
 
-  double _calculateBannerHeight(double screenWidth) {
+  double _calculateBannerHeight(double screenWidth, double screenHeight) {
     double height = (screenWidth - 32) / aspectRatioML; // margen horizontal
-    return height.clamp(minBannerHeight, maxBannerHeight);
+    // 🔹 límite dinámico respecto al alto de pantalla
+    return height.clamp(minBannerHeight, screenHeight * 0.3);
   }
 
   double _getViewportFraction(double screenWidth) {
-    if (screenWidth >= 1024) return 0.85;
-    if (screenWidth >= 768) return 0.88;
+    if (screenWidth >= 1400) return 0.6; // 🔹 desktop grande: se ven 2 banners
+    if (screenWidth >= 1024) return 0.75;
+    if (screenWidth >= 768) return 0.85;
     if (screenWidth >= 600) return 0.9;
     return 0.92;
   }
@@ -144,7 +146,8 @@ class _BannerCarouselState extends State<BannerCarousel> {
     );
   }
 
-  Widget _buildBannerItem(Map<String, String> anuncio, double width, double height) {
+  Widget _buildBannerItem(
+      Map<String, String> anuncio, double width, double height) {
     final deeplink = anuncio['deeplink'];
     final imageUrl = anuncio['imagen'] ?? '';
 
@@ -255,75 +258,83 @@ class _BannerCarouselState extends State<BannerCarousel> {
 
   @override
   Widget build(BuildContext context) {
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final double bannerHeight = _calculateBannerHeight(screenWidth);
-    final double viewportFraction = _getViewportFraction(screenWidth);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double screenWidth = constraints.maxWidth;
+        final double screenHeight = MediaQuery.of(context).size.height;
 
-    if (_isLoading) {
-      return Container(
-        margin: containerMargin,
-        height: bannerHeight,
-        child: ListView.builder(
-          scrollDirection: Axis.horizontal,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: 3,
-          itemBuilder: (context, index) => _buildShimmer(
-            screenWidth * viewportFraction - 12,
-            bannerHeight,
-          ),
-        ),
-      );
-    }
+        final double bannerHeight =
+            _calculateBannerHeight(screenWidth, screenHeight);
+        final double viewportFraction = _getViewportFraction(screenWidth);
 
-    if (_hasError) {
-      return _buildErrorState(bannerHeight);
-    }
-
-    if (_anuncios.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Container(
-      margin: containerMargin,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: screenWidth,
+        if (_isLoading) {
+          return Container(
+            margin: containerMargin,
             height: bannerHeight,
-            child: CarouselSlider.builder(
-              itemCount: _anuncios.length,
-              itemBuilder: (context, index, realIndex) {
-                return _buildBannerItem(
-                  _anuncios[index],
-                  screenWidth * viewportFraction - 12,
-                  bannerHeight,
-                );
-              },
-              options: CarouselOptions(
-                height: bannerHeight,
-                autoPlay: _anuncios.length > 1,
-                autoPlayInterval: const Duration(seconds: 6),
-                autoPlayAnimationDuration: const Duration(milliseconds: 1000),
-                autoPlayCurve: Curves.easeOutCubic,
-                enlargeCenterPage: false,
-                viewportFraction: viewportFraction,
-                enableInfiniteScroll: _anuncios.length > 1,
-                pauseAutoPlayOnTouch: true,
-                pauseAutoPlayOnManualNavigate: true,
-                onPageChanged: (index, reason) {
-                  if (mounted) {
-                    setState(() {
-                      _currentIndex = index;
-                    });
-                  }
-                },
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: 3,
+              itemBuilder: (context, index) => _buildShimmer(
+                screenWidth * viewportFraction - 12,
+                bannerHeight,
               ),
             ),
+          );
+        }
+
+        if (_hasError) {
+          return _buildErrorState(bannerHeight);
+        }
+
+        if (_anuncios.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        return Container(
+          margin: containerMargin,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: screenWidth,
+                height: bannerHeight,
+                child: CarouselSlider.builder(
+                  itemCount: _anuncios.length,
+                  itemBuilder: (context, index, realIndex) {
+                    return _buildBannerItem(
+                      _anuncios[index],
+                      screenWidth * viewportFraction - 12,
+                      bannerHeight,
+                    );
+                  },
+                  options: CarouselOptions(
+                    height: bannerHeight,
+                    autoPlay: _anuncios.length > 1,
+                    autoPlayInterval: const Duration(seconds: 6),
+                    autoPlayAnimationDuration:
+                        const Duration(milliseconds: 1000),
+                    autoPlayCurve: Curves.easeOutCubic,
+                    enlargeCenterPage: false,
+                    viewportFraction: viewportFraction,
+                    enableInfiniteScroll: _anuncios.length > 1,
+                    pauseAutoPlayOnTouch: true,
+                    pauseAutoPlayOnManualNavigate: true,
+                    onPageChanged: (index, reason) {
+                      if (mounted) {
+                        setState(() {
+                          _currentIndex = index;
+                        });
+                      }
+                    },
+                  ),
+                ),
+              ),
+              _buildModernDotsIndicator(),
+            ],
           ),
-          _buildModernDotsIndicator(),
-        ],
-      ),
+        );
+      },
     );
   }
 }

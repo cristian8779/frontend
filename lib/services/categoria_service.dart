@@ -5,7 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class CategoriaService {
-  final String _baseUrl = 'https://api.soportee.store/api'; // Cambia si tu API tiene otra base
+  final String _baseUrl = 'https://api.soportee.store/api';
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   String? _token;
 
@@ -42,11 +42,22 @@ class CategoriaService {
     }
   }
 
-  Map<String, String> _getHeaders(String token) {
-    return {
+  Map<String, String> _getHeaders(String token, {bool preventCache = false}) {
+    final headers = {
       'Authorization': 'Bearer $token',
       'Content-Type': 'application/json',
     };
+    
+    // Agregar headers anti-caché
+    if (preventCache) {
+      headers.addAll({
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      });
+    }
+    
+    return headers;
   }
 
   Future<String> _obtenerTokenValido() async {
@@ -77,13 +88,25 @@ class CategoriaService {
     return token;
   }
 
-  /// ✅ Obtener todas las categorías
+  /// ✅ Obtener todas las categorías (público o con token si existe)
   Future<List<Map<String, dynamic>>> obtenerCategorias() async {
-    final token = await _obtenerTokenValido();
     final url = Uri.parse('$_baseUrl/categorias');
+    String? token = await _getAccessToken();
 
     try {
-      final response = await http.get(url, headers: _getHeaders(token)).timeout(const Duration(seconds: 15));
+      final headers = {
+        'Content-Type': 'application/json',
+        // Agregar anti-caché para siempre obtener datos frescos
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+      };
+
+      final response = await http.get(url, headers: headers).timeout(const Duration(seconds: 15));
+
+      print('🔍 [obtenerCategorias] Status: ${response.statusCode}');
+      print('🔍 [obtenerCategorias] Response: ${response.body.substring(0, response.body.length > 200 ? 200 : response.body.length)}...');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -100,17 +123,66 @@ class CategoriaService {
     }
   }
 
+  /// 🆕 Obtener una categoría por ID
+  Future<Map<String, dynamic>?> obtenerCategoriaPorId(String categoriaId) async {
+    final token = await _obtenerTokenValido();
+    
+    // Agregar timestamp para evitar caché
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final url = Uri.parse('$_baseUrl/categorias/$categoriaId?_t=$timestamp');
+
+    try {
+      final response = await http.get(
+        url, 
+        headers: _getHeaders(token, preventCache: true)
+      ).timeout(const Duration(seconds: 15));
+
+      print('🔍 [obtenerCategoriaPorId] ID: $categoriaId');
+      print('🔍 [obtenerCategoriaPorId] URL: $url');
+      print('🔍 [obtenerCategoriaPorId] Status: ${response.statusCode}');
+      print('🔍 [obtenerCategoriaPorId] Response: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['categoria'] != null) {
+          print('✅ [obtenerCategoriaPorId] Categoría obtenida: ${data['categoria']['nombre']}');
+          return Map<String, dynamic>.from(data['categoria']);
+        } else {
+          print('⚠️ [obtenerCategoriaPorId] No se encontró la categoría en la respuesta');
+          return null;
+        }
+      } else {
+        throw Exception('❌ Error al cargar categoría: ${response.body}');
+      }
+    } on SocketException {
+      throw Exception('❌ No hay conexión a Internet.');
+    } catch (e) {
+      print('❌ [obtenerCategoriaPorId] Error: $e');
+      throw Exception('❌ Error al obtener categoría: $e');
+    }
+  }
+
   /// 🆕 Obtener productos por categoría (por ID)
   Future<List<Map<String, dynamic>>> obtenerProductosPorCategoria(String categoriaId) async {
     final token = await _obtenerTokenValido();
-    final url = Uri.parse('$_baseUrl/productos/por-categoria/$categoriaId');
+    
+    // Agregar timestamp para evitar caché
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final url = Uri.parse('$_baseUrl/productos/por-categoria/$categoriaId?_t=$timestamp');
 
     try {
-      final response = await http.get(url, headers: _getHeaders(token)).timeout(const Duration(seconds: 15));
+      final response = await http.get(
+        url, 
+        headers: _getHeaders(token, preventCache: true)
+      ).timeout(const Duration(seconds: 15));
+
+      print('🔍 [obtenerProductosPorCategoria] ID: $categoriaId');
+      print('🔍 [obtenerProductosPorCategoria] Status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['productos'] != null && data['productos'] is List) {
+          print('✅ [obtenerProductosPorCategoria] ${data['productos'].length} productos obtenidos');
           return List<Map<String, dynamic>>.from(data['productos']);
         } else {
           return [];
@@ -125,10 +197,9 @@ class CategoriaService {
     }
   }
 
-  /// ✅ Crear categoría con imagen local
+  /// ✅ Crear categoría con imagen local (sin descripcion)
   Future<Map<String, dynamic>> crearCategoriaConImagenLocal({
     required String nombre,
-    required String descripcion,
     required File imagenLocal,
   }) async {
     final token = await _obtenerTokenValido();
@@ -137,12 +208,14 @@ class CategoriaService {
     final request = http.MultipartRequest('POST', url)
       ..headers['Authorization'] = 'Bearer $token'
       ..fields['nombre'] = nombre.trim()
-      ..fields['descripcion'] = descripcion.trim()
       ..files.add(await http.MultipartFile.fromPath('imagen', imagenLocal.path));
 
     try {
       final response = await request.send().timeout(const Duration(seconds: 15));
       final responseBody = await response.stream.bytesToString();
+
+      print('🔍 [crearCategoriaConImagenLocal] Status: ${response.statusCode}');
+      print('🔍 [crearCategoriaConImagenLocal] Response: $responseBody');
 
       if (response.statusCode == 201) {
         return jsonDecode(responseBody);
@@ -155,11 +228,10 @@ class CategoriaService {
     }
   }
 
-  /// ✅ Actualizar categoría
+  /// ✅ Actualizar categoría (sin descripcion)
   Future<Map<String, dynamic>> actualizarCategoria({
     required String id,
     required String nombre,
-    required String descripcion,
     File? imagenLocal,
   }) async {
     final token = await _obtenerTokenValido();
@@ -167,8 +239,7 @@ class CategoriaService {
 
     final request = http.MultipartRequest('PUT', url)
       ..headers['Authorization'] = 'Bearer $token'
-      ..fields['nombre'] = nombre.trim()
-      ..fields['descripcion'] = descripcion.trim();
+      ..fields['nombre'] = nombre.trim();
 
     if (imagenLocal != null) {
       request.files.add(await http.MultipartFile.fromPath('imagen', imagenLocal.path));
@@ -177,6 +248,12 @@ class CategoriaService {
     try {
       final response = await request.send().timeout(const Duration(seconds: 15));
       final responseBody = await response.stream.bytesToString();
+
+      print('🔍 [actualizarCategoria] ID: $id');
+      print('🔍 [actualizarCategoria] Nombre: $nombre');
+      print('🔍 [actualizarCategoria] Imagen local: ${imagenLocal != null ? 'Sí' : 'No'}');
+      print('🔍 [actualizarCategoria] Status: ${response.statusCode}');
+      print('🔍 [actualizarCategoria] Response: $responseBody');
 
       if (response.statusCode == 200) {
         return jsonDecode(responseBody);
@@ -196,6 +273,9 @@ class CategoriaService {
 
     try {
       final response = await http.delete(url, headers: _getHeaders(token)).timeout(const Duration(seconds: 15));
+
+      print('🔍 [eliminarCategoria] ID: $id');
+      print('🔍 [eliminarCategoria] Status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         return true;

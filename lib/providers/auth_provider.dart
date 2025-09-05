@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:jwt_decoder/jwt_decoder.dart';
 import '../../services/auth_service.dart';
 
 class AuthProvider with ChangeNotifier {
@@ -9,6 +10,7 @@ class AuthProvider with ChangeNotifier {
   String? _rol;
   String? _nombre;
   String? _email;
+  String? _userId; // ✅ Nuevo
   bool _cargando = true;
 
   // Getters públicos
@@ -17,9 +19,10 @@ class AuthProvider with ChangeNotifier {
   String? get rol => _rol;
   String? get nombre => _nombre;
   String? get email => _email;
+  String? get userId => _userId; // ✅ Nuevo getter
   bool get cargando => _cargando;
 
-  bool get isAuthenticated => _token != null && _rol != null;
+  bool get isAuthenticated => _token != null && _rol != null && _userId != null;
 
   AuthProvider() {
     _inicializar();
@@ -31,11 +34,15 @@ class AuthProvider with ChangeNotifier {
   }
 
   Future<void> cargarSesion() async {
+    _cargando = true;
+    notifyListeners();
+
     await _cargarDesdeStorage();
 
-    if (_token == null || _rol == null) {
+    if (_token == null || _rol == null || _userId == null) {
       _resetearEstado();
     }
+
     _cargando = false;
     notifyListeners();
   }
@@ -48,6 +55,10 @@ class AuthProvider with ChangeNotifier {
       final success = await _authService.login(correo, password);
       if (success) {
         await _cargarDesdeStorage();
+        notifyListeners();
+
+        debugPrint('✅ Login exitoso - isAuthenticated: $isAuthenticated');
+        debugPrint('✅ Usuario logueado: $_nombre ($_email) ID: $_userId');
       }
       return success;
     } catch (e) {
@@ -67,6 +78,10 @@ class AuthProvider with ChangeNotifier {
       final success = await _authService.loginConGoogle();
       if (success) {
         await _cargarDesdeStorage();
+        notifyListeners();
+
+        debugPrint('✅ Login con Google exitoso - isAuthenticated: $isAuthenticated');
+        debugPrint('✅ Usuario logueado: $_nombre ($_email) ID: $_userId');
       }
       return success;
     } catch (e) {
@@ -86,6 +101,10 @@ class AuthProvider with ChangeNotifier {
       final success = await _authService.register(nombre, email, password);
       if (success) {
         await _cargarDesdeStorage();
+        notifyListeners();
+
+        debugPrint('✅ Registro exitoso - isAuthenticated: $isAuthenticated');
+        debugPrint('✅ Usuario registrado: $_nombre ($_email) ID: $_userId');
       }
       return success;
     } catch (e) {
@@ -99,47 +118,71 @@ class AuthProvider with ChangeNotifier {
 
   Future<void> _cargarDesdeStorage() async {
     try {
+      final oldIsAuthenticated = isAuthenticated;
+
       _token = await _authService.getAccessToken();
       _refreshToken = await _authService.getRefreshToken();
       _rol = await _authService.getRol();
       _nombre = await _authService.getNombre();
       _email = await _authService.getEmail();
 
-      debugPrint('✅ Token recuperado: $_token');
+      // ✅ Decodificar el userId del JWT si hay token
+      if (_token != null && _token!.isNotEmpty) {
+        try {
+          Map<String, dynamic> decoded = JwtDecoder.decode(_token!);
+          _userId = decoded['id'];
+        } catch (e) {
+          debugPrint("⚠️ Error al decodificar JWT: $e");
+          _userId = null;
+        }
+      }
+
+      debugPrint('✅ Token recuperado: ${_token != null ? 'SÍ' : 'NO'}');
       debugPrint('🧾 ROL detectado: $_rol');
       debugPrint('👤 Usuario: $_nombre ($_email)');
+      debugPrint('🆔 UserId: $_userId');
+      debugPrint('🔐 Estado autenticación: $isAuthenticated');
 
-      if (_token == null || _rol == null) {
+      if (_token == null || _rol == null || _userId == null) {
         _resetearEstado();
+      }
+
+      if (oldIsAuthenticated != isAuthenticated) {
+        debugPrint('🔄 Estado de autenticación cambió: $oldIsAuthenticated -> $isAuthenticated');
+        notifyListeners();
       }
     } catch (e) {
       debugPrint('⚠️ Error al cargar desde storage: $e');
       _resetearEstado();
     }
-
-    notifyListeners();
   }
 
   void _resetearEstado() {
     debugPrint("♻️ Reseteando estado de sesión...");
+    final wasAuthenticated = isAuthenticated;
+
     _token = null;
     _refreshToken = null;
     _rol = null;
     _nombre = null;
     _email = null;
+    _userId = null;
+
+    if (wasAuthenticated) {
+      debugPrint("🔄 Usuario desautenticado - notificando cambios");
+      notifyListeners();
+    }
   }
 
-  /// 🔐 Cierra sesión, limpia estado y almacenamiento
   Future<void> cerrarSesion() async {
     try {
       debugPrint("🚪 Cerrando sesión...");
-      await _authService.logout(); // Limpia almacenamiento seguro
+      await _authService.logout();
     } catch (e) {
       debugPrint('⚠️ Error al cerrar sesión: $e');
     }
 
     _resetearEstado();
-    notifyListeners();
   }
 
   String getTokenOrThrow() {
@@ -149,15 +192,22 @@ class AuthProvider with ChangeNotifier {
     return _token!;
   }
 
-  /// 🔄 Renovar token con servicio y guardar en storage
   Future<bool> renovarToken() async {
     try {
       final nuevoToken = await _authService.renovarToken();
       if (nuevoToken != null && nuevoToken.isNotEmpty) {
         _token = nuevoToken;
 
-        // Guardar el token renovado en almacenamiento seguro
         await _authService.guardarAccessToken(nuevoToken);
+
+        // ✅ actualizar userId con el nuevo token
+        try {
+          Map<String, dynamic> decoded = JwtDecoder.decode(nuevoToken);
+          _userId = decoded['id'];
+        } catch (e) {
+          debugPrint("⚠️ Error al decodificar nuevo JWT: $e");
+          _userId = null;
+        }
 
         debugPrint("🔑 Token renovado correctamente.");
         notifyListeners();
@@ -168,5 +218,11 @@ class AuthProvider with ChangeNotifier {
       debugPrint('⚠️ Error al renovar token: $e');
       return false;
     }
+  }
+
+  Future<void> actualizarEstado() async {
+    debugPrint("🔄 Forzando actualización del estado...");
+    await _cargarDesdeStorage();
+    notifyListeners();
   }
 }

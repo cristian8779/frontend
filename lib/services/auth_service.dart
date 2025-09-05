@@ -1,10 +1,11 @@
 import 'dart:convert';
-import 'dart:io' show Platform;
+import 'dart:io' show SocketException;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 class AuthService {
   final String baseUrl = '${dotenv.env['API_URL']}/auth';
@@ -16,7 +17,6 @@ class AuthService {
   late final GoogleSignIn _googleSignIn;
 
   AuthService() {
-    // 📌 Siempre usar Client ID Web, incluso en Android/iOS para validación en backend
     final clientIdWeb = dotenv.env['GOOGLE_CLIENT_ID_WEB'];
 
     _googleSignIn = GoogleSignIn(
@@ -26,6 +26,18 @@ class AuthService {
 
     print("✅ BASE URL: $baseUrl");
     print("✅ GOOGLE CLIENT ID USADO (WEB): $clientIdWeb");
+  }
+
+  // -------------------------------
+  // VERIFICACIÓN DE CONECTIVIDAD
+  // -------------------------------
+  Future<bool> _tieneConexion() async {
+    try {
+      final connectivityResult = await Connectivity().checkConnectivity();
+      return connectivityResult != ConnectivityResult.none;
+    } catch (e) {
+      return false;
+    }
   }
 
   // -------------------------------
@@ -39,6 +51,11 @@ class AuthService {
       return false;
     }
 
+    if (!await _tieneConexion()) {
+      _errorMessage = "sin_conexion";
+      return false;
+    }
+
     try {
       final url = Uri.parse('$baseUrl/login');
       print("🚀 Login URL: $url");
@@ -46,11 +63,8 @@ class AuthService {
       final response = await http.post(
         url,
         headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          "email": email.trim(),
-          "password": password.trim(),
-        }),
-      );
+        body: jsonEncode({"email": email.trim(), "password": password.trim()}),
+      ).timeout(const Duration(seconds: 15));
 
       print("🔐 LOGIN STATUS: ${response.statusCode}");
       print("📦 LOGIN BODY: ${response.body}");
@@ -63,8 +77,23 @@ class AuthService {
         _errorMessage = data['mensaje'] ?? 'Correo o contraseña incorrectos.';
         return false;
       }
+    } on SocketException catch (e) {
+      print("🚫 SocketException en login: $e");
+      _errorMessage = "sin_conexion";
+      return false;
+    } on http.ClientException catch (e) {
+      print("🚫 ClientException en login: $e");
+      _errorMessage = "error_red";
+      return false;
     } catch (e) {
-      _errorMessage = 'Error de conexión: $e';
+      print("❌ Error en login: $e");
+      if (e.toString().contains('timeout') || e.toString().contains('TimeoutException')) {
+        _errorMessage = "timeout";
+      } else if (e.toString().contains('Failed host lookup') || e.toString().contains('Network is unreachable')) {
+        _errorMessage = "sin_conexion";
+      } else {
+        _errorMessage = 'Error de conexión: $e';
+      }
       return false;
     }
   }
@@ -75,13 +104,16 @@ class AuthService {
   Future<bool> loginConGoogle() async {
     _errorMessage = null;
 
+    if (!await _tieneConexion()) {
+      _errorMessage = "sin_conexion";
+      return false;
+    }
+
     try {
       await _googleSignIn.signOut();
       final cuenta = await _googleSignIn.signIn();
 
-      if (cuenta == null) {
-        return false; // Usuario canceló
-      }
+      if (cuenta == null) return false;
 
       final auth = await cuenta.authentication;
       final idToken = auth.idToken;
@@ -95,7 +127,7 @@ class AuthService {
         Uri.parse('$baseUrl/google'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({"idToken": idToken}),
-      );
+      ).timeout(const Duration(seconds: 15));
 
       print("🔐 GOOGLE LOGIN STATUS: ${response.statusCode}");
       print("📦 GOOGLE LOGIN BODY: ${response.body}");
@@ -108,8 +140,23 @@ class AuthService {
         _errorMessage = data['mensaje'] ?? 'No se pudo iniciar sesión con Google.';
         return false;
       }
+    } on SocketException catch (e) {
+      print("🚫 SocketException en Google login: $e");
+      _errorMessage = "sin_conexion";
+      return false;
+    } on http.ClientException catch (e) {
+      print("🚫 ClientException en Google login: $e");
+      _errorMessage = "error_red";
+      return false;
     } catch (e) {
-      _errorMessage = "Error de Google Login: $e";
+      print("❌ Error en Google login: $e");
+      if (e.toString().contains('timeout') || e.toString().contains('TimeoutException')) {
+        _errorMessage = "timeout";
+      } else if (e.toString().contains('Failed host lookup') || e.toString().contains('Network is unreachable')) {
+        _errorMessage = "sin_conexion";
+      } else {
+        _errorMessage = "Error de Google Login: $e";
+      }
       return false;
     }
   }
@@ -120,6 +167,11 @@ class AuthService {
   Future<bool> register(String nombre, String email, String password) async {
     _errorMessage = null;
 
+    if (!await _tieneConexion()) {
+      _errorMessage = "sin_conexion";
+      return false;
+    }
+
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/registrar'),
@@ -129,7 +181,7 @@ class AuthService {
           "email": email.trim(),
           "password": password.trim(),
         }),
-      );
+      ).timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 201) {
         final data = jsonDecode(response.body);
@@ -139,8 +191,23 @@ class AuthService {
         _errorMessage = data['mensaje'] ?? 'Error al registrar usuario.';
         return false;
       }
+    } on SocketException catch (e) {
+      print("🚫 SocketException en registro: $e");
+      _errorMessage = "sin_conexion";
+      return false;
+    } on http.ClientException catch (e) {
+      print("🚫 ClientException en registro: $e");
+      _errorMessage = "error_red";
+      return false;
     } catch (e) {
-      _errorMessage = "Error al registrar: $e";
+      print("❌ Error en registro: $e");
+      if (e.toString().contains('timeout') || e.toString().contains('TimeoutException')) {
+        _errorMessage = "timeout";
+      } else if (e.toString().contains('Failed host lookup') || e.toString().contains('Network is unreachable')) {
+        _errorMessage = "sin_conexion";
+      } else {
+        _errorMessage = "Error al registrar: $e";
+      }
       return false;
     }
   }
@@ -176,6 +243,11 @@ class AuthService {
   // RENOVAR TOKEN
   // -------------------------------
   Future<String?> renovarToken() async {
+    if (!await _tieneConexion()) {
+      _errorMessage = "sin_conexion";
+      return null;
+    }
+
     try {
       final refreshToken = await _secureStorage.read(key: 'refreshToken');
       if (refreshToken == null) return null;
@@ -184,7 +256,7 @@ class AuthService {
         Uri.parse('$baseUrl/refresh'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({"refreshToken": refreshToken}),
-      );
+      ).timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -199,8 +271,16 @@ class AuthService {
         _errorMessage = "Token expirado";
         return null;
       }
+    } on SocketException catch (e) {
+      print("🚫 SocketException en renovar token: $e");
+      _errorMessage = "sin_conexion";
+      return null;
     } catch (e) {
-      _errorMessage = "Error al renovar token: $e";
+      if (e.toString().contains('timeout')) {
+        _errorMessage = "timeout";
+      } else {
+        _errorMessage = "Error al renovar token: $e";
+      }
       return null;
     }
   }
@@ -233,12 +313,17 @@ class AuthService {
   Future<bool?> verificarEmailExiste(String email) async {
     _errorMessage = null;
 
+    if (!await _tieneConexion()) {
+      _errorMessage = "sin_conexion";
+      return null;
+    }
+
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/email-existe'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({"email": email.trim()}),
-      );
+      ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -248,8 +333,16 @@ class AuthService {
         _errorMessage = data['mensaje'] ?? 'Error al verificar correo.';
         return null;
       }
+    } on SocketException catch (e) {
+      print("🚫 SocketException en verificar email: $e");
+      _errorMessage = "sin_conexion";
+      return null;
     } catch (e) {
-      _errorMessage = "Error al verificar correo: $e";
+      if (e.toString().contains('timeout')) {
+        _errorMessage = "timeout";
+      } else {
+        _errorMessage = "Error al verificar correo: $e";
+      }
       return null;
     }
   }
