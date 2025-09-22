@@ -10,9 +10,65 @@ import '../../widgets/selector_talla_widget.dart';
 import '../../models/variacion.dart';
 import '../../services/variacion_service.dart';
 
-// Esta pantalla ahora SOLO se usará para actualizar
+// Formateador para precios en COP (reutilizado de crear_variacion_screen)
+class CurrencyInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    if (newValue.text.isEmpty) {
+      return newValue;
+    }
+
+    // Eliminar todos los caracteres que no sean números
+    String numbersOnly = newValue.text.replaceAll(RegExp(r'[^\d]'), '');
+    
+    if (numbersOnly.isEmpty) {
+      return const TextEditingValue(
+        text: '',
+        selection: TextSelection.collapsed(offset: 0),
+      );
+    }
+
+    // Convertir a número para validar
+    final number = int.tryParse(numbersOnly);
+    if (number == null) {
+      return oldValue;
+    }
+
+    // Formatear con separadores de miles
+    String formatted = _formatWithThousands(numbersOnly);
+    
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+
+  String _formatWithThousands(String number) {
+    // Agregar puntos cada tres dígitos desde la derecha
+    String reversed = number.split('').reversed.join('');
+    String formatted = '';
+    
+    for (int i = 0; i < reversed.length; i++) {
+      if (i > 0 && i % 3 == 0) {
+        formatted += '.';
+      }
+      formatted += reversed[i];
+    }
+    
+    return formatted.split('').reversed.join('');
+  }
+}
+
+// Función auxiliar para convertir el texto formateado de vuelta a número
+int parseCurrency(String formattedText) {
+  return int.tryParse(formattedText.replaceAll('.', '')) ?? 0;
+}
+
 class ActualizarVariacionScreen extends StatefulWidget {
-  final Variacion variacionToEdit; // No es opcional, siempre se debe pasar
+  final Variacion variacionToEdit;
   
   const ActualizarVariacionScreen({
     Key? key,
@@ -27,31 +83,45 @@ class _ActualizarVariacionScreenState extends State<ActualizarVariacionScreen> {
   final VariacionService _variacionService = VariacionService();
   final _formKey = GlobalKey<FormState>();
 
+  // Selecciones individuales
   String? _selectedColorHex;
   String? _selectedColorName;
-  File? _imagenSeleccionada;
-  String? _imageUrl; // Para manejar la imagen existente
-  final ImagePicker _picker = ImagePicker();
-
   String? _tallaLetra;
   String? _tallaNumero;
 
+  // Imagen
+  File? _imagenSeleccionada;
+  String? _imageUrl; // Para la imagen existente
+  final ImagePicker _picker = ImagePicker();
+
+  // Controladores de texto
   final TextEditingController _stockController = TextEditingController();
   final TextEditingController _precioController = TextEditingController();
 
   bool _isLoading = false;
+  String _currencySymbol = '\$'; // Símbolo para pesos colombianos
 
   @override
   void initState() {
     super.initState();
-    // 2. Inicializa el estado con los datos de la variación que recibimos
+    _initializeFromVariacion();
+    _stockController.addListener(_validateForm);
+    _precioController.addListener(_validateForm);
+  }
+
+  void _initializeFromVariacion() {
     final variacion = widget.variacionToEdit;
     _selectedColorHex = variacion.colorHex;
     _selectedColorName = variacion.colorNombre;
     _tallaLetra = variacion.tallaLetra;
     _tallaNumero = variacion.tallaNumero;
     _stockController.text = variacion.stock.toString();
-    _precioController.text = variacion.precio.toString().replaceAll('.', ',');
+    
+    // Formatear el precio usando el mismo sistema que crear_variacion_screen
+    final precioInt = variacion.precio.toInt();
+    final formatter = CurrencyInputFormatter();
+    _precioController.text = formatter._formatWithThousands(precioInt.toString());
+    
     if (variacion.imagenes.isNotEmpty && variacion.imagenes.first.url != null) {
       _imageUrl = variacion.imagenes.first.url;
     }
@@ -90,7 +160,7 @@ class _ActualizarVariacionScreenState extends State<ActualizarVariacionScreen> {
         });
       }
     } catch (e) {
-      _mostrarMensaje('Error al seleccionar la imagen.', isError: true);
+      _mostrarMensaje('Error al seleccionar la imagen: $e', isError: true);
     }
   }
 
@@ -133,17 +203,33 @@ class _ActualizarVariacionScreenState extends State<ActualizarVariacionScreen> {
     if (value == null || value.isEmpty) {
       return 'El precio es requerido';
     }
-    final precio = double.tryParse(value.replaceAll(',', '.'));
-    if (precio == null || precio <= 0) {
+    
+    // Usar parseCurrency para obtener el valor numérico
+    final precio = parseCurrency(value);
+    if (precio <= 0) {
       return 'Ingresa un precio válido';
     }
     return null;
   }
 
-  // Lógica específica para la actualización
+  bool _isFormValid() {
+    return _formKey.currentState != null &&
+        _formKey.currentState!.validate() &&
+        _selectedColorHex != null &&
+        (_tallaLetra != null || _tallaNumero != null) &&
+        (_imagenSeleccionada != null || _imageUrl != null);
+  }
+
+  void _validateForm() {
+    setState(() {}); // Actualizar UI para reflejar estado del botón de guardar
+  }
+
   Future<void> _actualizarVariacion() async {
-    if (!_formKey.currentState!.validate()) return;
-    
+    if (!_isFormValid()) {
+      _mostrarMensaje('Por favor, completa todos los campos requeridos.', isError: true);
+      return;
+    }
+
     if (_selectedColorHex == null) {
       _mostrarMensaje('Selecciona un color.', isError: true);
       return;
@@ -158,7 +244,9 @@ class _ActualizarVariacionScreenState extends State<ActualizarVariacionScreen> {
     }
     
     final stock = int.parse(_stockController.text.trim());
-    final precio = double.parse(_precioController.text.trim().replaceAll(',', '.'));
+    // Usar parseCurrency en lugar de double.parse
+    final precioValue = parseCurrency(_precioController.text.trim());
+    final precio = precioValue.toStringAsFixed(2);
     
     final updatedVariacion = Variacion(
       id: widget.variacionToEdit.id,
@@ -168,7 +256,7 @@ class _ActualizarVariacionScreenState extends State<ActualizarVariacionScreen> {
       tallaLetra: _tallaLetra,
       tallaNumero: _tallaNumero,
       stock: stock,
-      precio: precio,
+      precio: double.parse(precio),
       imagenes: _imagenSeleccionada != null
         ? [ImagenVariacion(isLocal: true, localFile: _imagenSeleccionada)]
         : [ImagenVariacion(url: _imageUrl)],
@@ -195,7 +283,6 @@ class _ActualizarVariacionScreenState extends State<ActualizarVariacionScreen> {
     }
   }
 
-  // A partir de aquí los widgets son los mismos que en la pantalla de crear, pero con los ajustes necesarios
   Widget _buildSectionTitle(String title, {IconData? icon}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -225,14 +312,23 @@ class _ActualizarVariacionScreenState extends State<ActualizarVariacionScreen> {
     String? Function(String?)? validator,
     String? prefix,
     String? suffix,
+    bool isPrice = false,
   }) {
+    List<TextInputFormatter> formatters = [];
+    
+    if (isPrice) {
+      // Usar el formateador de moneda para campos de precio
+      formatters = [CurrencyInputFormatter()];
+    } else if (inputType == TextInputType.number) {
+      // Para campos numéricos que no son precio (como stock)
+      formatters = [FilteringTextInputFormatter.digitsOnly];
+    }
+
     return TextFormField(
       controller: controller,
       keyboardType: inputType,
       validator: validator,
-      inputFormatters: inputType == const TextInputType.numberWithOptions(decimal: true)
-          ? [FilteringTextInputFormatter.allow(RegExp(r'^\d*[,.]?\d{0,2}'))]
-          : [FilteringTextInputFormatter.digitsOnly],
+      inputFormatters: formatters,
       decoration: InputDecoration(
         labelText: label,
         prefixText: prefix,
@@ -273,31 +369,131 @@ class _ActualizarVariacionScreenState extends State<ActualizarVariacionScreen> {
           _buildSectionTitle('Imagen del producto', icon: Icons.image_outlined),
           GestureDetector(
             onTap: _seleccionarImagen,
-            child: Container(
-              height: 200,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: (_imagenSeleccionada != null || _imageUrl != null) 
-                    ? const Color(0xFF3A86FF) 
-                    : Colors.grey.shade300,
-                  width: (_imagenSeleccionada != null || _imageUrl != null) ? 2 : 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
+            child: Semantics(
+              label: 'Seleccionar imagen del producto',
+              child: Container(
+                height: 200,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: (_imagenSeleccionada != null || _imageUrl != null) 
+                      ? const Color(0xFF3A86FF) 
+                      : Colors.grey.shade300,
+                    width: (_imagenSeleccionada != null || _imageUrl != null) ? 2 : 1,
                   ),
-                ],
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.08),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: _imagenSeleccionada != null
+                    ? Stack(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(15),
+                            child: Image.file(
+                              _imagenSeleccionada!,
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              height: double.infinity,
+                            ),
+                          ),
+                          Positioned(
+                            top: 8,
+                            right: 8,
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.6),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: const Icon(
+                                Icons.edit,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
+                    : _imageUrl != null
+                        ? Stack(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(15),
+                                child: Image.network(
+                                  _imageUrl!,
+                                  fit: BoxFit.cover,
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                  errorBuilder: (_, __, ___) => Container(
+                                    color: Colors.grey.shade100,
+                                    child: Icon(
+                                      Icons.broken_image_outlined,
+                                      color: Colors.grey.shade400,
+                                      size: 32,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Positioned(
+                                top: 8,
+                                right: 8,
+                                child: Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.6),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: const Icon(
+                                    Icons.edit,
+                                    color: Colors.white,
+                                    size: 16,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          )
+                        : Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF3A86FF).withOpacity(0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.add_photo_alternate_outlined,
+                                  size: 32,
+                                  color: Color(0xFF3A86FF),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              const Text(
+                                'Toca para seleccionar imagen',
+                                style: TextStyle(
+                                  color: Color(0xFF718096),
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Máximo 5MB',
+                                style: TextStyle(
+                                  color: Colors.grey.shade500,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
               ),
-              child: _imagenSeleccionada != null 
-                  ? _buildImage(Image.file(_imagenSeleccionada!))
-                  : _imageUrl != null
-                      ? _buildImage(Image.network(_imageUrl!))
-                      : _buildPlaceholder(),
             ),
           ),
         ],
@@ -305,73 +501,9 @@ class _ActualizarVariacionScreenState extends State<ActualizarVariacionScreen> {
     );
   }
 
-  Widget _buildImage(Image image) {
-    return Stack(
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(15),
-          child: image,
-        ),
-        Positioned(
-          top: 8,
-          right: 8,
-          child: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.6),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Icon(
-              Icons.edit,
-              color: Colors.white,
-              size: 16,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPlaceholder() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF3A86FF).withOpacity(0.1),
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(
-            Icons.add_photo_alternate_outlined,
-            size: 32,
-            color: Color(0xFF3A86FF),
-          ),
-        ),
-        const SizedBox(height: 12),
-        const Text(
-          'Toca para seleccionar imagen',
-          style: TextStyle(
-            color: Color(0xFF718096),
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'Máximo 5MB',
-          style: TextStyle(
-            color: Colors.grey.shade500,
-            fontSize: 12,
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildColorPreview() {
     if (_selectedColorHex == null) return const SizedBox.shrink();
-    
+
     return Container(
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.all(12),
@@ -386,7 +518,7 @@ class _ActualizarVariacionScreenState extends State<ActualizarVariacionScreen> {
             width: 24,
             height: 24,
             decoration: BoxDecoration(
-              color: Color(int.parse(_selectedColorHex!.substring(1), radix: 16) | 0xFF000000),
+              color: Color(int.parse('0xFF${_selectedColorHex!.substring(1)}')),
               shape: BoxShape.circle,
               border: Border.all(color: Colors.white, width: 2),
               boxShadow: [
@@ -418,13 +550,46 @@ class _ActualizarVariacionScreenState extends State<ActualizarVariacionScreen> {
     );
   }
 
+  Widget _buildTallaPreview() {
+    if (_tallaLetra != null || _tallaNumero != null) {
+      return Container(
+        margin: const EdgeInsets.only(top: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF3A86FF).withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFF3A86FF).withOpacity(0.3)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Talla: ${_tallaLetra ?? _tallaNumero ?? 'Sin talla'}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF2D3748),
+                ),
+              ),
+            ),
+            const Icon(
+              Icons.check_circle,
+              color: Color(0xFF3A86FF),
+              size: 16,
+            ),
+          ],
+        ),
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
   Widget _buildUpdateButton() {
     return Container(
       width: double.infinity,
       height: 56,
       margin: const EdgeInsets.only(top: 8),
       child: ElevatedButton(
-        onPressed: _isLoading ? null : _actualizarVariacion,
+        onPressed: _isLoading || !_isFormValid() ? null : _actualizarVariacion,
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF3A86FF),
           foregroundColor: Colors.white,
@@ -517,15 +682,16 @@ class _ActualizarVariacionScreenState extends State<ActualizarVariacionScreen> {
                   children: [
                     ColorSelector(
                       coloresSeleccionados: _selectedColorHex != null ? [_selectedColorHex!] : [],
-                      onSelectionChanged: (sel) {
+                      onSelectionChanged: (seleccionados) {
                         setState(() {
-                          _selectedColorHex = sel.isNotEmpty ? sel.first : null;
-                          _selectedColorName = _selectedColorHex != null
-                              ? Colores.getNombreColor(_selectedColorHex!)
+                          _selectedColorHex = seleccionados.isNotEmpty ? seleccionados.first : null;
+                          _selectedColorName = _selectedColorHex != null 
+                              ? Colores.getNombreColor(_selectedColorHex!) 
                               : null;
                         });
                       },
                       coloresAgrupados: Colores.coloresAgrupados,
+                      multiSelection: false, // Solo un color en modo edición
                     ),
                     _buildColorPreview(),
                   ],
@@ -549,18 +715,32 @@ class _ActualizarVariacionScreenState extends State<ActualizarVariacionScreen> {
                     ),
                   ],
                 ),
-                child: SelectorTalla(
-                  initialSelectedValue: _tallaLetra ?? _tallaNumero,
-                  onSeleccion: (valor) {
-                    _tallaLetra = null;
-                    _tallaNumero = null;
-                    if (RegExp(r'^\d+$').hasMatch(valor)) {
-                      _tallaNumero = valor;
-                    } else {
-                      _tallaLetra = valor;
-                    }
-                    setState(() {});
-                  },
+                child: Column(
+                  children: [
+                    SelectorTalla(
+                      onSeleccion: (List<String> seleccionados) {
+                        setState(() {
+                          _tallaLetra = null;
+                          _tallaNumero = null;
+                          if (seleccionados.isNotEmpty) {
+                            String valor = seleccionados.first;
+                            if (RegExp(r'^\d+').hasMatch(valor)) {
+                              _tallaNumero = valor;
+                            } else {
+                              _tallaLetra = valor;
+                            }
+                          }
+                        });
+                      },
+                      multiSelection: false, // Solo una talla en modo edición
+                      tallasSeleccionadas: _tallaNumero != null
+                          ? [_tallaNumero!]
+                          : _tallaLetra != null
+                              ? [_tallaLetra!]
+                              : [],
+                    ),
+                    _buildTallaPreview(),
+                  ],
                 ),
               ),
               
@@ -594,9 +774,10 @@ class _ActualizarVariacionScreenState extends State<ActualizarVariacionScreen> {
                     _buildTextField(
                       label: 'Precio',
                       controller: _precioController,
-                      inputType: const TextInputType.numberWithOptions(decimal: true),
+                      inputType: TextInputType.number,
                       validator: _validarPrecio,
-                      prefix: '\$',
+                      prefix: _currencySymbol,
+                      isPrice: true,
                     ),
                   ],
                 ),

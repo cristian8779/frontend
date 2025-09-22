@@ -10,11 +10,33 @@ class AnuncioService {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   String? _token;
   String? _errorMessage;
+  bool _hasConnectionError = false; // Nuevo flag para errores de conexión
 
   String? get message => _errorMessage;
+  bool get hasConnectionError => _hasConnectionError; // Getter para verificar errores de conexión
 
   AnuncioService() {
     print("✅ AnuncioService base URL: $_baseUrl");
+  }
+
+  // ------------------------------
+  // UTILITY METHODS
+  // ------------------------------
+  void _clearConnectionError() {
+    _hasConnectionError = false;
+  }
+
+  void _setConnectionError(String message) {
+    _hasConnectionError = true;
+    _errorMessage = message;
+  }
+
+  bool _isConnectionError(dynamic error) {
+    return error is SocketException || 
+           error.toString().contains('Failed host lookup') ||
+           error.toString().contains('No address associated with hostname') ||
+           error.toString().contains('Network is unreachable') ||
+           error.toString().contains('Connection timed out');
   }
 
   // ------------------------------
@@ -49,6 +71,9 @@ class AnuncioService {
       }
     } catch (e) {
       print("❌ Error renovando token: $e");
+      if (_isConnectionError(e)) {
+        _setConnectionError("Sin conexión a Internet");
+      }
       return false;
     }
   }
@@ -75,7 +100,12 @@ class AnuncioService {
       if (expiry.isBefore(DateTime.now())) {
         print("⚠️ Token expirado. Intentando renovar...");
         final renovado = await _renovarToken();
-        if (!renovado) throw Exception('❌ No se pudo renovar el token');
+        if (!renovado) {
+          if (_hasConnectionError) {
+            throw Exception('Sin conexión a Internet');
+          }
+          throw Exception('❌ No se pudo renovar el token');
+        }
         token = await _getAccessToken();
       }
     }
@@ -87,6 +117,7 @@ class AnuncioService {
   // ANUNCIOS
   // ------------------------------
   Future<List<Map<String, String>>> obtenerAnunciosActivos() async {
+    _clearConnectionError();
     final url = Uri.parse('$_baseUrl/anuncios/activos');
     try {
       final response = await http.get(url);
@@ -103,12 +134,17 @@ class AnuncioService {
         return [];
       }
     } catch (e) {
+      if (_isConnectionError(e)) {
+        _setConnectionError("Sin conexión a Internet");
+        throw Exception('Sin conexión a Internet');
+      }
       _errorMessage = "❌ Error al obtener anuncios: $e";
       return [];
     }
   }
 
   Future<List<Map<String, dynamic>>> obtenerAnunciosActivosConId() async {
+    _clearConnectionError();
     final url = Uri.parse('$_baseUrl/anuncios/activos');
     try {
       final response = await http.get(url);
@@ -130,6 +166,10 @@ class AnuncioService {
         return [];
       }
     } catch (e) {
+      if (_isConnectionError(e)) {
+        _setConnectionError("Sin conexión a Internet");
+        throw Exception('Sin conexión a Internet');
+      }
       _errorMessage = "❌ Error al obtener anuncios con ID: $e";
       return [];
     }
@@ -142,11 +182,13 @@ class AnuncioService {
     String? categoriaId,
     required String imagenPath,
   }) async {
+    _clearConnectionError();
     _errorMessage = null;
-    final token = await _obtenerTokenValido();
-    final uri = Uri.parse('$_baseUrl/anuncios');
-
+    
     try {
+      final token = await _obtenerTokenValido();
+      final uri = Uri.parse('$_baseUrl/anuncios');
+
       final request = http.MultipartRequest('POST', uri)
         ..headers['Authorization'] = 'Bearer $token'
         ..fields['fechaInicio'] = fechaInicio
@@ -178,19 +220,26 @@ class AnuncioService {
         return false;
       }
     } catch (e) {
+      if (_isConnectionError(e) || e.toString().contains('Sin conexión a Internet')) {
+        _setConnectionError("Sin conexión a Internet");
+        _errorMessage = "Sin conexión a Internet";
+        return false;
+      }
       _errorMessage = "❌ Error interno al crear anuncio: $e";
       return false;
     }
   }
 
   Future<bool> eliminarAnuncio(String id) async {
+    _clearConnectionError();
     _errorMessage = null;
-    final token = await _obtenerTokenValido();
-    print("🧨 Intentando eliminar anuncio con ID: $id");
-
-    final url = Uri.parse('$_baseUrl/anuncios/$id');
-
+    
     try {
+      final token = await _obtenerTokenValido();
+      print("🧨 Intentando eliminar anuncio con ID: $id");
+
+      final url = Uri.parse('$_baseUrl/anuncios/$id');
+
       final response = await http.delete(
         url,
         headers: {'Authorization': 'Bearer $token'},
@@ -206,6 +255,11 @@ class AnuncioService {
         return false;
       }
     } catch (e) {
+      if (_isConnectionError(e) || e.toString().contains('Sin conexión a Internet')) {
+        _setConnectionError("Sin conexión a Internet");
+        _errorMessage = "Sin conexión a Internet";
+        return false;
+      }
       _errorMessage = "❌ Error interno al eliminar anuncio: $e";
       return false;
     }
@@ -215,10 +269,12 @@ class AnuncioService {
   // PRODUCTOS
   // ------------------------------
   Future<List<Map<String, dynamic>>> obtenerProductos() async {
-    final token = await _obtenerTokenValido();
-    final url = Uri.parse('$_baseUrl/anuncios/productos');
-
+    _clearConnectionError();
+    
     try {
+      final token = await _obtenerTokenValido();
+      final url = Uri.parse('$_baseUrl/anuncios/productos');
+
       final response = await http.get(url, headers: {
         'Authorization': 'Bearer $token',
       });
@@ -242,6 +298,10 @@ class AnuncioService {
         return [];
       }
     } catch (e) {
+      if (_isConnectionError(e) || e.toString().contains('Sin conexión a Internet')) {
+        _setConnectionError("Sin conexión a Internet");
+        throw Exception('Sin conexión a Internet');
+      }
       _errorMessage = '❌ Error al cargar productos: $e';
       return [];
     }
@@ -251,10 +311,12 @@ class AnuncioService {
   // CATEGORÍAS
   // ------------------------------
   Future<List<Map<String, dynamic>>> obtenerCategorias() async {
-    final token = await _obtenerTokenValido();
-    final url = Uri.parse('$_baseUrl/anuncios/categorias');
-
+    _clearConnectionError();
+    
     try {
+      final token = await _obtenerTokenValido();
+      final url = Uri.parse('$_baseUrl/anuncios/categorias');
+
       final response = await http.get(url, headers: {
         'Authorization': 'Bearer $token',
       });
@@ -278,6 +340,10 @@ class AnuncioService {
         return [];
       }
     } catch (e) {
+      if (_isConnectionError(e) || e.toString().contains('Sin conexión a Internet')) {
+        _setConnectionError("Sin conexión a Internet");
+        throw Exception('Sin conexión a Internet');
+      }
       _errorMessage = '❌ Error al cargar categorías: $e';
       return [];
     }

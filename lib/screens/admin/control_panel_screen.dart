@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
-import '../../services/categoria_service.dart';
+import '../../providers/categoria_admin_provider.dart';
 import 'widgets/categoria_list.dart';
 import 'widgets/banner.dart';
 import 'widgets/error_message.dart';
 import 'widgets/top_icons.dart';
 import 'widgets/categoria_skeleton.dart';
+import 'widgets/connection_error_widget.dart';
+import 'styles/control_panel_styles.dart';
+
+// 👇 AGREGAR: Importar el routeObserver
+import '../../main.dart';
 
 class ControlPanelScreen extends StatefulWidget {
   final String rol;
@@ -16,95 +22,42 @@ class ControlPanelScreen extends StatefulWidget {
   State<ControlPanelScreen> createState() => _ControlPanelScreenState();
 }
 
-class _ControlPanelScreenState extends State<ControlPanelScreen> {
-  late final CategoriaService _categoriaService;
-  List<Map<String, dynamic>> _categorias = [];
-  String _errorMessage = "";
-  bool _isLoading = false;
+class _ControlPanelScreenState extends State<ControlPanelScreen> with RouteAware {
 
   @override
   void initState() {
     super.initState();
-    _categoriaService = CategoriaService();
-    _cargarCategorias();
+    // Inicializar el provider
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<CategoriasProvider>().inicializar();
+    });
+  }
+
+  // 👇 AGREGAR: Suscribirse al RouteObserver
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    routeObserver.subscribe(this, ModalRoute.of(context) as PageRoute<dynamic>);
+  }
+
+  // 👇 AGREGAR: Desuscribirse del RouteObserver
+  @override
+  void dispose() {
+    routeObserver.unsubscribe(this);
+    super.dispose();
+  }
+
+  @override
+  void didPopNext() {
+    // Se ejecuta cuando regresamos a esta pantalla desde otra pantalla
+    super.didPopNext();
+    print("🔄 Regresando a ControlPanel - Recargando categorías...");
+    // Usar refresh silencioso para no mostrar skeleton
+    context.read<CategoriasProvider>().refrescarSilencioso();
   }
 
   bool _isAllowedRole(String rol) {
     return rol == 'admin' || rol == 'superAdmin';
-  }
-
-  Future<void> _cargarCategorias() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = "";
-    });
-
-    try {
-      final categorias = await _categoriaService.obtenerCategorias();
-      setState(() {
-        _categorias = categorias;
-      });
-    } catch (error) {
-      setState(() {
-        _errorMessage = _mapErrorMessage(error.toString());
-        _categorias = [];
-      });
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
-  String _mapErrorMessage(String error) {
-    if (error.contains('SocketException')) {
-      return "❌ Error de conexión: No hay Internet.";
-    } else if (error.contains('Token expirado')) {
-      return "❌ Token expirado: Por favor, inicia sesión nuevamente.";
-    }
-    return "❌ Error inesperado.";
-  }
-
-  // Función para obtener dimensiones responsivas del error screen
-  Map<String, double> _getErrorScreenDimensions(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isTablet = screenWidth >= 768;
-    final isDesktop = screenWidth >= 1024;
-    
-    if (isDesktop) {
-      return {
-        'iconSize': 120.0,
-        'titleFontSize': 32.0,
-        'bodyFontSize': 20.0,
-        'buttonFontSize': 20.0,
-        'horizontalMargin': 120.0,
-        'verticalPadding': 48.0,
-        'horizontalPadding': 40.0,
-        'buttonPadding': 20.0,
-      };
-    } else if (isTablet) {
-      return {
-        'iconSize': 108.0,
-        'titleFontSize': 28.0,
-        'bodyFontSize': 19.0,
-        'buttonFontSize': 19.0,
-        'horizontalMargin': 80.0,
-        'verticalPadding': 42.0,
-        'horizontalPadding': 32.0,
-        'buttonPadding': 18.0,
-      };
-    } else {
-      return {
-        'iconSize': 96.0,
-        'titleFontSize': 26.0,
-        'bodyFontSize': 18.0,
-        'buttonFontSize': 18.0,
-        'horizontalMargin': 32.0,
-        'verticalPadding': 36.0,
-        'horizontalPadding': 24.0,
-        'buttonPadding': 14.0,
-      };
-    }
   }
 
   @override
@@ -112,13 +65,13 @@ class _ControlPanelScreenState extends State<ControlPanelScreen> {
     if (!_isAllowedRole(widget.rol)) {
       return LayoutBuilder(
         builder: (context, constraints) {
-          final dimensions = _getErrorScreenDimensions(context);
+          final dimensions = ControlPanelStyles.getErrorScreenDimensions(context);
           
           return Scaffold(
-            backgroundColor: Colors.grey[100],
+            backgroundColor: ControlPanelStyles.errorScreenBackground,
             body: Center(
               child: Card(
-                elevation: 6,
+                elevation: ControlPanelStyles.cardElevation,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 margin: EdgeInsets.symmetric(horizontal: dimensions['horizontalMargin']!),
                 child: Padding(
@@ -130,27 +83,23 @@ class _ControlPanelScreenState extends State<ControlPanelScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        Icons.lock_outline,
+                        ControlPanelStyles.restrictedAccessIcon,
                         size: dimensions['iconSize']!,
-                        color: Colors.deepOrange.shade400,
+                       color: Colors.red,
                       ),
                       const SizedBox(height: 24),
                       Text(
                         "Acceso Restringido",
-                        style: TextStyle(
-                          fontSize: dimensions['titleFontSize']!,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.deepOrange.shade700,
+                        style: ControlPanelStyles.getRestrictedAccessTitleStyle(
+                          dimensions['titleFontSize']!
                         ),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 16),
                       Text(
                         "No tienes permisos para ingresar a esta sección.\nSi crees que esto es un error, contacta al administrador.",
-                        style: TextStyle(
-                          fontSize: dimensions['bodyFontSize']!,
-                          color: Colors.grey.shade800,
-                          height: 1.4,
+                        style: ControlPanelStyles.getRestrictedAccessBodyStyle(
+                          dimensions['bodyFontSize']!
                         ),
                         textAlign: TextAlign.center,
                       ),
@@ -159,21 +108,18 @@ class _ControlPanelScreenState extends State<ControlPanelScreen> {
                         width: double.infinity,
                         child: ElevatedButton.icon(
                           onPressed: () => Navigator.pushReplacementNamed(context, '/bienvenida-usuario'),
-                          icon: const Icon(Icons.home_outlined, size: 24),
+                          icon: const Icon(ControlPanelStyles.homeIcon, size: 24),
                           label: Text(
                             "Volver al Inicio",
-                            style: TextStyle(
-                              fontSize: dimensions['buttonFontSize']!,
-                              fontWeight: FontWeight.w600,
+                            style: ControlPanelStyles.getRestrictedAccessButtonStyle(
+                              dimensions['buttonFontSize']!
                             ),
                           ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.deepOrange.shade400,
+                            backgroundColor: ControlPanelStyles.restrictedAccessButton,
                             padding: EdgeInsets.symmetric(vertical: dimensions['buttonPadding']!),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            elevation: 4,
+                            shape: ControlPanelStyles.getButtonShape(),
+                            elevation: ControlPanelStyles.buttonElevation,
                           ),
                         ),
                       ),
@@ -188,20 +134,21 @@ class _ControlPanelScreenState extends State<ControlPanelScreen> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9FC),
+      backgroundColor: ControlPanelStyles.backgroundColor,
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _cargarCategorias,
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            child: _ContenidoFijo(
-              rol: widget.rol,
-              categorias: _categorias,
-              isLoading: _isLoading,
-              errorMessage: _errorMessage,
-              onCategoriasActualizadas: _cargarCategorias, // callback
-            ),
-          ),
+        child: Consumer<CategoriasProvider>(
+          builder: (context, categoriasProvider, child) {
+            return RefreshIndicator(
+              onRefresh: () => categoriasProvider.refrescarSilencioso(),
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: _ContenidoFijo(
+                  rol: widget.rol,
+                  categoriasProvider: categoriasProvider,
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -210,55 +157,19 @@ class _ControlPanelScreenState extends State<ControlPanelScreen> {
 
 class _ContenidoFijo extends StatelessWidget {
   final String rol;
-  final List<Map<String, dynamic>> categorias;
-  final bool isLoading;
-  final String errorMessage;
-  final VoidCallback onCategoriasActualizadas;
+  final CategoriasProvider categoriasProvider;
 
   const _ContenidoFijo({
     required this.rol,
-    required this.categorias,
-    required this.isLoading,
-    required this.errorMessage,
-    required this.onCategoriasActualizadas,
+    required this.categoriasProvider,
   });
-
-  // Función para obtener dimensiones responsivas del contenido principal
-  Map<String, double> _getContentDimensions(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isTablet = screenWidth >= 768;
-    final isDesktop = screenWidth >= 1024;
-    
-    if (isDesktop) {
-      return {
-        'padding': 32.0,
-        'titleFontSize': 28.0,
-        'adminTitleFontSize': 29.0,
-        'maxWidth': 1200.0,
-      };
-    } else if (isTablet) {
-      return {
-        'padding': 24.0,
-        'titleFontSize': 26.0,
-        'adminTitleFontSize': 27.0,
-        'maxWidth': 800.0,
-      };
-    } else {
-      return {
-        'padding': 20.0,
-        'titleFontSize': 24.0,
-        'adminTitleFontSize': 25.0,
-        'maxWidth': double.infinity,
-      };
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final media = MediaQuery.of(context);
-        final dimensions = _getContentDimensions(context);
+        final dimensions = ControlPanelStyles.getContentDimensions(context);
         
         return Center(
           child: Container(
@@ -270,87 +181,79 @@ class _ContenidoFijo extends StatelessWidget {
                 children: [
                   TopIcons(rol: rol, showNotificationIcon: false),
                   BannerWidget(media: media),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: ControlPanelStyles.defaultSpacing),
                   Text(
                     "Categorías",
-                    style: TextStyle(
-                      fontSize: dimensions['titleFontSize']!,
-                      fontWeight: FontWeight.bold,
+                    style: ControlPanelStyles.getSectionTitleStyle(
+                      dimensions['titleFontSize']!
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  // 👇 Eliminamos la lógica del estado vacío aquí
-                  if (isLoading)
+                  const SizedBox(height: ControlPanelStyles.smallSpacing),
+                  
+                  // 🎯 MANEJO DE ESTADOS CON PROVIDER MEJORADO
+                  if (categoriasProvider.isLoading && categoriasProvider.categorias.isEmpty)
+                    // Solo mostrar skeleton si es carga inicial (no hay datos)
                     const CategoriaSkeleton()
-                  else if (errorMessage.isNotEmpty)
-                    ErrorMessage(message: errorMessage)
+                  else if (categoriasProvider.hasError)
+                    ImprovedErrorMessage(
+                      message: ControlPanelStyles.mapErrorMessage(
+                        categoriasProvider.errorMessage ?? 'Error desconocido'
+                      ),
+                      onRetry: () => categoriasProvider.reintentar(),
+                    )
                   else
-                    // 👇 Siempre mostramos CategoriaList (maneja su propio estado vacío)
                     CategoriaList(
-                      categorias: categorias,
-                      onCategoriasActualizadas: onCategoriasActualizadas,
+                      categorias: categoriasProvider.categoriasFiltradas,
+                      onCategoriasActualizadas: () => categoriasProvider.refrescarSilencioso(),
                     ),
-                  const SizedBox(height: 2),
+                  
+                  const SizedBox(height: ControlPanelStyles.tinySpacing),
 
                   if (rol == 'admin' || rol == 'superAdmin') ...[
                     Text(
                       "Panel de Administración",
-                      style: TextStyle(
-                        fontSize: dimensions['adminTitleFontSize']!,
-                        fontWeight: FontWeight.bold,
+                      style: ControlPanelStyles.getSectionTitleStyle(
+                        dimensions['adminTitleFontSize']!
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: ControlPanelStyles.tinySpacing),
                     LayoutBuilder(
                       builder: (context, gridConstraints) {
-                        int crossAxisCount;
-                        double childAspectRatio;
-                        
-                        if (gridConstraints.maxWidth >= 1200) {
-                          crossAxisCount = 3;
-                          childAspectRatio = 3.2;
-                        } else if (gridConstraints.maxWidth >= 768) {
-                          crossAxisCount = 2;
-                          childAspectRatio = 3.0;
-                        } else if (gridConstraints.maxWidth >= 600) {
-                          crossAxisCount = 2;
-                          childAspectRatio = 2.8;
-                        } else {
-                          crossAxisCount = 1;
-                          childAspectRatio = 3.5;
-                        }
+                        final gridConfig = ControlPanelStyles.getGridConfig(
+                          gridConstraints.maxWidth
+                        );
                         
                         return GridView.count(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
-                          crossAxisCount: crossAxisCount,
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 16,
-                          childAspectRatio: childAspectRatio,
+                          crossAxisCount: gridConfig['crossAxisCount'],
+                          crossAxisSpacing: ControlPanelStyles.gridSpacing,
+                          mainAxisSpacing: ControlPanelStyles.gridSpacing,
+                          childAspectRatio: gridConfig['childAspectRatio'],
                           children: [
                             _AdminCard(
                               title: 'Gestión de Productos',
                               imagePath: 'assets/producto.png',
-                              backgroundColor: Colors.blue.shade50,
+                              backgroundColor: ControlPanelStyles.productosCardBackground,
                               routeName: '/gestion-productos',
                             ),
                             _AdminCard(
                               title: 'Gestión de Ventas',
                               imagePath: 'assets/venta.png',
-                              backgroundColor: Colors.green.shade50,
+                              backgroundColor: ControlPanelStyles.ventasCardBackground,
                               routeName: '/gestion-ventas',
                             ),
                             _AdminCard(
                               title: 'Gestión de Anuncios',
                               imagePath: 'assets/anuncio.png',
-                              backgroundColor: Colors.orange.shade50,
+                              backgroundColor: ControlPanelStyles.anunciosCardBackground,
                               routeName: '/anuncios-activos',
                             ),
                           ],
                         );
                       },
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: ControlPanelStyles.defaultSpacing),
                   ],
                 ],
               ),
@@ -375,47 +278,11 @@ class _AdminCard extends StatelessWidget {
     required this.routeName,
   });
 
-  // Función para obtener dimensiones responsivas de las tarjetas admin
-  Map<String, double> _getCardDimensions(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isTablet = screenWidth >= 768;
-    final isDesktop = screenWidth >= 1024;
-    
-    if (isDesktop) {
-      return {
-        'horizontalPadding': 24.0,
-        'verticalPadding': 24.0,
-        'imageSize': 70.0,
-        'spacing': 24.0,
-        'fontSize': 22.0,
-        'iconSize': 20.0,
-      };
-    } else if (isTablet) {
-      return {
-        'horizontalPadding': 22.0,
-        'verticalPadding': 22.0,
-        'imageSize': 65.0,
-        'spacing': 22.0,
-        'fontSize': 21.0,
-        'iconSize': 18.0,
-      };
-    } else {
-      return {
-        'horizontalPadding': 20.0,
-        'verticalPadding': 20.0,
-        'imageSize': 60.0,
-        'spacing': 20.0,
-        'fontSize': 20.0,
-        'iconSize': 16.0,
-      };
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final dimensions = _getCardDimensions(context);
+        final dimensions = ControlPanelStyles.getAdminCardDimensions(context);
         
         return GestureDetector(
           onTap: () => Navigator.pushNamed(context, routeName),
@@ -424,17 +291,7 @@ class _AdminCard extends StatelessWidget {
               horizontal: dimensions['horizontalPadding']!,
               vertical: dimensions['verticalPadding']!,
             ),
-            decoration: BoxDecoration(
-              color: backgroundColor,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: const [
-                BoxShadow(
-                  color: Colors.black12,
-                  blurRadius: 6,
-                  offset: Offset(0, 3),
-                ),
-              ],
-            ),
+            decoration: ControlPanelStyles.getAdminCardDecoration(backgroundColor),
             child: Row(
               children: [
                 Image.asset(
@@ -447,16 +304,14 @@ class _AdminCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     title,
-                    style: TextStyle(
-                      fontSize: dimensions['fontSize']!,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
+                    style: ControlPanelStyles.getAdminCardTitleStyle(
+                      dimensions['fontSize']!
                     ),
                   ),
                 ),
                 Icon(
-                  Icons.arrow_forward_ios,
-                  color: Colors.grey,
+                  ControlPanelStyles.arrowForwardIcon,
+                  color: ControlPanelStyles.arrowColor,
                   size: dimensions['iconSize']!,
                 ),
               ],

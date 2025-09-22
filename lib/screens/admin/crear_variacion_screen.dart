@@ -8,6 +8,63 @@ import '../../widgets/selector_talla_widget.dart';
 import '../../models/variacion.dart';
 import '../../services/variacion_service.dart';
 
+// Formatteador para precios en COP
+class CurrencyInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    if (newValue.text.isEmpty) {
+      return newValue;
+    }
+
+    // Eliminar todos los caracteres que no sean números
+    String numbersOnly = newValue.text.replaceAll(RegExp(r'[^\d]'), '');
+    
+    if (numbersOnly.isEmpty) {
+      return const TextEditingValue(
+        text: '',
+        selection: TextSelection.collapsed(offset: 0),
+      );
+    }
+
+    // Convertir a número para validar
+    final number = int.tryParse(numbersOnly);
+    if (number == null) {
+      return oldValue;
+    }
+
+    // Formatear con separadores de miles
+    String formatted = _formatWithThousands(numbersOnly);
+    
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+
+  String _formatWithThousands(String number) {
+    // Agregar puntos cada tres dígitos desde la derecha
+    String reversed = number.split('').reversed.join('');
+    String formatted = '';
+    
+    for (int i = 0; i < reversed.length; i++) {
+      if (i > 0 && i % 3 == 0) {
+        formatted += '.';
+      }
+      formatted += reversed[i];
+    }
+    
+    return formatted.split('').reversed.join('');
+  }
+}
+
+// Función auxiliar para convertir el texto formateado de vuelta a número
+int parseCurrency(String formattedText) {
+  return int.tryParse(formattedText.replaceAll('.', '')) ?? 0;
+}
+
 class CrearVariacionScreen extends StatefulWidget {
   final String productId;
 
@@ -171,8 +228,10 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
     if (value == null || value.isEmpty) {
       return 'El precio es requerido';
     }
-    final precio = double.tryParse(value.replaceAll(',', '.'));
-    if (precio == null || precio <= 0) {
+    
+    // Usar parseCurrency para obtener el valor numérico
+    final precio = parseCurrency(value);
+    if (precio <= 0) {
       return 'Ingresa un precio válido';
     }
     return null;
@@ -218,6 +277,13 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
 
   bool _isFormValid() {
     if (_modoLotes) {
+      // En modo lotes, verificar que todos los colores tengan imagen
+      for (var colorHex in _coloresSeleccionados) {
+        if (!_imagenesPorColor.containsKey(colorHex)) {
+          return false;
+        }
+      }
+      
       for (var colorHex in _coloresSeleccionados) {
         for (var talla in _tallasSeleccionadas) {
           final key = _getVariacionKey(colorHex, talla);
@@ -250,17 +316,18 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
       for (String talla in _tallasSeleccionadas) {
         final key = _getVariacionKey(colorHex, talla);
         final stockText = _stockControllersPorVariacion[key]?.text.trim();
-        final precioText =
-            _precioControllersPorVariacion[key]?.text.trim().replaceAll(',', '.');
+        final precioText = _precioControllersPorVariacion[key]?.text.trim();
 
         if (stockText == null || stockText.isEmpty || precioText == null || precioText.isEmpty) {
           continue;
         }
 
         final stock = int.parse(stockText);
-        final precio = double.parse(precioText).toStringAsFixed(2);
+        // Usar parseCurrency para obtener el valor numérico del precio
+        final precioValue = parseCurrency(precioText);
+        final precio = precioValue.toStringAsFixed(2);
         final esNumerico = RegExp(r'^\d+$').hasMatch(talla);
-        final imagenColor = _imagenesPorColor[colorHex] ?? _imagenPrincipal;
+        final imagenColor = _imagenesPorColor[colorHex];
 
         if (imagenColor == null) continue;
 
@@ -307,11 +374,11 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
       return;
     }
 
-    final variacionesSinImagen =
-        _coloresSeleccionados.where((colorHex) => !_imagenesPorColor.containsKey(colorHex)).toList();
-    if (variacionesSinImagen.isNotEmpty && _imagenPrincipal == null) {
-      _mostrarMensaje('Faltan imágenes para algunos colores y no hay imagen principal.',
-          isError: true);
+    // Verificar que todos los colores tengan imagen
+    final coloresSinImagen = _coloresSeleccionados.where((colorHex) => !_imagenesPorColor.containsKey(colorHex)).toList();
+    if (coloresSinImagen.isNotEmpty) {
+      final coloresNombres = coloresSinImagen.map((color) => _coloresNombres[color] ?? 'Sin nombre').join(', ');
+      _mostrarMensaje('Faltan imágenes para los colores: $coloresNombres', isError: true);
       return;
     }
 
@@ -378,7 +445,9 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
 
   Future<void> _guardarVariacionIndividual() async {
     final stock = int.parse(_stockController.text.trim());
-    final precio = double.parse(_precioController.text.trim().replaceAll(',', '.')).toStringAsFixed(2);
+    // Usar parseCurrency en lugar de double.parse
+    final precioValue = parseCurrency(_precioController.text.trim());
+    final precio = precioValue.toStringAsFixed(2);
 
     final variacion = Variacion(
       productoId: widget.productId,
@@ -409,9 +478,6 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
   }
 
   Future<bool> _mostrarPreviewLotes(List<Variacion> variaciones) async {
-    final variacionesConImagenPrincipal =
-        variaciones.where((v) => !_imagenesPorColor.containsKey(v.colorHex)).toList();
-
     return await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
@@ -425,17 +491,10 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
                   const SizedBox(height: 12),
                   Text('• ${_coloresSeleccionados.length} colores'),
                   Text('• ${_tallasSeleccionadas.length} tallas'),
-                  if (variacionesConImagenPrincipal.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      'Nota: ${variacionesConImagenPrincipal.length} variaciones usarán la imagen principal.',
-                      style: TextStyle(color: Colors.orange.shade700),
-                    ),
-                  ],
                   const SizedBox(height: 12),
                   const Text('Detalles:'),
                   ...variaciones.map((v) => Text(
-                        '• ${v.colorNombre} - Talla ${v.tallaLetra ?? v.tallaNumero}: ${v.stock} unidades, $_currencySymbol${v.precio}',
+                        '• ${v.colorNombre} - Talla ${v.tallaLetra ?? v.tallaNumero}: ${v.stock} unidades, $_currencySymbol${_formatPriceForDisplay(v.precio)} COP',
                         style: const TextStyle(fontSize: 12),
                       )),
                 ],
@@ -454,6 +513,12 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
           ),
         ) ??
         false;
+  }
+
+  String _formatPriceForDisplay(double price) {
+    final intPrice = price.toInt();
+    final formatter = CurrencyInputFormatter();
+    return formatter._formatWithThousands(intPrice.toString());
   }
 
   void _resetForm() {
@@ -584,22 +649,23 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
     String? Function(String?)? validator,
     String? prefix,
     String? suffix,
+    bool isPrice = false, // Nuevo parámetro
   }) {
+    List<TextInputFormatter> formatters = [];
+    
+    if (isPrice) {
+      // Usar el formateador de moneda para campos de precio
+      formatters = [CurrencyInputFormatter()];
+    } else if (inputType == TextInputType.number) {
+      // Para campos numéricos que no son precio (como stock)
+      formatters = [FilteringTextInputFormatter.digitsOnly];
+    }
+
     return TextFormField(
       controller: controller,
       keyboardType: inputType,
       validator: validator,
-      inputFormatters: inputType == const TextInputType.numberWithOptions(decimal: true)
-          ? [
-              FilteringTextInputFormatter.allow(RegExp(r'^\d*[,.]?\d{0,2}')),
-              TextInputFormatter.withFunction((oldValue, newValue) {
-                if (newValue.text.isEmpty) return newValue;
-                final parsed = double.tryParse(newValue.text.replaceAll(',', '.'));
-                if (parsed == null) return oldValue;
-                return newValue.copyWith(text: parsed.toStringAsFixed(2));
-              }),
-            ]
-          : [FilteringTextInputFormatter.digitsOnly],
+      inputFormatters: formatters,
       decoration: InputDecoration(
         labelText: label,
         prefixText: prefix,
@@ -747,90 +813,13 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildSectionTitle('Imágenes por color', icon: Icons.image_outlined),
-          GestureDetector(
-            onTap: () => _seleccionarImagen(),
-            child: Semantics(
-              label: 'Seleccionar imagen principal',
-              child: Container(
-                height: 120,
-                width: double.infinity,
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: _imagenPrincipal != null ? const Color(0xFF3A86FF) : Colors.grey.shade300,
-                  ),
-                ),
-                child: _imagenPrincipal != null
-                    ? Row(
-                        children: [
-                          ClipRRect(
-                            borderRadius: const BorderRadius.only(
-                              topLeft: Radius.circular(11),
-                              bottomLeft: Radius.circular(11),
-                            ),
-                            child: Image.file(
-                              _imagenPrincipal!,
-                              fit: BoxFit.cover,
-                              width: 120,
-                              height: 120,
-                            ),
-                          ),
-                          Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Text(
-                                    'Imagen principal',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Se usará para colores sin imagen específica',
-                                    style: TextStyle(
-                                      color: Colors.grey.shade600,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      )
-                    : Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.add_photo_alternate_outlined,
-                            color: Colors.grey.shade400,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Imagen principal (opcional)',
-                            style: TextStyle(
-                              color: Colors.grey.shade600,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-              ),
-            ),
-          ),
           if (_coloresSeleccionados.isNotEmpty) ...[
             const Text(
-              'Imágenes por color específico:',
+              'Selecciona una imagen para cada color:',
               style: TextStyle(
                 fontWeight: FontWeight.w500,
                 fontSize: 14,
+                color: Color(0xFF2D3748),
               ),
             ),
             const SizedBox(height: 12),
@@ -859,19 +848,48 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: tieneImagen ? const Color(0xFF3A86FF) : Colors.grey.shade300,
+                          width: tieneImagen ? 2 : 1,
                         ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.08),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
                       child: Column(
                         children: [
                           Expanded(
                             child: tieneImagen
-                                ? ClipRRect(
-                                    borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
-                                    child: Image.file(
-                                      _imagenesPorColor[colorHex]!,
-                                      fit: BoxFit.cover,
-                                      width: double.infinity,
-                                    ),
+                                ? Stack(
+                                    children: [
+                                      ClipRRect(
+                                        borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
+                                        child: Image.file(
+                                          _imagenesPorColor[colorHex]!,
+                                          fit: BoxFit.cover,
+                                          width: double.infinity,
+                                          height: double.infinity,
+                                        ),
+                                      ),
+                                      Positioned(
+                                        top: 8,
+                                        right: 8,
+                                        child: Container(
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: BoxDecoration(
+                                            color: Colors.black.withOpacity(0.6),
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: const Icon(
+                                            Icons.edit,
+                                            color: Colors.white,
+                                            size: 12,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   )
                                 : Container(
                                     decoration: BoxDecoration(
@@ -916,6 +934,34 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
                   ),
                 );
               },
+            ),
+          ] else ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: Colors.grey.shade600,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Selecciona colores para poder agregar sus imágenes',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ],
@@ -1362,7 +1408,7 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
                             _tallaNumero = null;
                             if (seleccionados.isNotEmpty) {
                               String valor = seleccionados.first;
-                              if (RegExp(r'^\d+$').hasMatch(valor)) {
+                              if (RegExp(r'^\d+').hasMatch(valor)) {
                                 _tallaNumero = valor;
                               } else {
                                 _tallaLetra = valor;
@@ -1415,9 +1461,10 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
                       _buildTextField(
                         label: 'Precio',
                         controller: _precioController,
-                        inputType: const TextInputType.numberWithOptions(decimal: true),
+                        inputType: TextInputType.number,
                         validator: _validarPrecio,
                         prefix: _currencySymbol,
+                        isPrice: true,
                       ),
                     ] else ...[
                       if (_coloresSeleccionados.isEmpty || _tallasSeleccionadas.isEmpty)
@@ -1470,9 +1517,10 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
                                       child: _buildTextField(
                                         label: 'Precio',
                                         controller: _precioControllersPorVariacion[key]!,
-                                        inputType: const TextInputType.numberWithOptions(decimal: true),
+                                        inputType: TextInputType.number,
                                         validator: _validarPrecio,
                                         prefix: _currencySymbol,
+                                        isPrice: true,
                                       ),
                                     ),
                                   ],

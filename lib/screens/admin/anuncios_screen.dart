@@ -1,99 +1,19 @@
-// 🎯 IMPORTACIONES
+// 📱 ANUNCIOS SCREEN REFACTORIZADO
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
-import 'dart:ui';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 
+// Importaciones de servicios y pantallas
 import '../../services/anuncio_service.dart';
 import 'gestion_anuncios_screen.dart';
 
-// 🎨 ESTILOS PROFESIONALES MEJORADOS
-class AppStyles {
-  // Colores mejorados con paleta más sofisticada
-  static const Color primaryColor = Color(0xFF1A237E);
-  static const Color primaryLight = Color(0xFF3F51B5);
-  static const Color accentColor = Color(0xFFFF6B35);
-  static const Color accentLight = Color(0xFFFF8A65);
-  static const Color successColor = Color(0xFF00C853);
-  static const Color successLight = Color(0xFF69F0AE);
-  static const Color errorColor = Color(0xFFD32F2F);
-  static const Color errorLight = Color(0xFFFF5252);
-  static const Color warningColor = Color(0xFFFFA726);
-  static const Color infoColor = Color(0xFF29B6F6);
-  
-  // Colores de superficie y fondo
-  static const Color backgroundColor = Color(0xFFF8FAFF);
-  static const Color surfaceColor = Colors.white;
-  static const Color cardColor = Colors.white;
-  static const Color dividerColor = Color(0xFFE0E7FF);
-  
-  // Colores de texto
-  static const Color textPrimary = Color(0xFF1A1A1A);
-  static const Color textSecondary = Color(0xFF666666);
-  static const Color textTertiary = Color(0xFF999999);
-  static const Color textOnPrimary = Colors.white;
-  
-  // Dimensiones estandarizadas
-  static const double radiusSmall = 8.0;
-  static const double radiusMedium = 12.0;
-  static const double radiusLarge = 16.0;
-  static const double radiusXLarge = 20.0;
-  static const double radiusMax = 32.0;
-  
-  static const double spacingXSmall = 4.0;
-  static const double spacingSmall = 8.0;
-  static const double spacingMedium = 16.0;
-  static const double spacingLarge = 24.0;
-  static const double spacingXLarge = 32.0;
-  
-  static const double elevationSmall = 2.0;
-  static const double elevationMedium = 4.0;
-  static const double elevationLarge = 8.0;
-  static const double elevationXLarge = 16.0;
-  
-  // Duraciones de animación optimizadas
-  static const Duration fastAnimation = Duration(milliseconds: 150);
-  static const Duration normalAnimation = Duration(milliseconds: 300);
-  static const Duration slowAnimation = Duration(milliseconds: 500);
-  static const Duration toastDuration = Duration(seconds: 4);
+// Importación de estilos (usando el archivo barrel)
+import 'styles/styles_index.dart';
 
-  // Shadows mejoradas
-  static List<BoxShadow> get cardShadow => [
-    BoxShadow(
-      color: Colors.black.withOpacity(0.08),
-      blurRadius: 10,
-      offset: const Offset(0, 4),
-      spreadRadius: 0,
-    ),
-    BoxShadow(
-      color: Colors.black.withOpacity(0.04),
-      blurRadius: 4,
-      offset: const Offset(0, 1),
-      spreadRadius: 0,
-    ),
-  ];
-
-  static List<BoxShadow> get elevatedShadow => [
-    BoxShadow(
-      color: Colors.black.withOpacity(0.12),
-      blurRadius: 20,
-      offset: const Offset(0, 8),
-      spreadRadius: 0,
-    ),
-    BoxShadow(
-      color: Colors.black.withOpacity(0.08),
-      blurRadius: 8,
-      offset: const Offset(0, 4),
-      spreadRadius: 0,
-    ),
-  ];
-}
-
-// 📱 ANUNCIOS SCREEN CON DISEÑO PROFESIONAL MEJORADO
 class AnunciosScreen extends StatefulWidget {
   const AnunciosScreen({super.key});
 
@@ -105,6 +25,7 @@ class _AnunciosScreenState extends State<AnunciosScreen>
     with TickerProviderStateMixin {
   final AnuncioService _anuncioService = AnuncioService();
   
+  // Estado de la pantalla
   List<Map<String, dynamic>> _anuncios = [];
   bool _isLoading = true;
   bool _hasError = false;
@@ -119,12 +40,6 @@ class _AnunciosScreenState extends State<AnunciosScreen>
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
 
-  // Configuraciones del carrusel optimizadas - MISMO TAMAÑO QUE BannerCarousel
-  static const double aspectRatioML = 10 / 3; // Relación similar a Mercado Libre (~3.33:1)
-  static const double maxBannerHeight = 240;
-  static const double minBannerHeight = 120;
-  static const EdgeInsets containerMargin = EdgeInsets.symmetric(horizontal: 16, vertical: 12);
-
   @override
   void initState() {
     super.initState();
@@ -133,31 +48,11 @@ class _AnunciosScreenState extends State<AnunciosScreen>
   }
 
   void _initAnimations() {
-    _fadeController = AnimationController(
-      duration: AppStyles.normalAnimation,
-      vsync: this,
-    );
+    _fadeController = StyleUtilities.createStandardController(vsync: this);
+    _slideController = StyleUtilities.createStandardController(vsync: this);
     
-    _slideController = AnimationController(
-      duration: AppStyles.normalAnimation,
-      vsync: this,
-    );
-
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _fadeController,
-      curve: Curves.easeOutCubic,
-    ));
-
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.3),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _slideController,
-      curve: Curves.easeOutCubic,
-    ));
+    _fadeAnimation = StyleUtilities.createFadeAnimation(_fadeController);
+    _slideAnimation = StyleUtilities.createSlideAnimation(_slideController);
   }
 
   @override
@@ -167,18 +62,7 @@ class _AnunciosScreenState extends State<AnunciosScreen>
     super.dispose();
   }
 
-  double _calculateBannerHeight(double screenWidth) {
-    double height = (screenWidth - 32) / aspectRatioML; // margen horizontal
-    return height.clamp(minBannerHeight, maxBannerHeight);
-  }
-
-  double _getViewportFraction(double screenWidth) {
-    if (screenWidth >= 1024) return 0.85;
-    if (screenWidth >= 768) return 0.88;
-    if (screenWidth >= 600) return 0.9;
-    return 0.92;
-  }
-
+  // 🔄 LÓGICA DE CARGA DE DATOS
   Future<void> _cargarAnuncios() async {
     if (!mounted) return;
     
@@ -221,7 +105,11 @@ class _AnunciosScreenState extends State<AnunciosScreen>
       
       // Mostrar mensaje de éxito solo en refresh manual
       if (_isRefreshing) {
-        _mostrarToast("Anuncios actualizados", success: true);
+        StyleUtilities.showStyledSnackBar(
+          context, 
+          "Anuncios actualizados", 
+          isSuccess: true
+        );
       }
     } catch (e) {
       if (!mounted) return;
@@ -230,7 +118,7 @@ class _AnunciosScreenState extends State<AnunciosScreen>
         _hasError = true;
         _isLoading = false;
         _isRefreshing = false;
-        _mensajeError = _determinarMensajeError(e);
+        _mensajeError = StyleUtilities.determineErrorMessage(e);
       });
       _fadeController.forward(); // Mostrar error con animación
     }
@@ -239,7 +127,7 @@ class _AnunciosScreenState extends State<AnunciosScreen>
   Future<void> _onRefresh() async {
     if (_isLoading || _isRefreshing) return;
     
-    HapticFeedback.mediumImpact();
+    StyleUtilities.mediumHaptic();
     
     setState(() {
       _isRefreshing = true;
@@ -248,33 +136,11 @@ class _AnunciosScreenState extends State<AnunciosScreen>
     await _cargarAnuncios();
   }
 
-  String _determinarMensajeError(dynamic error) {
-    String errorStr = error.toString().toLowerCase();
-    
-    if (errorStr.contains('socket') || 
-        errorStr.contains('network') || 
-        errorStr.contains('connection')) {
-      return "Sin conexión a internet";
-    } else if (errorStr.contains('timeout') || 
-               errorStr.contains('time out')) {
-      return "Tiempo de espera agotado";
-    } else if (errorStr.contains('server') || 
-               errorStr.contains('502') || 
-               errorStr.contains('503') || 
-               errorStr.contains('500')) {
-      return "Servidor no disponible";
-    } else if (errorStr.contains('404')) {
-      return "Recurso no encontrado";
-    } else {
-      return "Error de conexión";
-    }
-  }
-
   Future<void> _prefetchImages() async {
     final imagesToPrefetch = _anuncios.take(3).toList();
     for (int i = 0; i < imagesToPrefetch.length; i++) {
       final url = imagesToPrefetch[i]['imagen'];
-      if (url != null && url.isNotEmpty && mounted) {
+      if (StyleUtilities.isValidImageUrl(url) && mounted) {
         try {
           await precacheImage(
             CachedNetworkImageProvider(url),
@@ -287,10 +153,11 @@ class _AnunciosScreenState extends State<AnunciosScreen>
     }
   }
 
+  // 🗑️ LÓGICA DE ELIMINACIÓN
   Future<void> _eliminarAnuncio(String id) async {
     if (_isDeleting) return;
     
-    HapticFeedback.mediumImpact();
+    StyleUtilities.mediumHaptic();
 
     final confirmar = await _mostrarDialogoConfirmacion();
     if (confirmar != true) return;
@@ -302,7 +169,11 @@ class _AnunciosScreenState extends State<AnunciosScreen>
       if (!mounted) return;
 
       if (eliminado) {
-        _mostrarToast("Anuncio eliminado exitosamente", success: true);
+        StyleUtilities.showStyledSnackBar(
+          context,
+          "Anuncio eliminado exitosamente", 
+          isSuccess: true
+        );
         setState(() {
           _anuncios.removeWhere((a) => a['_id'] == id);
           if (_currentIndex >= _anuncios.length && _anuncios.isNotEmpty) {
@@ -310,14 +181,19 @@ class _AnunciosScreenState extends State<AnunciosScreen>
           }
         });
       } else {
-        _mostrarToast(
+        StyleUtilities.showStyledSnackBar(
+          context,
           _anuncioService.message ?? 'Error al eliminar el anuncio',
-          success: false
+          isSuccess: false
         );
       }
     } catch (e) {
       if (mounted) {
-        _mostrarToast(_determinarMensajeError(e), success: false);
+        StyleUtilities.showStyledSnackBar(
+          context,
+          StyleUtilities.determineErrorMessage(e), 
+          isSuccess: false
+        );
       }
     } finally {
       if (mounted) {
@@ -331,19 +207,14 @@ class _AnunciosScreenState extends State<AnunciosScreen>
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
-        ),
+        shape: WidgetStyles.dialogShape,
         elevation: AppStyles.elevationXLarge,
         backgroundColor: AppStyles.surfaceColor,
         title: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(AppStyles.spacingSmall),
-              decoration: BoxDecoration(
-                color: AppStyles.errorColor.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
+              decoration: WidgetStyles.iconContainerDecoration(AppStyles.errorColor),
               child: Icon(
                 Icons.warning_rounded,
                 color: AppStyles.errorColor,
@@ -363,24 +234,14 @@ class _AnunciosScreenState extends State<AnunciosScreen>
             ),
           ],
         ),
-        content: const Text(
+        content: Text(
           "¿Estás seguro de que deseas eliminar este anuncio? Esta acción no se puede deshacer.",
-          style: TextStyle(
-            color: AppStyles.textSecondary,
-            fontSize: 16,
-            height: 1.4,
-          ),
+          style: WidgetStyles.bodyTextStyle,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            style: TextButton.styleFrom(
-              foregroundColor: AppStyles.textSecondary,
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppStyles.spacingLarge,
-                vertical: AppStyles.spacingMedium,
-              ),
-            ),
+            style: WidgetStyles.secondaryTextButtonStyle,
             child: const Text(
               "Cancelar",
               style: TextStyle(fontWeight: FontWeight.w600),
@@ -388,18 +249,7 @@ class _AnunciosScreenState extends State<AnunciosScreen>
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppStyles.errorColor,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppStyles.spacingLarge,
-                vertical: AppStyles.spacingMedium,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
-              ),
-            ),
+            style: WidgetStyles.errorElevatedButtonStyle,
             child: const Text(
               "Eliminar",
               style: TextStyle(fontWeight: FontWeight.bold),
@@ -410,63 +260,12 @@ class _AnunciosScreenState extends State<AnunciosScreen>
     );
   }
 
-  void _mostrarToast(String mensaje, {required bool success}) {
-    if (!mounted) return;
-    
-    final color = success ? AppStyles.successColor : AppStyles.errorColor;
-    final icon = success ? Icons.check_circle_rounded : Icons.error_rounded;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Container(
-          padding: const EdgeInsets.symmetric(vertical: AppStyles.spacingSmall),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(AppStyles.spacingXSmall),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, color: Colors.white, size: 20),
-              ),
-              const SizedBox(width: AppStyles.spacingMedium),
-              Expanded(
-                child: Text(
-                  mensaje,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 15,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        backgroundColor: color,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
-        ),
-        duration: AppStyles.toastDuration,
-        elevation: AppStyles.elevationLarge,
-        margin: const EdgeInsets.all(AppStyles.spacingMedium),
-        action: SnackBarAction(
-          label: 'OK',
-          textColor: Colors.white,
-          onPressed: () {
-            ScaffoldMessenger.of(context).hideCurrentSnackBar();
-          },
-        ),
-      ),
-    );
-  }
-
+  // 🏗️ CONSTRUCCIÓN DE LA UI
   @override
   Widget build(BuildContext context) {
     final double screenWidth = MediaQuery.of(context).size.width;
-    final double bannerHeight = _calculateBannerHeight(screenWidth);
-    final double viewportFraction = _getViewportFraction(screenWidth);
+    final double bannerHeight = AppStyles.calculateBannerHeight(screenWidth);
+    final double viewportFraction = AppStyles.getViewportFraction(screenWidth);
 
     return Scaffold(
       backgroundColor: AppStyles.backgroundColor,
@@ -537,14 +336,7 @@ class _AnunciosScreenState extends State<AnunciosScreen>
         ),
         background: Container(
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                AppStyles.primaryColor,
-                AppStyles.primaryLight,
-              ],
-            ),
+            gradient: WidgetStyles.primaryGradient,
           ),
           child: Stack(
             children: [
@@ -602,10 +394,7 @@ class _AnunciosScreenState extends State<AnunciosScreen>
             children: [
               Container(
                 padding: const EdgeInsets.all(AppStyles.spacingSmall),
-                decoration: BoxDecoration(
-                  color: AppStyles.primaryColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(AppStyles.radiusSmall),
-                ),
+                decoration: WidgetStyles.iconContainerDecoration(AppStyles.primaryColor),
                 child: Icon(
                   Icons.campaign_rounded,
                   color: AppStyles.primaryColor,
@@ -619,18 +408,11 @@ class _AnunciosScreenState extends State<AnunciosScreen>
                   children: [
                     Text(
                       'Anuncios Activos',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: AppStyles.textPrimary,
-                      ),
+                      style: WidgetStyles.subtitleStyle,
                     ),
                     Text(
                       'Desliza hacia abajo para actualizar',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppStyles.textSecondary,
-                      ),
+                      style: WidgetStyles.captionStyle,
                     ),
                   ],
                 ),
@@ -650,9 +432,7 @@ class _AnunciosScreenState extends State<AnunciosScreen>
         vertical: AppStyles.spacingSmall,
       ),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [AppStyles.accentColor, AppStyles.accentLight],
-        ),
+        gradient: WidgetStyles.accentGradient,
         borderRadius: BorderRadius.circular(AppStyles.radiusMax),
         boxShadow: [
           BoxShadow(
@@ -664,40 +444,20 @@ class _AnunciosScreenState extends State<AnunciosScreen>
       ),
       child: Text(
         '${_currentIndex + 1} de ${_anuncios.length}',
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.bold,
-          fontSize: 13,
-        ),
+        style: WidgetStyles.badgeLabelStyle,
       ),
     );
   }
 
   Widget _buildFloatingActionButton() {
     return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppStyles.radiusMax),
-        boxShadow: AppStyles.elevatedShadow,
-      ),
+      decoration: WidgetStyles.fabDecoration,
       child: FloatingActionButton.extended(
         onPressed: () {
-          HapticFeedback.lightImpact();
+          StyleUtilities.lightHaptic();
           Navigator.push(
             context,
-            PageRouteBuilder(
-              pageBuilder: (context, animation, secondaryAnimation) =>
-                  const GestionAnunciosScreen(),
-              transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                return SlideTransition(
-                  position: animation.drive(
-                    Tween(begin: const Offset(1.0, 0.0), end: Offset.zero)
-                        .chain(CurveTween(curve: Curves.easeOutCubic)),
-                  ),
-                  child: child,
-                );
-              },
-              transitionDuration: AppStyles.normalAnimation,
-            ),
+            StyleUtilities.slideRightTransition(const GestionAnunciosScreen()),
           ).then((_) => _cargarAnuncios());
         },
         backgroundColor: AppStyles.accentColor,
@@ -725,7 +485,7 @@ class _AnunciosScreenState extends State<AnunciosScreen>
 
   Widget _buildCarruselAnuncios(double screenWidth, double bannerHeight, double viewportFraction) {
     return Container(
-      margin: containerMargin,
+      margin: AppStyles.containerMargin,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -752,7 +512,7 @@ class _AnunciosScreenState extends State<AnunciosScreen>
                 scrollPhysics: const BouncingScrollPhysics(),
                 onPageChanged: (index, reason) {
                   if (mounted) {
-                    HapticFeedback.selectionClick();
+                    StyleUtilities.selectionHaptic();
                     setState(() {
                       _currentIndex = index;
                     });
@@ -778,16 +538,7 @@ class _AnunciosScreenState extends State<AnunciosScreen>
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 6),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.12),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+      decoration: WidgetStyles.carouselItemDecoration,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: Stack(
@@ -808,15 +559,7 @@ class _AnunciosScreenState extends State<AnunciosScreen>
             Positioned.fill(
               child: Container(
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.transparent,
-                      Colors.black.withOpacity(0.3),
-                    ],
-                    stops: const [0.6, 1.0],
-                  ),
+                  gradient: WidgetStyles.imageOverlayGradient,
                 ),
               ),
             ),
@@ -853,60 +596,26 @@ class _AnunciosScreenState extends State<AnunciosScreen>
     final DateTime fechaInicio = DateTime.tryParse(anuncio['fechaInicio'] ?? '') ?? now;
     final DateTime fechaFin = DateTime.tryParse(anuncio['fechaFin'] ?? '') ?? now;
     
-    final bool isActive = now.isAfter(fechaInicio) && now.isBefore(fechaFin);
-    final bool isExpired = now.isAfter(fechaFin);
-    final bool isPending = now.isBefore(fechaInicio);
-
-    String status;
-    Color statusColor;
-    IconData statusIcon;
-
-    if (isExpired) {
-      status = 'Expirado';
-      statusColor = AppStyles.errorColor;
-      statusIcon = Icons.schedule_rounded;
-    } else if (isPending) {
-      status = 'Programado';
-      statusColor = AppStyles.warningColor;
-      statusIcon = Icons.schedule_rounded;
-    } else {
-      status = 'Activo';
-      statusColor = AppStyles.successColor;
-      statusIcon = Icons.check_circle_rounded;
-    }
+    final statusConfig = AppStyles.getStatusBadgeConfig(fechaInicio, fechaFin);
 
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: AppStyles.spacingMedium,
         vertical: AppStyles.spacingSmall,
       ),
-      decoration: BoxDecoration(
-        color: statusColor,
-        borderRadius: BorderRadius.circular(AppStyles.radiusMax),
-        boxShadow: [
-          BoxShadow(
-            color: statusColor.withOpacity(0.4),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+      decoration: WidgetStyles.statusBadgeDecoration(statusConfig['color']),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            statusIcon,
+            statusConfig['icon'],
             color: Colors.white,
             size: 14,
           ),
           const SizedBox(width: AppStyles.spacingXSmall),
           Text(
-            status,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-            ),
+            statusConfig['status'],
+            style: WidgetStyles.badgeLabelStyle,
           ),
         ],
       ),
@@ -923,20 +632,9 @@ class _AnunciosScreenState extends State<AnunciosScreen>
           borderRadius: BorderRadius.circular(AppStyles.radiusMax),
           child: Container(
             padding: const EdgeInsets.all(AppStyles.spacingSmall),
-            decoration: BoxDecoration(
-              color: _isDeleting 
-                  ? AppStyles.textSecondary.withOpacity(0.8)
-                  : AppStyles.errorColor,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: (_isDeleting 
-                      ? AppStyles.textSecondary 
-                      : AppStyles.errorColor).withOpacity(0.4),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
+            decoration: WidgetStyles.circularButtonDecoration(
+              AppStyles.errorColor,
+              isDisabled: _isDeleting,
             ),
             child: _isDeleting
                 ? SizedBox(
@@ -1039,10 +737,7 @@ class _AnunciosScreenState extends State<AnunciosScreen>
                 children: [
                   Container(
                     padding: const EdgeInsets.all(AppStyles.spacingSmall),
-                    decoration: BoxDecoration(
-                      color: AppStyles.infoColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(AppStyles.radiusSmall),
-                    ),
+                    decoration: WidgetStyles.iconContainerDecoration(AppStyles.infoColor),
                     child: Icon(
                       Icons.info_outline_rounded,
                       color: AppStyles.infoColor,
@@ -1053,11 +748,7 @@ class _AnunciosScreenState extends State<AnunciosScreen>
                   Expanded(
                     child: Text(
                       'Detalles del Anuncio',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppStyles.textPrimary,
-                      ),
+                      style: WidgetStyles.sectionTitleStyle,
                     ),
                   ),
                 ],
@@ -1071,7 +762,7 @@ class _AnunciosScreenState extends State<AnunciosScreen>
                   Expanded(
                     child: _buildDateInfoCard(
                       'Fecha de Inicio',
-                      dateFormat.format(fechaInicio),
+                      StyleUtilities.formatDate(fechaInicio),
                       Icons.play_arrow_rounded,
                       AppStyles.successColor,
                     ),
@@ -1080,7 +771,7 @@ class _AnunciosScreenState extends State<AnunciosScreen>
                   Expanded(
                     child: _buildDateInfoCard(
                       'Fecha de Fin',
-                      dateFormat.format(fechaFin),
+                      StyleUtilities.formatDate(fechaFin),
                       Icons.stop_rounded,
                       AppStyles.errorColor,
                     ),
@@ -1126,14 +817,7 @@ class _AnunciosScreenState extends State<AnunciosScreen>
   Widget _buildDateInfoCard(String label, String value, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.all(AppStyles.spacingMedium),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
-        border: Border.all(
-          color: color.withOpacity(0.2),
-          width: 1,
-        ),
-      ),
+      decoration: WidgetStyles.successCardDecoration,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1144,11 +828,7 @@ class _AnunciosScreenState extends State<AnunciosScreen>
               Expanded(
                 child: Text(
                   label,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: AppStyles.textSecondary,
-                  ),
+                  style: WidgetStyles.captionStyle.copyWith(fontWeight: FontWeight.w600),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -1174,14 +854,7 @@ class _AnunciosScreenState extends State<AnunciosScreen>
         horizontal: AppStyles.spacingMedium,
         vertical: AppStyles.spacingSmall,
       ),
-      decoration: BoxDecoration(
-        color: AppStyles.backgroundColor,
-        borderRadius: BorderRadius.circular(AppStyles.radiusMax),
-        border: Border.all(
-          color: color.withOpacity(0.3),
-          width: 1,
-        ),
-      ),
+      decoration: WidgetStyles.infoChipDecoration(color),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1242,16 +915,7 @@ class _AnunciosScreenState extends State<AnunciosScreen>
   Widget _buildShimmer(double width, double height) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 6),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+      decoration: WidgetStyles.carouselItemDecoration,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: Shimmer.fromColors(
@@ -1335,7 +999,7 @@ class _AnunciosScreenState extends State<AnunciosScreen>
     return Container(
       width: width,
       height: height,
-      color: Colors.grey.shade200,
+      decoration: WidgetStyles.errorImagePlaceholderDecoration,
       child: Icon(
         Icons.image_outlined,
         size: 48,
@@ -1346,7 +1010,7 @@ class _AnunciosScreenState extends State<AnunciosScreen>
 
   Widget _buildLoadingState(double screenWidth, double bannerHeight, double viewportFraction) {
     return Container(
-      margin: containerMargin,
+      margin: AppStyles.containerMargin,
       child: Column(
         children: [
           SizedBox(
@@ -1388,195 +1052,164 @@ class _AnunciosScreenState extends State<AnunciosScreen>
   }
 
   Widget _buildErrorState(double height) {
+    final errorConfig = AppStyles.getErrorConfig(_mensajeError);
+    
     return Container(
-      height: height,
-      margin: containerMargin,
+      constraints: BoxConstraints(
+        minHeight: height * 0.8,
+        maxHeight: height,
+      ),
+      margin: AppStyles.containerMargin,
       decoration: BoxDecoration(
         color: Colors.grey.shade50,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.grey.shade200),
       ),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              _mensajeError?.contains('internet') == true || _mensajeError?.contains('conexión') == true
-                  ? Icons.wifi_off_rounded 
-                  : _mensajeError?.contains('servidor') == true || _mensajeError?.contains('Servidor') == true
-                      ? Icons.dns_rounded
-                      : Icons.error_outline_rounded,
-              color: AppStyles.errorColor,
-              size: 48,
-            ),
-            const SizedBox(height: AppStyles.spacingMedium),
-            Text(
-              _mensajeError ?? 'Error desconocido',
-              style: TextStyle(
-                color: AppStyles.textPrimary,
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(AppStyles.spacingLarge),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                errorConfig['icon'],
+                color: errorConfig['color'],
+                size: 48,
               ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: AppStyles.spacingSmall),
-            Text(
-              _mensajeError?.contains('internet') == true
-                  ? 'Verifica tu conexión e intenta nuevamente'
-                  : _mensajeError?.contains('servidor') == true || _mensajeError?.contains('Servidor') == true
-                      ? 'El servicio no está disponible en este momento'
-                      : 'No se pudieron cargar los anuncios',
-              style: TextStyle(
-                color: AppStyles.textSecondary,
-                fontSize: 14,
+              const SizedBox(height: AppStyles.spacingMedium),
+              Text(
+                errorConfig['title'],
+                style: WidgetStyles.subtitleStyle,
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: AppStyles.spacingLarge),
-            ElevatedButton.icon(
-              onPressed: _cargarAnuncios,
-              icon: const Icon(Icons.refresh_rounded, size: 18),
-              label: const Text('Reintentar'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppStyles.errorColor,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppStyles.spacingLarge,
-                  vertical: AppStyles.spacingMedium,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
-                ),
+              const SizedBox(height: AppStyles.spacingSmall),
+              Text(
+                errorConfig['subtitle'],
+                style: WidgetStyles.bodyTextStyle,
+                textAlign: TextAlign.center,
               ),
-            ),
-          ],
+              const SizedBox(height: AppStyles.spacingLarge),
+              ElevatedButton.icon(
+                onPressed: _cargarAnuncios,
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Reintentar'),
+                style: WidgetStyles.errorElevatedButtonStyle,
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppStyles.spacingXLarge),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Ilustración animada
-            TweenAnimationBuilder(
-              duration: AppStyles.slowAnimation,
-              tween: Tween<double>(begin: 0.8, end: 1.0),
-              builder: (context, scale, child) {
-                return Transform.scale(
-                  scale: scale,
-                  child: Container(
-                    width: 120,
-                    height: 120,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          AppStyles.primaryColor.withOpacity(0.1),
-                          AppStyles.accentColor.withOpacity(0.1),
-                        ],
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          minHeight: MediaQuery.of(context).size.height * 0.6,
+        ),
+        child: Padding(
+          padding: StyleUtilities.getResponsivePadding(context),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Ilustración animada - tamaño reducido
+              TweenAnimationBuilder(
+                duration: AppStyles.slowAnimation,
+                tween: Tween<double>(begin: 0.8, end: 1.0),
+                builder: (context, scale, child) {
+                  return Transform.scale(
+                    scale: scale,
+                    child: Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            AppStyles.primaryColor.withOpacity(0.1),
+                            AppStyles.accentColor.withOpacity(0.1),
+                          ],
+                        ),
+                        shape: BoxShape.circle,
                       ),
-                      shape: BoxShape.circle,
+                      child: Icon(
+                        Icons.campaign_outlined,
+                        color: AppStyles.primaryColor,
+                        size: 40,
+                      ),
                     ),
-                    child: Icon(
-                      Icons.campaign_outlined,
-                      color: AppStyles.primaryColor,
-                      size: 60,
-                    ),
-                  ),
-                );
-              },
-            ),
-            
-            const SizedBox(height: AppStyles.spacingXLarge),
-            
-            Text(
-              "¡Todo listo para empezar!",
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: AppStyles.textPrimary,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            
-            const SizedBox(height: AppStyles.spacingMedium),
-            
-            Text(
-              "Crea tu primer anuncio para promocionar tu negocio y aumentar tus ventas.",
-              style: TextStyle(
-                fontSize: 16,
-                color: AppStyles.textSecondary,
-                height: 1.5,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            
-            const SizedBox(height: AppStyles.spacingXLarge),
-            
-            // Botón call-to-action mejorado
-            Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(AppStyles.radiusMax),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppStyles.accentColor.withOpacity(0.3),
-                    blurRadius: 12,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
-              ),
-              child: ElevatedButton.icon(
-                icon: const Icon(Icons.add_rounded, size: 24),
-                label: const Text("Crear Primer Anuncio"),
-                onPressed: () {
-                  HapticFeedback.lightImpact();
-                  Navigator.push(
-                    context,
-                    PageRouteBuilder(
-                      pageBuilder: (context, animation, secondaryAnimation) =>
-                          const GestionAnunciosScreen(),
-                      transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                        return SlideTransition(
-                          position: animation.drive(
-                            Tween(begin: const Offset(0.0, 1.0), end: Offset.zero)
-                                .chain(CurveTween(curve: Curves.easeOutCubic)),
-                          ),
-                          child: FadeTransition(
-                            opacity: animation,
-                            child: child,
-                          ),
-                        );
-                      },
-                      transitionDuration: AppStyles.normalAnimation,
-                    ),
-                  ).then((_) => _cargarAnuncios());
+                  );
                 },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppStyles.accentColor,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppStyles.spacingXLarge,
-                    vertical: AppStyles.spacingLarge,
+              ),
+              
+              const SizedBox(height: AppStyles.spacingLarge),
+              
+              Text(
+                "¡Todo listo para empezar!",
+                style: TextStyle(
+                  fontSize: StyleUtilities.getResponsiveFontSize(
+                    context, 
+                    mobile: 20,
+                    tablet: 24,
+                    desktop: 28
                   ),
-                  textStyle: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.bold,
+                  color: AppStyles.textPrimary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              
+              const SizedBox(height: AppStyles.spacingMedium),
+              
+              Text(
+                "Crea tu primer anuncio para promocionar tu negocio y aumentar tus ventas.",
+                style: WidgetStyles.bodyTextStyle.copyWith(
+                  fontSize: StyleUtilities.getResponsiveFontSize(
+                    context,
+                    mobile: 14,
+                    tablet: 16,
+                  )
+                ),
+                textAlign: TextAlign.center,
+              ),
+              
+              const SizedBox(height: AppStyles.spacingXLarge),
+              
+              // Botón call-to-action mejorado
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(AppStyles.radiusMax),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppStyles.accentColor.withOpacity(0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.add_rounded, size: 20),
+                  label: const Text(
+                    "Crear Primer Anuncio",
+                    style: TextStyle(fontSize: 14),
                   ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppStyles.radiusMax),
-                  ),
+                  onPressed: () {
+                    StyleUtilities.lightHaptic();
+                    Navigator.push(
+                      context,
+                      StyleUtilities.slideUpTransition(const GestionAnunciosScreen()),
+                    ).then((_) => _cargarAnuncios());
+                  },
+                  style: WidgetStyles.primaryElevatedButtonStyle,
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

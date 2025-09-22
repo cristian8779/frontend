@@ -1,6 +1,7 @@
 import '../../services/carrito_service.dart';
 import '../../providers/auth_provider.dart';
 import '../bold_payment_page.dart';
+import '../producto/producto_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -293,6 +294,24 @@ class _CartPageState extends State<CartPage> {
     }
   }
 
+  void _navegarADetalleProducto(String productoId) {
+    if (productoId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error: ID de producto inválido'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ProductoScreen(productId: productoId),
+      ),
+    );
+  }
+
   void _navegarAPago(AuthProvider authProvider) {
     if (items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -315,14 +334,17 @@ class _CartPageState extends State<CartPage> {
       return;
     }
 
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => BoldPaymentPage(
-          totalPrice: totalPrice,
-          totalItems: totalItems,
-        ),
-      ),
-    );
+   Navigator.push(
+  context,
+  MaterialPageRoute(
+    builder: (_) => BoldPaymentPage(
+      totalPrice: totalPrice,
+      totalItems: totalItems,
+      
+    ),
+  ),
+);
+
   }
 
   // Función para obtener dimensiones responsive
@@ -943,29 +965,6 @@ class _CartPageState extends State<CartPage> {
                       ),
                     ),
                   ),
-                  
-                  SizedBox(height: 12),
-                  
-                  // Texto de seguridad
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.verified_user_outlined,
-                        size: responsive['isDesktop'] ? 18.0 : 16.0,
-                        color: Colors.green.shade600,
-                      ),
-                      SizedBox(width: 6),
-                      Text(
-                        'Pago 100% seguro con Bold',
-                        style: TextStyle(
-                          fontSize: responsive['isDesktop'] ? 14.0 : 12.0,
-                          color: Colors.green.shade600,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
                 ],
               ),
             ),
@@ -1002,320 +1001,327 @@ class _CartPageState extends State<CartPage> {
           ),
         ],
       ),
-      child: Padding(
-        padding: EdgeInsets.all(responsive['cardPadding']),
-        child: Column(
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _navegarADetalleProducto(productoId),
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: EdgeInsets.all(responsive['cardPadding']),
+            child: Column(
               children: [
-                // Imagen del producto mejorada
-                Container(
-                  width: responsive['itemImageSize'],
-                  height: responsive['itemImageSize'],
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    color: Colors.grey.shade100,
-                  ),
-                  child: imagenUrl.isNotEmpty
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.network(
-                            imagenUrl,
-                            fit: BoxFit.cover,
-                            loadingBuilder: (context, child, progress) {
-                              if (progress == null) return child;
-                              return Shimmer.fromColors(
-                                baseColor: Colors.grey.shade300,
-                                highlightColor: Colors.grey.shade100,
-                                child: Container(
-                                  color: Colors.white,
-                                ),
-                              );
-                            },
-                            errorBuilder: (context, error, stackTrace) {
-                              return Icon(
-                                Icons.image_not_supported_outlined,
-                                size: responsive['itemImageSize'] * 0.4,
-                                color: Colors.grey.shade400,
-                              );
-                            },
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Imagen del producto mejorada
+                    Container(
+                      width: responsive['itemImageSize'],
+                      height: responsive['itemImageSize'],
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        color: Colors.grey.shade100,
+                      ),
+                      child: imagenUrl.isNotEmpty
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.network(
+                                imagenUrl,
+                                fit: BoxFit.cover,
+                                loadingBuilder: (context, child, progress) {
+                                  if (progress == null) return child;
+                                  return Shimmer.fromColors(
+                                    baseColor: Colors.grey.shade300,
+                                    highlightColor: Colors.grey.shade100,
+                                    child: Container(
+                                      color: Colors.white,
+                                    ),
+                                  );
+                                },
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Icon(
+                                    Icons.image_not_supported_outlined,
+                                    size: responsive['itemImageSize'] * 0.4,
+                                    color: Colors.grey.shade400,
+                                  );
+                                },
+                              ),
+                            )
+                          : Icon(
+                              Icons.shopping_bag_outlined,
+                              size: responsive['itemImageSize'] * 0.4,
+                              color: Colors.grey.shade400,
+                            ),
+                    ),
+                    
+                    SizedBox(width: responsive['isDesktop'] ? 20.0 : 16.0),
+                    
+                    // Información del producto
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            nombre,
+                            style: TextStyle(
+                              fontSize: responsive['isDesktop'] ? 18.0 : 16.0,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.black87,
+                              height: 1.2,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        )
-                      : Icon(
-                          Icons.shopping_bag_outlined,
-                          size: responsive['itemImageSize'] * 0.4,
-                          color: Colors.grey.shade400,
+                          
+                          // Mostrar información de variaciones si existe
+                          if (variacionNombre.isNotEmpty || talla.isNotEmpty || color.isNotEmpty) ...[
+                            SizedBox(height: 6),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
+                              children: [
+                                if (talla.isNotEmpty)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: Colors.purple.shade50,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: Colors.purple.shade200),
+                                    ),
+                                    child: Text(
+                                      'Talla: $talla',
+                                      style: TextStyle(
+                                        fontSize: responsive['isDesktop'] ? 11.0 : 10.0,
+                                        color: Colors.purple.shade700,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                if (color.isNotEmpty)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: Colors.orange.shade50,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: Colors.orange.shade200),
+                                    ),
+                                    child: Text(
+                                      'Color: $color',
+                                      style: TextStyle(
+                                        fontSize: responsive['isDesktop'] ? 11.0 : 10.0,
+                                        color: Colors.orange.shade700,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                if (variacionNombre.isNotEmpty && variacionValor.isNotEmpty)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: Colors.indigo.shade50,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: Colors.indigo.shade200),
+                                    ),
+                                    child: Text(
+                                      '$variacionNombre: $variacionValor',
+                                      style: TextStyle(
+                                        fontSize: responsive['isDesktop'] ? 11.0 : 10.0,
+                                        color: Colors.indigo.shade700,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
+                          
+                          SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              'Precio unitario: ${_currencyFormat.format(precioUnitario)}',
+                              style: TextStyle(
+                                fontSize: responsive['isDesktop'] ? 12.0 : 11.0,
+                                color: Colors.blue.shade700,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            'Subtotal: ${_currencyFormat.format(precio)}',
+                            style: TextStyle(
+                              fontSize: responsive['isDesktop'] ? 16.0 : 14.0,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF4A5568),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Botón eliminar mejorado
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: IconButton(
+                        onPressed: () => _eliminarProducto(
+                          productoId, 
+                          variacionId: variacionId.isNotEmpty ? variacionId : null
                         ),
+                        icon: Icon(
+                          Icons.delete_outline,
+                          color: Colors.red.shade600,
+                          size: responsive['isDesktop'] ? 24.0 : 20.0,
+                        ),
+                        tooltip: 'Eliminar producto',
+                      ),
+                    ),
+                  ],
                 ),
                 
-                SizedBox(width: responsive['isDesktop'] ? 20.0 : 16.0),
+                SizedBox(height: responsive['isDesktop'] ? 20.0 : 16.0),
                 
-                // Información del producto
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                // Controles de cantidad mejorados
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        nombre,
-                        style: TextStyle(
-                          fontSize: responsive['isDesktop'] ? 18.0 : 16.0,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.black87,
-                          height: 1.2,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      
-                      // Mostrar información de variaciones si existe
-                      if (variacionNombre.isNotEmpty || talla.isNotEmpty || color.isNotEmpty) ...[
-                        SizedBox(height: 6),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 4,
-                          children: [
-                            if (talla.isNotEmpty)
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: Colors.purple.shade50,
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(color: Colors.purple.shade200),
-                                ),
-                                child: Text(
-                                  'Talla: $talla',
-                                  style: TextStyle(
-                                    fontSize: responsive['isDesktop'] ? 11.0 : 10.0,
-                                    color: Colors.purple.shade700,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                            if (color.isNotEmpty)
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: Colors.orange.shade50,
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(color: Colors.orange.shade200),
-                                ),
-                                child: Text(
-                                  'Color: $color',
-                                  style: TextStyle(
-                                    fontSize: responsive['isDesktop'] ? 11.0 : 10.0,
-                                    color: Colors.orange.shade700,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                            if (variacionNombre.isNotEmpty && variacionValor.isNotEmpty)
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: Colors.indigo.shade50,
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(color: Colors.indigo.shade200),
-                                ),
-                                child: Text(
-                                  '$variacionNombre: $variacionValor',
-                                  style: TextStyle(
-                                    fontSize: responsive['isDesktop'] ? 11.0 : 10.0,
-                                    color: Colors.indigo.shade700,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
-                      
-                      SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          'Precio unitario: ${_currencyFormat.format(precioUnitario)}',
-                          style: TextStyle(
-                            fontSize: responsive['isDesktop'] ? 12.0 : 11.0,
-                            color: Colors.blue.shade700,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        'Subtotal: ${_currencyFormat.format(precio)}',
+                        'Cantidad:',
                         style: TextStyle(
                           fontSize: responsive['isDesktop'] ? 16.0 : 14.0,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF4A5568),
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.05),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            // Botón disminuir
+                            Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: cantidad > 1 ? () {
+                                  _actualizarCantidadLocal(
+                                    productoId, 
+                                    cantidad - 1, 
+                                    variacionId: variacionId.isNotEmpty ? variacionId : null
+                                  );
+                                } : null,
+                                borderRadius: const BorderRadius.only(
+                                  topLeft: Radius.circular(12),
+                                  bottomLeft: Radius.circular(12),
+                                ),
+                                child: Container(
+                                  width: responsive['isDesktop'] ? 44.0 : 36.0,
+                                  height: responsive['isDesktop'] ? 44.0 : 36.0,
+                                  decoration: BoxDecoration(
+                                    color: cantidad > 1 
+                                        ? const Color(0xFF4A5568) 
+                                        : Colors.grey.shade200,
+                                    borderRadius: const BorderRadius.only(
+                                      topLeft: Radius.circular(12),
+                                      bottomLeft: Radius.circular(12),
+                                    ),
+                                  ),
+                                  child: Icon(
+                                    Icons.remove,
+                                    color: cantidad > 1 ? Colors.white : Colors.grey.shade400,
+                                    size: responsive['isDesktop'] ? 20.0 : 16.0,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            
+                            // Cantidad actual
+                            Container(
+                              width: responsive['isDesktop'] ? 60.0 : 50.0,
+                              height: responsive['isDesktop'] ? 44.0 : 36.0,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                border: Border.symmetric(
+                                  vertical: BorderSide(
+                                    color: Colors.grey.shade200,
+                                    width: 1,
+                                  ),
+                                ),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  cantidad.toString(),
+                                  style: TextStyle(
+                                    fontSize: responsive['isDesktop'] ? 18.0 : 16.0,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            
+                            // Botón aumentar
+                            Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () {
+                                  _actualizarCantidadLocal(
+                                    productoId, 
+                                    cantidad + 1,
+                                    variacionId: variacionId.isNotEmpty ? variacionId : null
+                                  );
+                                },
+                                borderRadius: const BorderRadius.only(
+                                  topRight: Radius.circular(12),
+                                  bottomRight: Radius.circular(12),
+                                ),
+                                child: Container(
+                                  width: responsive['isDesktop'] ? 44.0 : 36.0,
+                                  height: responsive['isDesktop'] ? 44.0 : 36.0,
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFF4A5568),
+                                    borderRadius: BorderRadius.only(
+                                      topRight: Radius.circular(12),
+                                      bottomRight: Radius.circular(12),
+                                    ),
+                                  ),
+                                  child: Icon(
+                                    Icons.add,
+                                    color: Colors.white,
+                                    size: responsive['isDesktop'] ? 20.0 : 16.0,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
-
-                // Botón eliminar mejorado
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: IconButton(
-                    onPressed: () => _eliminarProducto(
-                      productoId, 
-                      variacionId: variacionId.isNotEmpty ? variacionId : null
-                    ),
-                    icon: Icon(
-                      Icons.delete_outline,
-                      color: Colors.red.shade600,
-                      size: responsive['isDesktop'] ? 24.0 : 20.0,
-                    ),
-                    tooltip: 'Eliminar producto',
-                  ),
-                ),
               ],
             ),
-            
-            SizedBox(height: responsive['isDesktop'] ? 20.0 : 16.0),
-            
-            // Controles de cantidad mejorados
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Cantidad:',
-                    style: TextStyle(
-                      fontSize: responsive['isDesktop'] ? 16.0 : 14.0,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 4,
-                          offset: const Offset(0, 1),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      children: [
-                        // Botón disminuir
-                        Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: cantidad > 1 ? () {
-                              _actualizarCantidadLocal(
-                                productoId, 
-                                cantidad - 1, 
-                                variacionId: variacionId.isNotEmpty ? variacionId : null
-                              );
-                            } : null,
-                            borderRadius: const BorderRadius.only(
-                              topLeft: Radius.circular(12),
-                              bottomLeft: Radius.circular(12),
-                            ),
-                            child: Container(
-                              width: responsive['isDesktop'] ? 44.0 : 36.0,
-                              height: responsive['isDesktop'] ? 44.0 : 36.0,
-                              decoration: BoxDecoration(
-                                color: cantidad > 1 
-                                    ? const Color(0xFF4A5568) 
-                                    : Colors.grey.shade200,
-                                borderRadius: const BorderRadius.only(
-                                  topLeft: Radius.circular(12),
-                                  bottomLeft: Radius.circular(12),
-                                ),
-                              ),
-                              child: Icon(
-                                Icons.remove,
-                                color: cantidad > 1 ? Colors.white : Colors.grey.shade400,
-                                size: responsive['isDesktop'] ? 20.0 : 16.0,
-                              ),
-                            ),
-                          ),
-                        ),
-                        
-                        // Cantidad actual
-                        Container(
-                          width: responsive['isDesktop'] ? 60.0 : 50.0,
-                          height: responsive['isDesktop'] ? 44.0 : 36.0,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            border: Border.symmetric(
-                              vertical: BorderSide(
-                                color: Colors.grey.shade200,
-                                width: 1,
-                              ),
-                            ),
-                          ),
-                          child: Center(
-                            child: Text(
-                              cantidad.toString(),
-                              style: TextStyle(
-                                fontSize: responsive['isDesktop'] ? 18.0 : 16.0,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.black87,
-                              ),
-                            ),
-                          ),
-                        ),
-                        
-                        // Botón aumentar
-                        Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: () {
-                              _actualizarCantidadLocal(
-                                productoId, 
-                                cantidad + 1,
-                                variacionId: variacionId.isNotEmpty ? variacionId : null
-                              );
-                            },
-                            borderRadius: const BorderRadius.only(
-                              topRight: Radius.circular(12),
-                              bottomRight: Radius.circular(12),
-                            ),
-                            child: Container(
-                              width: responsive['isDesktop'] ? 44.0 : 36.0,
-                              height: responsive['isDesktop'] ? 44.0 : 36.0,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFF4A5568),
-                                borderRadius: BorderRadius.only(
-                                  topRight: Radius.circular(12),
-                                  bottomRight: Radius.circular(12),
-                                ),
-                              ),
-                              child: Icon(
-                                Icons.add,
-                                color: Colors.white,
-                                size: responsive['isDesktop'] ? 20.0 : 16.0,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

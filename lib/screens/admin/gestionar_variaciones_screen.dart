@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:intl/intl.dart';
 import '../../services/variacion_service.dart';
+import '../../models/variacion.dart'; // Importar el modelo
 import 'crear_variacion_screen.dart';
+import 'ActualizarVariacionScreen.dart'; // Importar la nueva pantalla
 
 class GestionarVariacionesScreen extends StatefulWidget {
   final String productId;
@@ -19,16 +22,114 @@ class _GestionarVariacionesScreenState extends State<GestionarVariacionesScreen>
   List<Map<String, dynamic>> _variaciones = [];
   bool _isLoading = true;
 
+  // Formateador de peso colombiano
+  final NumberFormat _currencyFormatter = NumberFormat.currency(
+    locale: 'es_CO',
+    symbol: r'$',
+    decimalDigits: 0,
+  );
+
   @override
   void initState() {
     super.initState();
     _loadVariaciones();
   }
 
+  // Método para formatear precio en pesos colombianos
+  String _formatPrice(double price) {
+    return _currencyFormatter.format(price);
+  }
+
+  // Método para obtener breakpoints responsive
+  ResponsiveBreakpoints _getBreakpoints(double width) {
+    if (width >= 1200) {
+      return ResponsiveBreakpoints.desktop;
+    } else if (width >= 800) {
+      return ResponsiveBreakpoints.tablet;
+    } else if (width >= 600) {
+      return ResponsiveBreakpoints.tabletSmall;
+    } else {
+      return ResponsiveBreakpoints.mobile;
+    }
+  }
+
+  // Método para obtener dimensiones responsive
+  ResponsiveDimensions _getDimensions(ResponsiveBreakpoints breakpoint) {
+    switch (breakpoint) {
+      case ResponsiveBreakpoints.desktop:
+        return ResponsiveDimensions(
+          horizontalMargin: 0.15,
+          imageSize: 100,
+          contentPadding: 32,
+          titleFontSize: 20,
+          priceFontSize: 18,
+          iconSize: 28,
+          actionButtonSize: 52,
+          spacingLarge: 40,
+          spacingMedium: 20,
+          columns: 2,
+        );
+      case ResponsiveBreakpoints.tablet:
+        return ResponsiveDimensions(
+          horizontalMargin: 0.12,
+          imageSize: 90,
+          contentPadding: 28,
+          titleFontSize: 19,
+          priceFontSize: 17,
+          iconSize: 26,
+          actionButtonSize: 50,
+          spacingLarge: 36,
+          spacingMedium: 18,
+          columns: 2,
+        );
+      case ResponsiveBreakpoints.tabletSmall:
+        return ResponsiveDimensions(
+          horizontalMargin: 0.08,
+          imageSize: 80,
+          contentPadding: 24,
+          titleFontSize: 18,
+          priceFontSize: 16,
+          iconSize: 24,
+          actionButtonSize: 48,
+          spacingLarge: 32,
+          spacingMedium: 16,
+          columns: 1,
+        );
+      case ResponsiveBreakpoints.mobile:
+        return ResponsiveDimensions(
+          horizontalMargin: 0.05,
+          imageSize: 60,
+          contentPadding: 16,
+          titleFontSize: 16,
+          priceFontSize: 15,
+          iconSize: 20,
+          actionButtonSize: 40,
+          spacingLarge: 24,
+          spacingMedium: 12,
+          columns: 1,
+        );
+    }
+  }
+
   Future<void> _loadVariaciones() async {
     setState(() => _isLoading = true);
     try {
       final data = await _variacionService.obtenerVariacionesPorProducto(widget.productId);
+      
+      // DEPURACIÓN: Imprimir los datos recibidos del servidor
+      print('=== DATOS DE VARIACIONES RECIBIDOS ===');
+      print('Cantidad de variaciones: ${data.length}');
+      for (int i = 0; i < data.length; i++) {
+        print('Variación $i:');
+        print('  ID: ${data[i]['_id']}');
+        print('  tallaLetra: "${data[i]['tallaLetra']}"');
+        print('  tallaNumero: "${data[i]['tallaNumero']}"');
+        print('  color: ${data[i]['color']}');
+        print('  stock: ${data[i]['stock']}');
+        print('  precio: ${data[i]['precio']}');
+        print('  ---');
+      }
+      print('=======================================');
 
       if (!mounted) return;
 
@@ -117,6 +218,61 @@ class _GestionarVariacionesScreenState extends State<GestionarVariacionesScreen>
     });
   }
 
+  // NUEVO: Método para navegar a la pantalla de actualizar variación
+  void _navigateToActualizarVariacion(Map<String, dynamic> variacionData) {
+    // Crear el objeto Variacion desde los datos
+    final variacion = _convertirDataAVariacion(variacionData);
+    
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ActualizarVariacionScreen(variacionToEdit: variacion),
+      ),
+    ).then((result) {
+      // Si result es true, significa que se actualizó correctamente
+      if (result == true) {
+        _loadVariaciones(); // Recargar la lista
+      }
+    });
+  }
+
+  // MÉTODO CORREGIDO: Convertir Map a objeto Variacion
+  Variacion _convertirDataAVariacion(Map<String, dynamic> data) {
+    final Map<String, dynamic>? colorData = data['color'];
+    final List<dynamic>? imagenesData = data['imagenes'];
+    
+    // Debug para verificar los datos
+    print('🔄 CONVERSIÓN - tallaLetra: "${data['tallaLetra']}", tallaNumero: "${data['tallaNumero']}"');
+    
+    // Manejar tallas correctamente
+    String? tallaLetra;
+    String? tallaNumero;
+    
+    if (data['tallaLetra'] != null && data['tallaLetra'].toString().trim().isNotEmpty) {
+      tallaLetra = data['tallaLetra'].toString().trim();
+    }
+    
+    if (data['tallaNumero'] != null && data['tallaNumero'].toString().trim().isNotEmpty) {
+      tallaNumero = data['tallaNumero'].toString().trim();
+    }
+    
+    return Variacion(
+      id: data['_id'] ?? '',
+      productoId: widget.productId,
+      colorHex: colorData?['hex'] ?? '',
+      colorNombre: colorData?['nombre'] ?? '',
+      tallaLetra: tallaLetra,
+      tallaNumero: tallaNumero,
+      stock: data['stock'] ?? 0,
+      precio: (data['precio'] != null) 
+          ? double.tryParse(data['precio'].toString()) ?? 0.0 
+          : 0.0,
+      imagenes: imagenesData?.isNotEmpty == true 
+          ? [ImagenVariacion(url: imagenesData!.first['url'])]
+          : [],
+    );
+  }
+
   Color _getStockColor(int stock) {
     if (stock <= 5) return Colors.red.shade600;
     if (stock <= 20) return Colors.orange.shade600;
@@ -129,14 +285,15 @@ class _GestionarVariacionesScreenState extends State<GestionarVariacionesScreen>
     return 'Alto';
   }
 
-  Widget _buildStockChip(int stock, [bool isTablet = false]) {
+  Widget _buildStockChip(int stock, ResponsiveDimensions dimensions) {
     final color = _getStockColor(stock);
     final label = _getStockLabel(stock);
-    final fontSize = isTablet ? 14.0 : 12.0;
-    final dotSize = isTablet ? 8.0 : 6.0;
-    final padding = isTablet ? 
-        const EdgeInsets.symmetric(horizontal: 12, vertical: 6) :
-        const EdgeInsets.symmetric(horizontal: 8, vertical: 4);
+    final fontSize = dimensions.titleFontSize - 4;
+    final dotSize = dimensions.iconSize * 0.3;
+    final padding = EdgeInsets.symmetric(
+      horizontal: dimensions.spacingMedium * 0.8,
+      vertical: dimensions.spacingMedium * 0.4,
+    );
     
     return Container(
       padding: padding,
@@ -156,7 +313,7 @@ class _GestionarVariacionesScreenState extends State<GestionarVariacionesScreen>
               shape: BoxShape.circle,
             ),
           ),
-          SizedBox(width: isTablet ? 6 : 4),
+          SizedBox(width: dimensions.spacingMedium * 0.3),
           Text(
             '$stock ($label)',
             style: TextStyle(
@@ -170,111 +327,116 @@ class _GestionarVariacionesScreenState extends State<GestionarVariacionesScreen>
     );
   }
 
-  Widget _buildShimmerItem() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isTablet = constraints.maxWidth > 600;
-        final horizontalMargin = isTablet ? constraints.maxWidth * 0.1 : 20.0;
-        final imageSize = isTablet ? 80.0 : 60.0;
-        final contentPadding = isTablet ? 24.0 : 16.0;
-        
-        return Container(
-          margin: EdgeInsets.symmetric(horizontal: horizontalMargin, vertical: 8),
-          child: Shimmer.fromColors(
-            baseColor: Colors.grey.shade300,
-            highlightColor: Colors.grey.shade100,
-            child: Container(
-              padding: EdgeInsets.all(contentPadding),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+  Widget _buildShimmerItem(ResponsiveDimensions dimensions, double screenWidth) {
+    final horizontalMargin = screenWidth * dimensions.horizontalMargin;
+    
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: horizontalMargin, vertical: 8),
+      child: Shimmer.fromColors(
+        baseColor: Colors.grey.shade300,
+        highlightColor: Colors.grey.shade100,
+        child: Container(
+          padding: EdgeInsets.all(dimensions.contentPadding),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.08),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
               ),
-              child: Row(
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: dimensions.imageSize,
+                height: dimensions.imageSize,
+                decoration: BoxDecoration(
+                  color: Colors.grey,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              SizedBox(width: dimensions.spacingMedium),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      height: dimensions.titleFontSize,
+                      width: screenWidth * 0.3,
+                      color: Colors.grey,
+                      margin: EdgeInsets.only(bottom: dimensions.spacingMedium * 0.5),
+                    ),
+                    Container(
+                      height: dimensions.priceFontSize,
+                      width: screenWidth * 0.2,
+                      color: Colors.grey,
+                      margin: EdgeInsets.only(bottom: dimensions.spacingMedium * 0.5),
+                    ),
+                    Container(
+                      height: dimensions.titleFontSize - 2,
+                      width: screenWidth * 0.25,
+                      color: Colors.grey,
+                    ),
+                  ],
+                ),
+              ),
+              Column(
                 children: [
                   Container(
-                    width: imageSize,
-                    height: imageSize,
-                    decoration: BoxDecoration(
-                      color: Colors.grey,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    width: dimensions.actionButtonSize,
+                    height: dimensions.actionButtonSize,
+                    color: Colors.grey,
+                    margin: EdgeInsets.only(bottom: dimensions.spacingMedium * 0.5),
                   ),
-                  SizedBox(width: isTablet ? 24 : 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          height: isTablet ? 20 : 16,
-                          width: isTablet ? 160 : 120,
-                          color: Colors.grey,
-                          margin: const EdgeInsets.only(bottom: 8),
-                        ),
-                        Container(
-                          height: isTablet ? 18 : 14,
-                          width: isTablet ? 100 : 80,
-                          color: Colors.grey,
-                          margin: const EdgeInsets.only(bottom: 8),
-                        ),
-                        Container(
-                          height: isTablet ? 16 : 12,
-                          width: isTablet ? 120 : 100,
-                          color: Colors.grey,
-                        ),
-                      ],
-                    ),
-                  ),
-                  Column(
-                    children: [
-                      Container(
-                        width: isTablet ? 40 : 32,
-                        height: isTablet ? 40 : 32,
-                        color: Colors.grey,
-                        margin: const EdgeInsets.only(bottom: 8),
-                      ),
-                      Container(
-                        width: isTablet ? 40 : 32,
-                        height: isTablet ? 40 : 32,
-                        color: Colors.grey,
-                      ),
-                    ],
+                  Container(
+                    width: dimensions.actionButtonSize,
+                    height: dimensions.actionButtonSize,
+                    color: Colors.grey,
                   ),
                 ],
               ),
-            ),
+            ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
   Widget _buildVariacionItem(Map<String, dynamic> variacion, Animation<double> animation) {
-    final Map<String, dynamic>? colorData = variacion['color'];
-    final String color = colorData?['nombre'] ?? 'Sin color';
-    final String talla = variacion['tallaNumero']?.toString() ?? variacion['tallaLetra'] ?? 'Sin talla';
-    final int stock = variacion['stock'] ?? 0;
-    final double precio = (variacion['precio'] != null) 
-        ? double.tryParse(variacion['precio'].toString()) ?? 0.0 
-        : 0.0;
-    final List<dynamic>? imagenes = variacion['imagenes'];
-
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isTablet = constraints.maxWidth > 600;
-        final horizontalMargin = isTablet ? constraints.maxWidth * 0.1 : 20.0;
-        final imageSize = isTablet ? 80.0 : 60.0;
-        final contentPadding = isTablet ? 24.0 : 16.0;
-        final titleFontSize = isTablet ? 18.0 : 16.0;
-        final priceFontSize = isTablet ? 17.0 : 15.0;
-        final iconSize = isTablet ? 24.0 : 20.0;
-        final actionButtonSize = isTablet ? 48.0 : 40.0;
+        final breakpoint = _getBreakpoints(constraints.maxWidth);
+        final dimensions = _getDimensions(breakpoint);
+        final horizontalMargin = constraints.maxWidth * dimensions.horizontalMargin;
+        
+        final Map<String, dynamic>? colorData = variacion['color'];
+        final String color = colorData?['nombre'] ?? 'Sin color';
+        
+        // CORRECCIÓN: Manejar correctamente tallas vacías vs null
+        String talla = 'Sin talla';
+        
+        // Primero verificar tallaLetra
+        if (variacion['tallaLetra'] != null && 
+            variacion['tallaLetra'].toString().trim().isNotEmpty) {
+          talla = variacion['tallaLetra'].toString().trim();
+        } 
+        // Si no hay tallaLetra, verificar tallaNumero
+        else if (variacion['tallaNumero'] != null && 
+                 variacion['tallaNumero'].toString().trim().isNotEmpty) {
+          talla = variacion['tallaNumero'].toString().trim();
+        }
+        
+        // Debug: imprimir para verificar
+        print('🏷️ TALLA DEBUG - tallaLetra: "${variacion['tallaLetra']}", tallaNumero: "${variacion['tallaNumero']}", resultado: "$talla"');
+        
+        final int stock = variacion['stock'] ?? 0;
+        final double precio = (variacion['precio'] != null) 
+            ? double.tryParse(variacion['precio'].toString()) ?? 0.0 
+            : 0.0;
+        final List<dynamic>? imagenes = variacion['imagenes'];
         
         return SizeTransition(
           sizeFactor: animation,
@@ -289,24 +451,28 @@ class _GestionarVariacionesScreenState extends State<GestionarVariacionesScreen>
                 borderRadius: BorderRadius.circular(16),
               ),
               alignment: Alignment.centerRight,
-              padding: EdgeInsets.symmetric(horizontal: isTablet ? 32 : 24),
+              padding: EdgeInsets.symmetric(horizontal: dimensions.spacingLarge),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.delete_outline, color: Colors.white, size: isTablet ? 32 : 28),
+                  Icon(
+                    Icons.delete_outline, 
+                    color: Colors.white, 
+                    size: dimensions.iconSize + 4,
+                  ),
                   const SizedBox(height: 4),
                   Text(
                     'Eliminar',
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w600,
-                      fontSize: isTablet ? 14 : 12,
+                      fontSize: dimensions.titleFontSize - 4,
                     ),
                   ),
                 ],
               ),
             ),
-            confirmDismiss: (direction) => _showDeleteDialog(),
+            confirmDismiss: (direction) => _showDeleteDialog(dimensions),
             onDismissed: (direction) {
               final index = _variaciones.indexWhere((v) => v['_id'] == variacion['_id']);
               if (index != -1) _deleteVariacion(index);
@@ -325,13 +491,13 @@ class _GestionarVariacionesScreenState extends State<GestionarVariacionesScreen>
                 ],
               ),
               child: Padding(
-                padding: EdgeInsets.all(contentPadding),
+                padding: EdgeInsets.all(dimensions.contentPadding),
                 child: Row(
                   children: [
                     // Imagen
                     Container(
-                      width: imageSize,
-                      height: imageSize,
+                      width: dimensions.imageSize,
+                      height: dimensions.imageSize,
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: Colors.grey.shade200),
@@ -347,7 +513,7 @@ class _GestionarVariacionesScreenState extends State<GestionarVariacionesScreen>
                                   child: Icon(
                                     Icons.broken_image_outlined,
                                     color: Colors.grey.shade400,
-                                    size: isTablet ? 28 : 24,
+                                    size: dimensions.iconSize,
                                   ),
                                 ),
                                 loadingBuilder: (context, child, loadingProgress) {
@@ -356,8 +522,8 @@ class _GestionarVariacionesScreenState extends State<GestionarVariacionesScreen>
                                     color: Colors.grey.shade100,
                                     child: Center(
                                       child: SizedBox(
-                                        width: isTablet ? 24 : 20,
-                                        height: isTablet ? 24 : 20,
+                                        width: dimensions.iconSize,
+                                        height: dimensions.iconSize,
                                         child: CircularProgressIndicator(
                                           strokeWidth: 2,
                                           valueColor: AlwaysStoppedAnimation<Color>(
@@ -374,13 +540,13 @@ class _GestionarVariacionesScreenState extends State<GestionarVariacionesScreen>
                                 child: Icon(
                                   Icons.image_not_supported_outlined,
                                   color: Colors.grey.shade400,
-                                  size: isTablet ? 28 : 24,
+                                  size: dimensions.iconSize,
                                 ),
                               ),
                       ),
                     ),
                     
-                    SizedBox(width: isTablet ? 24 : 16),
+                    SizedBox(width: dimensions.spacingMedium),
                     
                     // Información principal
                     Expanded(
@@ -392,36 +558,49 @@ class _GestionarVariacionesScreenState extends State<GestionarVariacionesScreen>
                             '$color - $talla',
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
-                              fontSize: titleFontSize,
+                              fontSize: dimensions.titleFontSize,
                               color: Color(0xFF2D3748),
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          
+                          SizedBox(height: dimensions.spacingMedium * 0.7),
+                          
+                          // Precio en pesos colombianos
+                          Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: dimensions.spacingMedium * 0.7,
+                              vertical: dimensions.spacingMedium * 0.3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF3A86FF).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.attach_money,
+                                  size: dimensions.iconSize * 0.8,
+                                  color: const Color(0xFF3A86FF),
+                                ),
+                                Text(
+                                  _formatPrice(precio),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: dimensions.priceFontSize,
+                                    color: const Color(0xFF3A86FF),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                           
-                          SizedBox(height: isTablet ? 12 : 8),
-                          
-                          // Precio
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.attach_money,
-                                size: isTablet ? 18 : 16,
-                                color: Colors.grey.shade600,
-                              ),
-                              Text(
-                                precio.toStringAsFixed(2),
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: priceFontSize,
-                                  color: const Color(0xFF3A86FF),
-                                ),
-                              ),
-                            ],
-                          ),
-                          
-                          SizedBox(height: isTablet ? 12 : 8),
+                          SizedBox(height: dimensions.spacingMedium * 0.7),
                           
                           // Stock
-                          _buildStockChip(stock, isTablet),
+                          _buildStockChip(stock, dimensions),
                         ],
                       ),
                     ),
@@ -430,8 +609,8 @@ class _GestionarVariacionesScreenState extends State<GestionarVariacionesScreen>
                     Column(
                       children: [
                         Container(
-                          width: actionButtonSize,
-                          height: actionButtonSize,
+                          width: dimensions.actionButtonSize,
+                          height: dimensions.actionButtonSize,
                           decoration: BoxDecoration(
                             color: const Color(0xFF3A86FF).withOpacity(0.1),
                             borderRadius: BorderRadius.circular(8),
@@ -440,19 +619,19 @@ class _GestionarVariacionesScreenState extends State<GestionarVariacionesScreen>
                             icon: Icon(
                               Icons.edit_outlined,
                               color: Color(0xFF3A86FF),
-                              size: iconSize,
+                              size: dimensions.iconSize,
                             ),
                             tooltip: 'Editar variación',
-                            onPressed: _navigateToCrearVariacion,
-                            splashRadius: isTablet ? 24 : 20,
+                            onPressed: () => _navigateToActualizarVariacion(variacion),
+                            splashRadius: dimensions.actionButtonSize * 0.5,
                           ),
                         ),
                         
-                        SizedBox(height: isTablet ? 12 : 8),
+                        SizedBox(height: dimensions.spacingMedium * 0.7),
                         
                         Container(
-                          width: actionButtonSize,
-                          height: actionButtonSize,
+                          width: dimensions.actionButtonSize,
+                          height: dimensions.actionButtonSize,
                           decoration: BoxDecoration(
                             color: Colors.red.shade50,
                             borderRadius: BorderRadius.circular(8),
@@ -461,16 +640,16 @@ class _GestionarVariacionesScreenState extends State<GestionarVariacionesScreen>
                             icon: Icon(
                               Icons.delete_outline,
                               color: Colors.red.shade600,
-                              size: iconSize,
+                              size: dimensions.iconSize,
                             ),
                             tooltip: 'Eliminar variación',
                             onPressed: () {
                               final index = _variaciones.indexWhere(
                                 (v) => v['_id'] == variacion['_id']
                               );
-                              if (index != -1) _confirmDelete(index);
+                              if (index != -1) _confirmDelete(index, dimensions);
                             },
-                            splashRadius: isTablet ? 24 : 20,
+                            splashRadius: dimensions.actionButtonSize * 0.5,
                           ),
                         ),
                       ],
@@ -485,91 +664,84 @@ class _GestionarVariacionesScreenState extends State<GestionarVariacionesScreen>
     );
   }
 
-  Future<bool?> _showDeleteDialog() {
+  Future<bool?> _showDeleteDialog(ResponsiveDimensions dimensions) {
     return showDialog<bool>(
       context: context,
       builder: (ctx) {
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            final isTablet = constraints.maxWidth > 600;
-            final titleFontSize = isTablet ? 20.0 : 18.0;
-            final contentFontSize = isTablet ? 16.0 : 14.0;
-            final iconSize = isTablet ? 28.0 : 24.0;
-            final buttonPadding = isTablet ? 
-                const EdgeInsets.symmetric(horizontal: 24, vertical: 16) :
-                const EdgeInsets.symmetric(horizontal: 20, vertical: 12);
-            final spacingMedium = isTablet ? 16.0 : 12.0;
-            
-            return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              title: Row(
-                children: [
-                  Container(
-                    padding: EdgeInsets.all(isTablet ? 12 : 8),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      Icons.warning_outlined,
-                      color: Colors.red.shade600,
-                      size: iconSize,
-                    ),
-                  ),
-                  SizedBox(width: spacingMedium),
-                  Expanded(
-                    child: Text(
-                      'Confirmar eliminación',
-                      style: TextStyle(
-                        fontSize: titleFontSize, 
-                        fontWeight: FontWeight.w600
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              content: Text(
-                '¿Está seguro que desea eliminar esta variación? Esta acción no se puede deshacer.',
-                style: TextStyle(
-                  color: Color(0xFF718096),
-                  fontSize: contentFontSize,
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(dimensions.spacingMedium * 0.7),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.warning_outlined,
+                  color: Colors.red.shade600,
+                  size: dimensions.iconSize,
                 ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(false),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.grey.shade600,
-                    padding: buttonPadding,
-                  ),
-                  child: Text(
-                    'Cancelar',
-                    style: TextStyle(fontSize: contentFontSize),
+              SizedBox(width: dimensions.spacingMedium * 0.8),
+              Expanded(
+                child: Text(
+                  'Confirmar eliminación',
+                  style: TextStyle(
+                    fontSize: dimensions.titleFontSize, 
+                    fontWeight: FontWeight.w600
                   ),
                 ),
-                ElevatedButton(
-                  onPressed: () => Navigator.of(ctx).pop(true),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red.shade600,
-                    foregroundColor: Colors.white,
-                    padding: buttonPadding,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                  child: Text(
-                    'Eliminar',
-                    style: TextStyle(fontSize: contentFontSize),
-                  ),
+              ),
+            ],
+          ),
+          content: Text(
+            '¿Está seguro que desea eliminar esta variación? Esta acción no se puede deshacer.',
+            style: TextStyle(
+              color: Color(0xFF718096),
+              fontSize: dimensions.titleFontSize - 2,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.grey.shade600,
+                padding: EdgeInsets.symmetric(
+                  horizontal: dimensions.spacingMedium,
+                  vertical: dimensions.spacingMedium * 0.7,
                 ),
-              ],
-            );
-          },
+              ),
+              child: Text(
+                'Cancelar',
+                style: TextStyle(fontSize: dimensions.titleFontSize - 2),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade600,
+                foregroundColor: Colors.white,
+                padding: EdgeInsets.symmetric(
+                  horizontal: dimensions.spacingMedium,
+                  vertical: dimensions.spacingMedium * 0.7,
+                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: Text(
+                'Eliminar',
+                style: TextStyle(fontSize: dimensions.titleFontSize - 2),
+              ),
+            ),
+          ],
         );
       },
     );
   }
 
-  void _confirmDelete(int index) async {
-    final confirmed = await _showDeleteDialog();
+  void _confirmDelete(int index, ResponsiveDimensions dimensions) async {
+    final confirmed = await _showDeleteDialog(dimensions);
     if (confirmed == true) {
       _deleteVariacion(index);
     }
@@ -578,78 +750,72 @@ class _GestionarVariacionesScreenState extends State<GestionarVariacionesScreen>
   Widget _buildEmptyState() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isTablet = constraints.maxWidth > 600;
-        final iconSize = isTablet ? 80.0 : 64.0;
-        final titleFontSize = isTablet ? 28.0 : 24.0;
-        final subtitleFontSize = isTablet ? 18.0 : 16.0;
-        final buttonPadding = isTablet ? 
-            const EdgeInsets.symmetric(horizontal: 32, vertical: 20) :
-            const EdgeInsets.symmetric(horizontal: 24, vertical: 16);
-        final containerPadding = isTablet ? 48.0 : 32.0;
-        final spacingLarge = isTablet ? 32.0 : 24.0;
-        final spacingMedium = isTablet ? 12.0 : 8.0;
-        final spacingXLarge = isTablet ? 48.0 : 32.0;
+        final breakpoint = _getBreakpoints(constraints.maxWidth);
+        final dimensions = _getDimensions(breakpoint);
         
         return Center(
           child: Container(
-            padding: EdgeInsets.all(containerPadding),
+            padding: EdgeInsets.all(dimensions.contentPadding),
             constraints: BoxConstraints(
-              maxWidth: isTablet ? 600 : double.infinity,
+              maxWidth: breakpoint == ResponsiveBreakpoints.mobile ? double.infinity : 600,
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Container(
-                  padding: EdgeInsets.all(spacingLarge),
+                  padding: EdgeInsets.all(dimensions.spacingLarge),
                   decoration: BoxDecoration(
                     color: const Color(0xFF3A86FF).withOpacity(0.1),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
                     Icons.inventory_2_outlined,
-                    size: iconSize,
+                    size: dimensions.spacingLarge + 20,
                     color: Color(0xFF3A86FF),
                   ),
                 ),
                 
-                SizedBox(height: spacingLarge),
+                SizedBox(height: dimensions.spacingLarge),
                 
                 Text(
                   'No hay variaciones',
                   style: TextStyle(
-                    fontSize: titleFontSize,
+                    fontSize: dimensions.titleFontSize + 8,
                     fontWeight: FontWeight.w600,
                     color: Color(0xFF2D3748),
                   ),
                 ),
                 
-                SizedBox(height: spacingMedium),
+                SizedBox(height: dimensions.spacingMedium * 0.7),
                 
                 Text(
                   'Agrega la primera variación de tu producto para empezar a vender',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: subtitleFontSize,
+                    fontSize: dimensions.titleFontSize,
                     color: Colors.grey.shade600,
                   ),
                 ),
                 
-                SizedBox(height: spacingXLarge),
+                SizedBox(height: dimensions.spacingLarge + 8),
                 
                 ElevatedButton.icon(
                   onPressed: _navigateToCrearVariacion,
-                  icon: Icon(Icons.add, size: isTablet ? 24 : 20),
+                  icon: Icon(Icons.add, size: dimensions.iconSize),
                   label: Text(
                     'Nueva variación',
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
-                      fontSize: isTablet ? 18 : 16,
+                      fontSize: dimensions.titleFontSize,
                     ),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF3A86FF),
                     foregroundColor: Colors.white,
-                    padding: buttonPadding,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: dimensions.spacingLarge,
+                      vertical: dimensions.spacingMedium,
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -669,17 +835,13 @@ class _GestionarVariacionesScreenState extends State<GestionarVariacionesScreen>
     
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isTablet = constraints.maxWidth > 600;
-        final horizontalMargin = isTablet ? constraints.maxWidth * 0.1 : 20.0;
-        final contentPadding = isTablet ? 24.0 : 16.0;
-        final iconSize = isTablet ? 28.0 : 24.0;
-        final titleFontSize = isTablet ? 20.0 : 18.0;
-        final subtitleFontSize = isTablet ? 16.0 : 14.0;
-        final spacingMedium = isTablet ? 20.0 : 16.0;
+        final breakpoint = _getBreakpoints(constraints.maxWidth);
+        final dimensions = _getDimensions(breakpoint);
+        final horizontalMargin = constraints.maxWidth * dimensions.horizontalMargin;
         
         return Container(
           margin: EdgeInsets.all(horizontalMargin),
-          padding: EdgeInsets.all(contentPadding),
+          padding: EdgeInsets.all(dimensions.contentPadding),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
@@ -694,7 +856,7 @@ class _GestionarVariacionesScreenState extends State<GestionarVariacionesScreen>
           child: Row(
             children: [
               Container(
-                padding: EdgeInsets.all(isTablet ? 16 : 12),
+                padding: EdgeInsets.all(dimensions.spacingMedium),
                 decoration: BoxDecoration(
                   color: const Color(0xFF3A86FF).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
@@ -702,11 +864,11 @@ class _GestionarVariacionesScreenState extends State<GestionarVariacionesScreen>
                 child: Icon(
                   Icons.inventory_2_outlined,
                   color: Color(0xFF3A86FF),
-                  size: iconSize,
+                  size: dimensions.iconSize + 4,
                 ),
               ),
               
-              SizedBox(width: spacingMedium),
+              SizedBox(width: dimensions.spacingMedium),
               
               Expanded(
                 child: Column(
@@ -715,7 +877,7 @@ class _GestionarVariacionesScreenState extends State<GestionarVariacionesScreen>
                     Text(
                       '${_variaciones.length} variaciones',
                       style: TextStyle(
-                        fontSize: titleFontSize,
+                        fontSize: dimensions.titleFontSize,
                         fontWeight: FontWeight.w600,
                         color: Color(0xFF2D3748),
                       ),
@@ -723,7 +885,7 @@ class _GestionarVariacionesScreenState extends State<GestionarVariacionesScreen>
                     Text(
                       'Desliza hacia la izquierda para eliminar',
                       style: TextStyle(
-                        fontSize: subtitleFontSize,
+                        fontSize: dimensions.titleFontSize - 2,
                         color: Colors.grey.shade600,
                       ),
                     ),
@@ -741,8 +903,9 @@ class _GestionarVariacionesScreenState extends State<GestionarVariacionesScreen>
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isTablet = constraints.maxWidth > 600;
-        final bottomPadding = isTablet ? 120.0 : 100.0;
+        final breakpoint = _getBreakpoints(constraints.maxWidth);
+        final dimensions = _getDimensions(breakpoint);
+        final bottomPadding = breakpoint == ResponsiveBreakpoints.mobile ? 100.0 : 120.0;
         
         return Scaffold(
           backgroundColor: const Color(0xFFF7FAFC),
@@ -751,7 +914,7 @@ class _GestionarVariacionesScreenState extends State<GestionarVariacionesScreen>
               'Gestionar Variaciones',
               style: TextStyle(
                 fontWeight: FontWeight.w600,
-                fontSize: isTablet ? 20 : 18,
+                fontSize: dimensions.titleFontSize,
               ),
             ),
             backgroundColor: Colors.white,
@@ -771,7 +934,7 @@ class _GestionarVariacionesScreenState extends State<GestionarVariacionesScreen>
               ? ListView.builder(
                   padding: const EdgeInsets.symmetric(vertical: 20),
                   itemCount: 6,
-                  itemBuilder: (_, __) => _buildShimmerItem(),
+                  itemBuilder: (_, __) => _buildShimmerItem(dimensions, constraints.maxWidth),
                 )
               : _variaciones.isEmpty
                   ? _buildEmptyState()
@@ -802,12 +965,12 @@ class _GestionarVariacionesScreenState extends State<GestionarVariacionesScreen>
             backgroundColor: const Color(0xFF3A86FF),
             foregroundColor: Colors.white,
             elevation: 4,
-            icon: Icon(Icons.add, size: isTablet ? 24 : 20),
+            icon: Icon(Icons.add, size: dimensions.iconSize),
             label: Text(
               'Nueva variación',
               style: TextStyle(
                 fontWeight: FontWeight.w600,
-                fontSize: isTablet ? 16 : 14,
+                fontSize: dimensions.titleFontSize - 2,
               ),
             ),
           ) : null,
@@ -815,4 +978,38 @@ class _GestionarVariacionesScreenState extends State<GestionarVariacionesScreen>
       },
     );
   }
+}
+
+// Enums y clases para el sistema responsive
+enum ResponsiveBreakpoints {
+  mobile,
+  tabletSmall,
+  tablet,
+  desktop,
+}
+
+class ResponsiveDimensions {
+  final double horizontalMargin; // Como porcentaje de la pantalla
+  final double imageSize;
+  final double contentPadding;
+  final double titleFontSize;
+  final double priceFontSize;
+  final double iconSize;
+  final double actionButtonSize;
+  final double spacingLarge;
+  final double spacingMedium;
+  final int columns; // Para futuras implementaciones de grid
+
+  const ResponsiveDimensions({
+    required this.horizontalMargin,
+    required this.imageSize,
+    required this.contentPadding,
+    required this.titleFontSize,
+    required this.priceFontSize,
+    required this.iconSize,
+    required this.actionButtonSize,
+    required this.spacingLarge,
+    required this.spacingMedium,
+    required this.columns,
+  });
 }

@@ -3,7 +3,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
-import '../../services/producto_service.dart';
+import 'package:provider/provider.dart';
+import '../../providers/producto_admin_provider.dart';
 import 'gestionar_variaciones_screen.dart';
 
 // Clase para formatear el precio en pesos colombianos
@@ -53,7 +54,7 @@ class ColombiaCurrencyInputFormatter extends TextInputFormatter {
 }
 
 class CrearProductoScreen extends StatefulWidget {
-  final String? categoryId; // Added parameter to accept category ID
+  final String? categoryId; // Parameter to accept category ID
 
   const CrearProductoScreen({super.key, this.categoryId});
 
@@ -73,22 +74,19 @@ class _CrearProductoScreenState extends State<CrearProductoScreen> {
   bool disponible = true;
   File? imagenSeleccionada;
 
-  List<Map<String, dynamic>> categorias = [];
   final List<String> subcategorias = ['Adulto', 'Niño'];
 
-  final productoService = ProductoService();
   final ColombiaCurrencyInputFormatter _currencyFormatter = ColombiaCurrencyInputFormatter();
 
   bool _showFab = false;
   String? _createdProductId;
-  bool _isLoadingCategories = true;
-  bool _isCreating = false;
-  String? _categoryError;
 
   @override
   void initState() {
     super.initState();
-    cargarCategorias();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _inicializarProvider();
+    });
   }
 
   @override
@@ -98,6 +96,27 @@ class _CrearProductoScreenState extends State<CrearProductoScreen> {
     precioController.dispose();
     stockController.dispose();
     super.dispose();
+  }
+
+  Future<void> _inicializarProvider() async {
+    final provider = context.read<ProductoProvider>();
+    
+    // Solo inicializar si no hay categorías cargadas
+    if (provider.categorias.isEmpty) {
+      await provider.inicializar();
+    }
+
+    // Preseleccionar categoría si se pasó como parámetro
+    if (widget.categoryId != null && provider.categorias.isNotEmpty) {
+      try {
+        categoriaSeleccionada = provider.categorias.firstWhere(
+          (cat) => cat['_id'] == widget.categoryId
+        );
+      } catch (e) {
+        categoriaSeleccionada = provider.categorias.isNotEmpty ? provider.categorias.first : null;
+      }
+      if (mounted) setState(() {});
+    }
   }
 
   // Función para extraer el valor numérico del precio formateado
@@ -113,36 +132,6 @@ class _CrearProductoScreenState extends State<CrearProductoScreen> {
     if (numbersOnly.isEmpty) return 0.0;
     
     return double.tryParse(numbersOnly) ?? 0.0;
-  }
-
-  Future<void> cargarCategorias() async {
-    setState(() {
-      _isLoadingCategories = true;
-      _categoryError = null;
-    });
-    try {
-     final data = await productoService.obtenerCategorias();
-setState(() {
-  categorias = data;
-  _isLoadingCategories = false;
-
-  if (widget.categoryId != null) {
-    try {
-      categoriaSeleccionada = categorias.firstWhere((cat) => cat['_id'] == widget.categoryId);
-    } catch (e) {
-      categoriaSeleccionada = categorias.isNotEmpty ? categorias.first : null;
-    }
-  }
-});
-    } catch (e) {
-      setState(() {
-        _categoryError = 'Error al cargar categorías: ${e.toString().replaceAll('Exception:', '')}';
-        _isLoadingCategories = false;
-      });
-      if (mounted) {
-        _showSnackBar(_categoryError!, isError: true);
-      }
-    }
   }
 
   Future<void> seleccionarImagen() async {
@@ -199,41 +188,44 @@ setState(() {
       return;
     }
 
-    setState(() => _isCreating = true);
-
+    final provider = context.read<ProductoProvider>();
     final int? stockGeneral = int.tryParse(stockController.text.trim());
     final double precioValue = _extractPriceValue(precioController.text);
 
     try {
-      final nuevoProducto = await productoService.crearProducto(
+      final exito = await provider.crearProducto(
         nombre: nombreController.text.trim(),
         descripcion: descripcionController.text.trim(),
         precio: precioValue,
-        stock: stockGeneral ?? 0,
         categoria: categoriaSeleccionada!['_id'],
         subcategoria: subcategoriaSeleccionada ?? '',
+        stock: stockGeneral ?? 0,
         disponible: disponible,
-        estado: 'activo', // Valor por defecto
+        estado: 'activo',
         imagenLocal: imagenSeleccionada!,
       );
 
       if (mounted) {
-        _showSnackBar('¡Producto creado exitosamente! 🎉');
-        setState(() {
-          _showFab = true;
-          _createdProductId = nuevoProducto['_id']?.toString();
-        });
-
-        // Limpiar formularios
-        _resetForm();
+        if (exito) {
+          _showSnackBar('¡Producto creado exitosamente!');
+          
+          // Pequeña pausa para mostrar el mensaje de éxito
+          await Future.delayed(const Duration(milliseconds: 1500));
+          
+          // Redirigir a la pantalla de gestión de productos
+          if (mounted) {
+            Navigator.of(context).pushReplacementNamed('/gestion-productos');
+          }
+        } else {
+          _showSnackBar(
+            provider.errorMessage ?? 'Error al crear producto',
+            isError: true
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
         _showSnackBar('Error al crear producto: ${e.toString()}', isError: true);
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isCreating = false);
       }
     }
   }
@@ -568,56 +560,170 @@ setState(() {
     );
   }
 
+  Widget _buildCategoriaDropdown() {
+    return Consumer<ProductoProvider>(
+      builder: (context, provider, child) {
+        return Container(
+          margin: const EdgeInsets.only(bottom: 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Text(
+                    'Categoría',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF374151),
+                    ),
+                  ),
+                  const Text(
+                    ' *',
+                    style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                ),
+                child: provider.isLoading && provider.categorias.isEmpty
+                    ? Container(
+                        padding: const EdgeInsets.all(20),
+                        child: const Row(
+                          children: [
+                            SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                            SizedBox(width: 16),
+                            Text('Cargando categorías...'),
+                          ],
+                        ),
+                      )
+                    : provider.hasError && provider.categorias.isEmpty
+                        ? Container(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.error_outline, color: Color(0xFFEF4444)),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text(provider.errorMessage ?? 'Error al cargar categorías')
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: TextButton(
+                                    onPressed: () => provider.reintentar(),
+                                    child: const Text('Reintentar'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : DropdownButtonFormField<Map<String, dynamic>>(
+                            value: categoriaSeleccionada,
+                            decoration: InputDecoration(
+                              prefixIcon: const Padding(
+                                padding: EdgeInsets.only(left: 16, right: 12),
+                                child: Icon(Icons.category_outlined, color: Color(0xFF9CA3AF), size: 20),
+                              ),
+                              hintText: 'Seleccionar categoría',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                              filled: true,
+                              fillColor: Colors.white,
+                            ),
+                            items: provider.categorias.map((cat) {
+                              return DropdownMenuItem<Map<String, dynamic>>(
+                                value: cat,
+                                child: Text(cat['nombre']),
+                              );
+                            }).toList(),
+                            onChanged: widget.categoryId != null
+                                ? null
+                                : (val) => setState(() => categoriaSeleccionada = val),
+                            validator: (val) => val == null ? 'Campo obligatorio' : null,
+                            isExpanded: true,
+                            disabledHint: widget.categoryId != null && categoriaSeleccionada != null
+                                ? Text(categoriaSeleccionada!['nombre'])
+                                : null,
+                          ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildActionButton() {
-    return Container(
-      margin: const EdgeInsets.only(top: 32, bottom: 20),
-      child: SizedBox(
-        width: double.infinity,
-        height: 56,
-        child: ElevatedButton(
-          onPressed: _isCreating ? null : guardarProducto,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF6366F1),
-            foregroundColor: Colors.white,
-            disabledBackgroundColor: const Color(0xFF9CA3AF),
-            elevation: _isCreating ? 0 : 8,
-            shadowColor: const Color(0xFF6366F1).withOpacity(0.4),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+    return Consumer<ProductoProvider>(
+      builder: (context, provider, child) {
+        return Container(
+          margin: const EdgeInsets.only(top: 32, bottom: 20),
+          child: SizedBox(
+            width: double.infinity,
+            height: 56,
+            child: ElevatedButton(
+              onPressed: provider.isCreating ? null : guardarProducto,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF6366F1),
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: const Color(0xFF9CA3AF),
+                elevation: provider.isCreating ? 0 : 8,
+                shadowColor: const Color(0xFF6366F1).withOpacity(0.4),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              child: provider.isCreating
+                  ? Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        const Text(
+                          'Creando producto...',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    )
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.add_circle_outline, size: 22),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Crear Producto',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
             ),
           ),
-          child: _isCreating
-              ? Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    const Text(
-                      'Creando producto...',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                    ),
-                  ],
-                )
-              : Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.add_circle_outline, size: 22),
-                    const SizedBox(width: 12),
-                    const Text(
-                      'Crear Producto',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                    ),
-                  ],
-                ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -668,108 +774,7 @@ setState(() {
                 maxLines: 3,
                 hint: 'Describe las características del producto...',
               ),
-              // Categoría con loading state
-              Container(
-                margin: const EdgeInsets.only(bottom: 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Text(
-                          'Categoría',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF374151),
-                          ),
-                        ),
-                        const Text(
-                          ' *',
-                          style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w600),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFE5E7EB)),
-                      ),
-                      child: _isLoadingCategories
-                          ? Container(
-                              padding: const EdgeInsets.all(20),
-                              child: const Row(
-                                children: [
-                                  SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
-                                  ),
-                                  SizedBox(width: 16),
-                                  Text('Cargando categorías...'),
-                                ],
-                              ),
-                            )
-                          : _categoryError != null
-                              ? Container(
-                                  padding: const EdgeInsets.all(20),
-                                  child: Column(
-                                    children: [
-                                      Row(
-                                        children: [
-                                          const Icon(Icons.error_outline, color: Color(0xFFEF4444)),
-                                          const SizedBox(width: 12),
-                                          Expanded(child: Text(_categoryError!)),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 12),
-                                      SizedBox(
-                                        width: double.infinity,
-                                        child: TextButton(
-                                          onPressed: cargarCategorias,
-                                          child: const Text('Reintentar'),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                )
-                              : DropdownButtonFormField<Map<String, dynamic>>(
-                                  value: categoriaSeleccionada,
-                                  decoration: InputDecoration(
-                                    prefixIcon: const Padding(
-                                      padding: EdgeInsets.only(left: 16, right: 12),
-                                      child: Icon(Icons.category_outlined, color: Color(0xFF9CA3AF), size: 20),
-                                    ),
-                                    hintText: 'Seleccionar categoría',
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide.none,
-                                    ),
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                                    filled: true,
-                                    fillColor: Colors.white,
-                                  ),
-                                  items: categorias.map((cat) {
-                                    return DropdownMenuItem<Map<String, dynamic>>(
-                                      value: cat,
-                                      child: Text(cat['nombre']),
-                                    );
-                                  }).toList(),
-                                  onChanged: widget.categoryId != null
-                                      ? null
-                                      : (val) => setState(() => categoriaSeleccionada = val),
-                                  validator: (val) => val == null ? 'Campo obligatorio' : null,
-                                  isExpanded: true,
-                                  disabledHint: widget.categoryId != null && categoriaSeleccionada != null
-                                      ? Text(categoriaSeleccionada!['nombre'])
-                                      : null,
-                                ),
-                    ),
-                  ],
-                ),
-              ),
+              _buildCategoriaDropdown(),
               _buildDropdownField<String>(
                 label: 'Subcategoría',
                 value: subcategoriaSeleccionada,

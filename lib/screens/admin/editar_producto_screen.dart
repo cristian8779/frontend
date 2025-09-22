@@ -2,7 +2,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
 import '../../services/producto_service.dart';
+import '../../providers/producto_admin_provider.dart'; // ← NUEVO IMPORT
 
 class EditarProductoScreen extends StatefulWidget {
   final String productId;
@@ -38,14 +40,12 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
   bool disponible = true;
 
   // Datos
-  List<Map<String, dynamic>> categorias = [];
   final List<String> subcategorias = ['Adulto', 'Niño'];
   final List<String> estados = ['activo', 'inactivo'];
 
   // Estados de UI
   bool _isUpdating = false;
   bool _isLoadingProduct = true;
-  bool _isLoadingCategories = false;
   String? _categoryError;
   bool _hasUnsavedChanges = false;
   bool _showPreview = false;
@@ -153,20 +153,31 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
         false;
   }
 
+  // ✅ MÉTODO ACTUALIZADO - Usa Provider para cargar datos
   Future<void> _cargarProducto() async {
     setState(() {
       _isLoadingProduct = true;
-      _isLoadingCategories = true;
+      _categoryError = null;
     });
 
     try {
-      final prod = await productoService.obtenerProductoPorId(widget.productId);
-      final data = await productoService.obtenerCategorias();
+      final provider = Provider.of<ProductoProvider>(context, listen: false);
+      
+      // Obtener producto específico
+      final prod = await provider.obtenerProductoPorId(widget.productId);
+      
+      // Si las categorías no están cargadas en el provider, cargarlas
+      if (provider.categorias.isEmpty) {
+        await provider.inicializar(); // Esto carga categorías y filtros
+      }
+
+      if (prod == null) {
+        throw Exception('No se pudo cargar el producto');
+      }
 
       setState(() {
         producto = prod;
-        categorias = data;
-
+        
         // Guardar datos originales para comparar cambios
         _originalData = Map.from(prod);
 
@@ -179,13 +190,14 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
         estadoSeleccionado = producto?['estado'] ?? 'activo';
         disponible = producto?['disponible'] ?? true;
 
+        // Usar las categorías del provider
+        final categorias = provider.categorias;
         categoriaSeleccionada = categorias.firstWhere(
           (cat) => cat['_id'] == producto?['categoria'],
           orElse: () => categorias.isNotEmpty ? categorias[0] : {},
         );
 
         _isLoadingProduct = false;
-        _isLoadingCategories = false;
         _hasUnsavedChanges = false;
       });
 
@@ -196,7 +208,6 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
     } catch (e) {
       setState(() {
         _isLoadingProduct = false;
-        _isLoadingCategories = false;
         _categoryError = 'Error cargando datos: ${e.toString()}';
       });
       if (mounted) {
@@ -273,6 +284,7 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
     }
   }
 
+  // ✅ MÉTODO ACTUALIZADO - Usa Provider para actualizar
   Future<void> actualizarProducto() async {
     if (!_formKey.currentState!.validate() || categoriaSeleccionada == null) {
       _showSnackBar('Por favor, completa todos los campos requeridos.', isError: true);
@@ -288,7 +300,9 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
     HapticFeedback.lightImpact();
 
     try {
-      final actualizado = await productoService.actualizarProducto(
+      final provider = Provider.of<ProductoProvider>(context, listen: false);
+      
+      final success = await provider.actualizarProducto(
         id: widget.productId,
         nombre: nombreController.text.trim(),
         descripcion: descripcionController.text.trim(),
@@ -302,14 +316,22 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
       );
 
       if (mounted) {
-        HapticFeedback.mediumImpact();
-        _showSnackBar('¡Producto actualizado exitosamente! 🎉');
-        setState(() => _hasUnsavedChanges = false);
-        
-        // Pequeño delay para mostrar el éxito antes de cerrar
-        await Future.delayed(const Duration(milliseconds: 1500));
-        if (mounted) {
-          Navigator.pop(context, actualizado);
+        if (success) {
+          HapticFeedback.mediumImpact();
+          _showSnackBar('¡Producto actualizado exitosamente! 🎉');
+          setState(() => _hasUnsavedChanges = false);
+          
+          // Pequeño delay para mostrar el éxito antes de cerrar
+          await Future.delayed(const Duration(milliseconds: 1500));
+          if (mounted) {
+            Navigator.pop(context, true); // Retorna true para indicar éxito
+          }
+        } else {
+          HapticFeedback.heavyImpact();
+          _showSnackBar(
+            'Error al actualizar producto: ${provider.errorMessage ?? 'Error desconocido'}', 
+            isError: true
+          );
         }
       }
     } catch (e) {
@@ -616,155 +638,164 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
     );
   }
 
+  // ✅ MÉTODO ACTUALIZADO - Usa Provider para obtener categorías
   Widget _buildCategorySelector() {
-    return Container(
-      margin: EdgeInsets.only(bottom: _getResponsiveSize(context, 20)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return Consumer<ProductoProvider>(
+      builder: (context, provider, child) {
+        final categorias = provider.categorias;
+        final isLoadingCategories = provider.isLoading && categorias.isEmpty;
+        final hasError = provider.hasError && categorias.isEmpty;
+
+        return Container(
+          margin: EdgeInsets.only(bottom: _getResponsiveSize(context, 20)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Flexible(
-                child: Text(
-                  'Categoría',
-                  style: TextStyle(
-                    fontSize: _getResponsiveSize(context, 14),
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF374151),
-                  ),
-                ),
-              ),
-              Text(
-                ' *',
-                style: TextStyle(
-                  color: const Color(0xFFEF4444),
-                  fontWeight: FontWeight.w600,
-                  fontSize: _getResponsiveSize(context, 14),
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: _getResponsiveSize(context, 8)),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE5E7EB)),
-            ),
-            child: _isLoadingCategories
-                ? Container(
-                    padding: EdgeInsets.all(_getResponsiveSize(context, 20)),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: _getResponsiveSize(context, 20),
-                          height: _getResponsiveSize(context, 20),
-                          child: const CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Color(0xFF6366F1),
-                          ),
-                        ),
-                        SizedBox(width: _getResponsiveSize(context, 16)),
-                        Flexible(
-                          child: Text(
-                            'Cargando categorías...',
-                            style: TextStyle(fontSize: _getResponsiveSize(context, 14)),
-                          ),
-                        ),
-                      ],
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      'Categoría',
+                      style: TextStyle(
+                        fontSize: _getResponsiveSize(context, 14),
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF374151),
+                      ),
                     ),
-                  )
-                : _categoryError != null
+                  ),
+                  Text(
+                    ' *',
+                    style: TextStyle(
+                      color: const Color(0xFFEF4444),
+                      fontWeight: FontWeight.w600,
+                      fontSize: _getResponsiveSize(context, 14),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: _getResponsiveSize(context, 8)),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                ),
+                child: isLoadingCategories
                     ? Container(
                         padding: EdgeInsets.all(_getResponsiveSize(context, 20)),
-                        child: Column(
+                        child: Row(
                           children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.error_outline,
-                                  color: const Color(0xFFEF4444),
-                                  size: _getResponsiveSize(context, 20),
-                                ),
-                                SizedBox(width: _getResponsiveSize(context, 12)),
-                                Expanded(
-                                  child: Text(
-                                    _categoryError!,
-                                    style: TextStyle(fontSize: _getResponsiveSize(context, 14)),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            SizedBox(height: _getResponsiveSize(context, 12)),
                             SizedBox(
-                              width: double.infinity,
-                              child: TextButton.icon(
-                                onPressed: _cargarProducto,
-                                icon: Icon(
-                                  Icons.refresh,
-                                  size: _getResponsiveSize(context, 18),
-                                ),
-                                label: Text(
-                                  'Reintentar',
-                                  style: TextStyle(fontSize: _getResponsiveSize(context, 14)),
-                                ),
+                              width: _getResponsiveSize(context, 20),
+                              height: _getResponsiveSize(context, 20),
+                              child: const CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Color(0xFF6366F1),
+                              ),
+                            ),
+                            SizedBox(width: _getResponsiveSize(context, 16)),
+                            Flexible(
+                              child: Text(
+                                'Cargando categorías...',
+                                style: TextStyle(fontSize: _getResponsiveSize(context, 14)),
                               ),
                             ),
                           ],
                         ),
                       )
-                    : DropdownButtonFormField<Map<String, dynamic>>(
-                        value: categoriaSeleccionada,
-                        style: TextStyle(
-                          fontSize: _getResponsiveSize(context, 16),
-                          color: Colors.black,
-                        ),
-                        decoration: InputDecoration(
-                          prefixIcon: Padding(
-                            padding: EdgeInsets.only(
-                              left: _getResponsiveSize(context, 16),
-                              right: _getResponsiveSize(context, 12),
+                    : hasError
+                        ? Container(
+                            padding: EdgeInsets.all(_getResponsiveSize(context, 20)),
+                            child: Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.error_outline,
+                                      color: const Color(0xFFEF4444),
+                                      size: _getResponsiveSize(context, 20),
+                                    ),
+                                    SizedBox(width: _getResponsiveSize(context, 12)),
+                                    Expanded(
+                                      child: Text(
+                                        provider.errorMessage ?? 'Error cargando categorías',
+                                        style: TextStyle(fontSize: _getResponsiveSize(context, 14)),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                SizedBox(height: _getResponsiveSize(context, 12)),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: TextButton.icon(
+                                    onPressed: () => provider.inicializar(),
+                                    icon: Icon(
+                                      Icons.refresh,
+                                      size: _getResponsiveSize(context, 18),
+                                    ),
+                                    label: Text(
+                                      'Reintentar',
+                                      style: TextStyle(fontSize: _getResponsiveSize(context, 14)),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                            child: Icon(
-                              Icons.category_outlined,
-                              color: const Color(0xFF9CA3AF),
-                              size: _getResponsiveSize(context, 20),
+                          )
+                        : DropdownButtonFormField<Map<String, dynamic>>(
+                            value: categoriaSeleccionada,
+                            style: TextStyle(
+                              fontSize: _getResponsiveSize(context, 16),
+                              color: Colors.black,
                             ),
-                          ),
-                          hintText: 'Seleccionar categoría',
-                          hintStyle: TextStyle(fontSize: _getResponsiveSize(context, 14)),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
-                          ),
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: _getResponsiveSize(context, 16),
-                            vertical: _getResponsiveSize(context, 16),
-                          ),
-                          filled: true,
-                          fillColor: Colors.white,
-                        ),
-                        items: categorias.map((cat) {
-                          return DropdownMenuItem<Map<String, dynamic>>(
-                            value: cat,
-                            child: Text(
-                              cat['nombre'],
-                              style: TextStyle(fontSize: _getResponsiveSize(context, 16)),
+                            decoration: InputDecoration(
+                              prefixIcon: Padding(
+                                padding: EdgeInsets.only(
+                                  left: _getResponsiveSize(context, 16),
+                                  right: _getResponsiveSize(context, 12),
+                                ),
+                                child: Icon(
+                                  Icons.category_outlined,
+                                  color: const Color(0xFF9CA3AF),
+                                  size: _getResponsiveSize(context, 20),
+                                ),
+                              ),
+                              hintText: 'Seleccionar categoría',
+                              hintStyle: TextStyle(fontSize: _getResponsiveSize(context, 14)),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: _getResponsiveSize(context, 16),
+                                vertical: _getResponsiveSize(context, 16),
+                              ),
+                              filled: true,
+                              fillColor: Colors.white,
                             ),
-                          );
-                        }).toList(),
-                        onChanged: (val) {
-                          setState(() {
-                            categoriaSeleccionada = val;
-                            _hasUnsavedChanges = true;
-                          });
-                        },
-                        validator: (val) => val == null ? 'Campo obligatorio' : null,
-                        isExpanded: true,
-                      ),
+                            items: categorias.map((cat) {
+                              return DropdownMenuItem<Map<String, dynamic>>(
+                                value: cat,
+                                child: Text(
+                                  cat['nombre'],
+                                  style: TextStyle(fontSize: _getResponsiveSize(context, 16)),
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: (val) {
+                              setState(() {
+                                categoriaSeleccionada = val;
+                                _hasUnsavedChanges = true;
+                              });
+                            },
+                            validator: (val) => val == null ? 'Campo obligatorio' : null,
+                            isExpanded: true,
+                          ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -1210,125 +1241,131 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
   }
 
   Widget _buildActionButtons() {
-    return Column(
-      children: [
-        Container(
-          margin: EdgeInsets.only(
-            top: _getResponsiveSize(context, 20),
-            bottom: _getResponsiveSize(context, 12),
-          ),
-          child: SizedBox(
-            width: double.infinity,
-            height: _getResponsiveSize(context, 56),
-            child: AnimatedBuilder(
-              animation: _pulseAnimation,
-              builder: (context, child) {
-                return Transform.scale(
-                  scale: _isUpdating ? _pulseAnimation.value : 1.0,
-                  child: ElevatedButton(
-                    onPressed: _isUpdating ? null : actualizarProducto,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF6366F1),
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor: const Color(0xFF9CA3AF),
-                      elevation: _isUpdating ? 0 : 8,
-                      shadowColor: const Color(0xFF6366F1).withOpacity(0.4),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                    child: _isUpdating
-                        ? Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              SizedBox(
-                                width: _getResponsiveSize(context, 20),
-                                height: _getResponsiveSize(context, 20),
-                                child: const CircularProgressIndicator(
-                                  strokeWidth: 2.5,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                ),
-                              ),
-                              SizedBox(width: _getResponsiveSize(context, 16)),
-                              Text(
-                                'Actualizando producto...',
-                                style: TextStyle(
-                                  fontSize: _getResponsiveSize(context, 16),
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          )
-                        : Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.save_outlined,
-                                size: _getResponsiveSize(context, 22),
-                              ),
-                              SizedBox(width: _getResponsiveSize(context, 12)),
-                              Text(
-                                'Actualizar Producto',
-                                style: TextStyle(
-                                  fontSize: _getResponsiveSize(context, 16),
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
-        if (_hasUnsavedChanges)
-          SizedBox(
-            width: double.infinity,
-            child: TextButton.icon(
-              onPressed: _isUpdating ? null : () async {
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    title: const Text('¿Descartar cambios?'),
-                    content: const Text('Se perderán todos los cambios no guardados.'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        child: const Text('Cancelar'),
-                      ),
-                      ElevatedButton(
-                        onPressed: () => Navigator.pop(context, true),
+    return Consumer<ProductoProvider>(
+      builder: (context, provider, child) {
+        final isProviderUpdating = provider.isUpdating;
+        
+        return Column(
+          children: [
+            Container(
+              margin: EdgeInsets.only(
+                top: _getResponsiveSize(context, 20),
+                bottom: _getResponsiveSize(context, 12),
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                height: _getResponsiveSize(context, 56),
+                child: AnimatedBuilder(
+                  animation: _pulseAnimation,
+                  builder: (context, child) {
+                    return Transform.scale(
+                      scale: (_isUpdating || isProviderUpdating) ? _pulseAnimation.value : 1.0,
+                      child: ElevatedButton(
+                        onPressed: (_isUpdating || isProviderUpdating) ? null : actualizarProducto,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.orange[600],
+                          backgroundColor: const Color(0xFF6366F1),
                           foregroundColor: Colors.white,
+                          disabledBackgroundColor: const Color(0xFF9CA3AF),
+                          elevation: (_isUpdating || isProviderUpdating) ? 0 : 8,
+                          shadowColor: const Color(0xFF6366F1).withOpacity(0.4),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
                         ),
-                        child: const Text('Descartar'),
+                        child: (_isUpdating || isProviderUpdating)
+                            ? Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  SizedBox(
+                                    width: _getResponsiveSize(context, 20),
+                                    height: _getResponsiveSize(context, 20),
+                                    child: const CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    ),
+                                  ),
+                                  SizedBox(width: _getResponsiveSize(context, 16)),
+                                  Text(
+                                    'Actualizando producto...',
+                                    style: TextStyle(
+                                      fontSize: _getResponsiveSize(context, 16),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.save_outlined,
+                                    size: _getResponsiveSize(context, 22),
+                                  ),
+                                  SizedBox(width: _getResponsiveSize(context, 12)),
+                                  Text(
+                                    'Actualizar Producto',
+                                    style: TextStyle(
+                                      fontSize: _getResponsiveSize(context, 16),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
                       ),
-                    ],
-                  ),
-                );
-                
-                if (confirm == true) {
-                  _cargarProducto();
-                }
-              },
-              icon: Icon(
-                Icons.refresh_outlined,
-                size: _getResponsiveSize(context, 18),
-              ),
-              label: Text(
-                'Descartar cambios',
-                style: TextStyle(fontSize: _getResponsiveSize(context, 14)),
-              ),
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.orange[600],
-                padding: EdgeInsets.symmetric(vertical: _getResponsiveSize(context, 12)),
+                    );
+                  },
+                ),
               ),
             ),
-          ),
-      ],
+            if (_hasUnsavedChanges)
+              SizedBox(
+                width: double.infinity,
+                child: TextButton.icon(
+                  onPressed: (_isUpdating || isProviderUpdating) ? null : () async {
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        title: const Text('¿Descartar cambios?'),
+                        content: const Text('Se perderán todos los cambios no guardados.'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('Cancelar'),
+                          ),
+                          ElevatedButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange[600],
+                              foregroundColor: Colors.white,
+                            ),
+                            child: const Text('Descartar'),
+                          ),
+                        ],
+                      ),
+                    );
+                    
+                    if (confirm == true) {
+                      _cargarProducto();
+                    }
+                  },
+                  icon: Icon(
+                    Icons.refresh_outlined,
+                    size: _getResponsiveSize(context, 18),
+                  ),
+                  label: Text(
+                    'Descartar cambios',
+                    style: TextStyle(fontSize: _getResponsiveSize(context, 14)),
+                  ),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.orange[600],
+                    padding: EdgeInsets.symmetric(vertical: _getResponsiveSize(context, 12)),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 
@@ -1636,4 +1673,3 @@ class _EditarProductoScreenState extends State<EditarProductoScreen>
     );
   }
 }
-                                

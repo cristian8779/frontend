@@ -1,242 +1,54 @@
+// categoria_list.dart
 import 'package:flutter/material.dart';
 import '../../../services/categoria_service.dart';
 import '../categoria_preview_screen.dart';
 import '../create_category_screen.dart';
 import '/models/categoria.dart';
+import '../styles/categoria_list_styles.dart'; // Import de los estilos
 
 class CategoriaList extends StatelessWidget {
   final List<Map<String, dynamic>> categorias;
-  final VoidCallback onCategoriasActualizadas; // Callback para actualizar
+  final VoidCallback onCategoriasActualizadas;
+  final int maxItemsToShow;
 
   const CategoriaList({
     super.key,
     required this.categorias,
     required this.onCategoriasActualizadas,
+    this.maxItemsToShow = CategoriaDimensions.defaultMaxItems,
   });
-
-  // Función para obtener dimensiones responsivas
-  Map<String, double> _getResponsiveDimensions(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isTablet = screenWidth >= 768;
-    final isDesktop = screenWidth >= 1024;
-    
-    if (isDesktop) {
-      return {
-        'containerHeight': 240.0,
-        'itemWidth': 160.0,
-        'itemHeight': 160.0,
-        'fontSize': 16.0,
-        'iconSize': 50.0,
-        'padding': 16.0,
-      };
-    } else if (isTablet) {
-      return {
-        'containerHeight': 225.0,
-        'itemWidth': 145.0,
-        'itemHeight': 145.0,
-        'fontSize': 15.0,
-        'iconSize': 45.0,
-        'padding': 14.0,
-      };
-    } else {
-      return {
-        'containerHeight': 210.0,
-        'itemWidth': 130.0,
-        'itemHeight': 130.0,
-        'fontSize': 14.0,
-        'iconSize': 40.0,
-        'padding': 12.0,
-      };
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final dimensions = _getResponsiveDimensions(context);
+        final dimensions = CategoriaDimensions.getResponsiveDimensions(context);
         
         if (categorias.isEmpty) {
-          return SizedBox(
-            height: dimensions['containerHeight']!,
-            child: Row(
-              children: [
-                // Mensaje y botón alineados horizontalmente
-                Expanded(
-                  flex: 2,
-                  child: Padding(
-                    padding: EdgeInsets.only(right: dimensions['padding']!),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          Icons.category_outlined,
-                          size: dimensions['iconSize']! + 4,
-                          color: Colors.blueGrey,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'No se encontraron categorías.',
-                          style: TextStyle(
-                            fontSize: dimensions['fontSize']! + 1,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black87,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Puedes crear nuevas desde aquí',
-                          style: TextStyle(
-                            fontSize: dimensions['fontSize']! - 1,
-                            color: Colors.black54,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                // Botón de agregar
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    GestureDetector(
-                      onTap: () async {
-                        final creado = await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const CreateCategoryScreen(),
-                          ),
-                        );
-
-                        if (creado == true) {
-                          onCategoriasActualizadas(); // Actualiza después de crear
-                        }
-                      },
-                      child: Container(
-                        width: dimensions['itemWidth']!,
-                        height: dimensions['itemHeight']!,
-                        decoration: BoxDecoration(
-                          color: Colors.red[400],
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Colors.black26,
-                              blurRadius: 6,
-                              offset: Offset(0, 3),
-                            ),
-                          ],
-                        ),
-                        child: Icon(
-                          Icons.add, 
-                          color: Colors.white, 
-                          size: dimensions['iconSize']!,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      "Agregar",
-                      style: TextStyle(
-                        fontSize: dimensions['fontSize']!,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          );
+          return _buildEmptyState(context, dimensions);
         }
+
+        final bool hasMoreItems = categorias.length > maxItemsToShow;
+        final int itemsToShow = hasMoreItems ? maxItemsToShow - 1 : categorias.length;
 
         return SizedBox(
           height: dimensions['containerHeight']!,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
-            itemCount: categorias.length + 1,
+            itemCount: itemsToShow + (hasMoreItems ? 2 : 1),
             itemBuilder: (context, index) {
-              if (index == categorias.length) {
-                return _agregarCategoriaBoton(context, dimensions);
+              // Botón "Ver más"
+              if (hasMoreItems && index == itemsToShow) {
+                return _buildViewMoreButton(context, dimensions);
+              }
+              
+              // Botón "Agregar"
+              if (index == itemsToShow + (hasMoreItems ? 1 : 0)) {
+                return _buildAddButton(context, dimensions);
               }
 
-              final categoriaMap = categorias[index];
-              late Categoria categoria;
-              try {
-                categoria = Categoria.fromJson(categoriaMap);
-              } catch (e) {
-                return const SizedBox();
-              }
-
-              return Padding(
-                padding: EdgeInsets.only(right: dimensions['padding']!),
-                child: GestureDetector(
-                  onTap: () async {
-                    // Navegar a CategoriaPreviewScreen
-                    final resultado = await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => CategoriaPreviewScreen(
-                          categoria: categoria,
-                        ),
-                      ),
-                    );
-
-                    // Si se retornó true, significa que hubo cambios (actualización o eliminación)
-                    if (resultado == true) {
-                      onCategoriasActualizadas(); // Actualiza la lista
-                    }
-                  },
-                  child: Column(
-                    children: [
-                      Container(
-                        width: dimensions['itemWidth']!,
-                        height: dimensions['itemHeight']!,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          color: Colors.grey[200],
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Colors.black12,
-                              blurRadius: 6,
-                              offset: Offset(0, 3),
-                            ),
-                          ],
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
-                          child: categoria.imagen != null && categoria.imagen!.isNotEmpty
-                              ? Image.network(
-                                  categoria.imagen!,
-                                  fit: BoxFit.cover,
-                                  width: double.infinity,
-                                  height: double.infinity,
-                                  errorBuilder: (_, __, ___) =>
-                                      Icon(Icons.broken_image, size: dimensions['iconSize']!),
-                                )
-                              : Image.asset(
-                                  'assets/imagen.png',
-                                  fit: BoxFit.cover,
-                                ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        width: dimensions['itemWidth']!,
-                        child: Text(
-                          categoria.nombre,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: dimensions['fontSize']!,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 2,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
+              // Categorías normales
+              return _buildCategoryItem(context, index, dimensions);
             },
           ),
         );
@@ -244,55 +56,450 @@ class CategoriaList extends StatelessWidget {
     );
   }
 
-  Widget _agregarCategoriaBoton(BuildContext context, Map<String, double> dimensions) {
+  Widget _buildEmptyState(BuildContext context, Map<String, double> dimensions) {
+    return SizedBox(
+      height: dimensions['containerHeight']!,
+      child: Row(
+        children: [
+          Expanded(
+            flex: 2,
+            child: Padding(
+              padding: EdgeInsets.only(right: dimensions['padding']!),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    CategoriaTheme.categoryIcon,
+                    size: dimensions['iconSize']! + 4,
+                    color: CategoriaTheme.hintTextColor,
+                  ),
+                  SizedBox(height: CategoriaDimensions.defaultSpacing),
+                  Text(
+                    CategoriaConstants.noCategoriesTitle,
+                    style: CategoriaTextStyles.getTitleStyle(dimensions),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    CategoriaConstants.noCategoriesSubtitle,
+                    style: CategoriaTextStyles.getSubtitleStyle(dimensions),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildAddButtonContent(context, dimensions),
+              SizedBox(height: CategoriaDimensions.defaultSpacing),
+              Text(
+                CategoriaConstants.addButtonLabel,
+                style: CategoriaTextStyles.getLabelStyle(dimensions),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCategoryItem(BuildContext context, int index, Map<String, double> dimensions) {
+    final categoriaMap = categorias[index];
+    late Categoria categoria;
+    
+    try {
+      categoria = Categoria.fromJson(categoriaMap);
+    } catch (e) {
+      return const SizedBox();
+    }
+
+    return Padding(
+      padding: EdgeInsets.only(right: dimensions['padding']!),
+      child: GestureDetector(
+        onTap: () => _navigateToCategoryPreview(context, categoria),
+        child: Column(
+          children: [
+            Container(
+              width: dimensions['itemWidth']!,
+              height: dimensions['itemHeight']!,
+              decoration: CategoriaDecorations.getCategoryItemDecoration(),
+              child: ClipRRect(
+                borderRadius: CategoriaLayout.fullBorderRadius,
+                child: _buildCategoryImage(categoria, dimensions),
+              ),
+            ),
+            SizedBox(height: CategoriaDimensions.defaultSpacing),
+            SizedBox(
+              width: dimensions['itemWidth']!,
+              child: Text(
+                categoria.nombre,
+                textAlign: TextAlign.center,
+                style: CategoriaTextStyles.getCategoryNameStyle(dimensions),
+                overflow: TextOverflow.ellipsis,
+                maxLines: CategoriaConstants.maxLines,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCategoryImage(Categoria categoria, Map<String, double> dimensions) {
+    if (categoria.imagen != null && categoria.imagen!.isNotEmpty) {
+      return Image.network(
+        categoria.imagen!,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        errorBuilder: (_, __, ___) => Icon(
+          CategoriaTheme.brokenImageIcon, 
+          size: dimensions['iconSize']!
+        ),
+      );
+    } else {
+      return Image.asset(
+        CategoriaConstants.defaultImagePath,
+        fit: BoxFit.cover,
+      );
+    }
+  }
+
+  Widget _buildViewMoreButton(BuildContext context, Map<String, double> dimensions) {
+    final totalCategorias = categorias.length;
+    final categoriasRestantes = totalCategorias - (maxItemsToShow - 1);
+    
     return Padding(
       padding: EdgeInsets.only(right: dimensions['padding']!),
       child: Column(
         children: [
           GestureDetector(
-            onTap: () async {
-              final creado = await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const CreateCategoryScreen(),
-                ),
-              );
-
-              if (creado == true) {
-                onCategoriasActualizadas(); // Actualiza después de crear
-              }
-            },
+            onTap: () => _navigateToAllCategories(context),
             child: Container(
               width: dimensions['itemWidth']!,
               height: dimensions['itemHeight']!,
-              decoration: BoxDecoration(
-                color: Colors.red[400],
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black26,
-                    blurRadius: 6,
-                    offset: Offset(0, 3),
+              decoration: CategoriaDecorations.getViewMoreButtonDecoration(),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    CategoriaTheme.viewMoreIcon,
+                    color: CategoriaTheme.whiteColor,
+                    size: dimensions['iconSize']! - 8,
+                  ),
+                  SizedBox(height: CategoriaDimensions.defaultSpacing),
+                  Container(
+                    padding: CategoriaLayout.counterPadding,
+                    decoration: CategoriaDecorations.getCounterDecoration(),
+                    child: Text(
+                      "+$categoriasRestantes",
+                      style: CategoriaTextStyles.getCounterStyle(dimensions),
+                    ),
                   ),
                 ],
               ),
-              child: Icon(
-                Icons.add, 
-                color: Colors.white, 
-                size: dimensions['iconSize']!,
-              ),
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: CategoriaDimensions.defaultSpacing),
           Text(
-            "Agregar",
-            style: TextStyle(
-              fontSize: dimensions['fontSize']!,
-              fontWeight: FontWeight.w500,
-            ),
+            CategoriaConstants.viewMoreButtonLabel,
+            style: CategoriaTextStyles.getLabelStyle(dimensions),
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildAddButton(BuildContext context, Map<String, double> dimensions) {
+    return Padding(
+      padding: EdgeInsets.only(right: dimensions['padding']!),
+      child: Column(
+        children: [
+          _buildAddButtonContent(context, dimensions),
+          SizedBox(height: CategoriaDimensions.defaultSpacing),
+          Text(
+            CategoriaConstants.addButtonLabel,
+            style: CategoriaTextStyles.getLabelStyle(dimensions),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAddButtonContent(BuildContext context, Map<String, double> dimensions) {
+    return GestureDetector(
+      onTap: () => _navigateToCreateCategory(context),
+      child: Container(
+        width: dimensions['itemWidth']!,
+        height: dimensions['itemHeight']!,
+        decoration: CategoriaDecorations.getAddButtonDecoration(),
+        child: Icon(
+          CategoriaTheme.addIcon, 
+          color: CategoriaTheme.whiteColor, 
+          size: dimensions['iconSize']!,
+        ),
+      ),
+    );
+  }
+
+  // Métodos de navegación
+  Future<void> _navigateToCategoryPreview(BuildContext context, Categoria categoria) async {
+    final resultado = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CategoriaPreviewScreen(categoria: categoria),
+      ),
+    );
+
+    if (resultado == true) {
+      onCategoriasActualizadas();
+    }
+  }
+
+  Future<void> _navigateToCreateCategory(BuildContext context) async {
+    final creado = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const CreateCategoryScreen(),
+      ),
+    );
+
+    if (creado == true) {
+      onCategoriasActualizadas();
+    }
+  }
+
+  Future<void> _navigateToAllCategories(BuildContext context) async {
+    final resultado = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TodasLasCategoriasScreen(
+          categorias: categorias,
+          onCategoriasActualizadas: onCategoriasActualizadas,
+        ),
+      ),
+    );
+
+    if (resultado == true) {
+      onCategoriasActualizadas();
+    }
+  }
+}
+
+// Pantalla para mostrar todas las categorías - también refactorizada
+class TodasLasCategoriasScreen extends StatefulWidget {
+  final List<Map<String, dynamic>> categorias;
+  final VoidCallback onCategoriasActualizadas;
+
+  const TodasLasCategoriasScreen({
+    super.key,
+    required this.categorias,
+    required this.onCategoriasActualizadas,
+  });
+
+  @override
+  State<TodasLasCategoriasScreen> createState() => _TodasLasCategoriasScreenState();
+}
+
+class _TodasLasCategoriasScreenState extends State<TodasLasCategoriasScreen> {
+  List<Map<String, dynamic>> categoriasList = [];
+  bool isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    categoriasList = List.from(widget.categorias);
+  }
+
+  Future<void> _recargarCategorias() async {
+    setState(() => isLoading = true);
+
+    try {
+      final service = CategoriaService();
+      final nuevasCategorias = await service.obtenerCategorias();
+      
+      setState(() {
+        categoriasList = nuevasCategorias;
+        isLoading = false;
+      });
+      
+      widget.onCategoriasActualizadas();
+    } catch (e) {
+      setState(() => isLoading = false);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${CategoriaConstants.errorLoadingCategories}${e.toString()}'),
+            backgroundColor: CategoriaTheme.addButtonColor,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: CategoriaTheme.backgroundColor,
+      appBar: _buildAppBar(),
+      body: _buildBody(),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar() {
+    return AppBar(
+      title: Text(
+        '${CategoriaConstants.allCategoriesTitle} (${categoriasList.length})',
+        style: CategoriaTextStyles.appBarTitleStyle,
+      ),
+      backgroundColor: CategoriaTheme.whiteColor,
+      elevation: 0,
+      iconTheme: const IconThemeData(color: CategoriaTheme.primaryTextColor),
+      actions: [
+        IconButton(
+          icon: const Icon(CategoriaTheme.addIcon),
+          onPressed: () async {
+            final creado = await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CreateCategoryScreen()),
+            );
+            if (creado == true) await _recargarCategorias();
+          },
+        ),
+        IconButton(
+          icon: const Icon(CategoriaTheme.refreshIcon),
+          onPressed: _recargarCategorias,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBody() {
+    if (isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (categoriasList.isEmpty) {
+      return _buildEmptyState();
+    }
+
+    return RefreshIndicator(
+      onRefresh: _recargarCategorias,
+      child: _buildGrid(),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            CategoriaTheme.categoryIcon,
+            size: CategoriaConstants.emptyStateIconSize,
+            color: CategoriaTheme.placeholderIcon,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            CategoriaConstants.noCategoriesAvailable,
+            style: CategoriaTextStyles.getEmptyStateMainStyle(),
+          ),
+          SizedBox(height: CategoriaDimensions.defaultSpacing),
+          Text(
+            CategoriaConstants.createNewCategory,
+            style: CategoriaTextStyles.getEmptyStateSubStyle(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGrid() {
+    return GridView.builder(
+      padding: CategoriaLayout.gridPadding,
+      gridDelegate: CategoriaLayout.getGridDelegate(context),
+      itemCount: categoriasList.length,
+      itemBuilder: (context, index) => _buildGridItem(index),
+    );
+  }
+
+  Widget _buildGridItem(int index) {
+    final categoriaMap = categoriasList[index];
+    late Categoria categoria;
+    
+    try {
+      categoria = Categoria.fromJson(categoriaMap);
+    } catch (e) {
+      return const SizedBox();
+    }
+
+    return GestureDetector(
+      onTap: () async {
+        final resultado = await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => CategoriaPreviewScreen(categoria: categoria),
+          ),
+        );
+        if (resultado == true) await _recargarCategorias();
+      },
+      child: Container(
+        decoration: CategoriaDecorations.getGridCardDecoration(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              flex: 3,
+              child: ClipRRect(
+                borderRadius: CategoriaLayout.topBorderRadius,
+                child: _buildGridImage(categoria),
+              ),
+            ),
+            Expanded(
+              flex: 1,
+              child: Padding(
+                padding: CategoriaLayout.cardPadding,
+                child: Center(
+                  child: Text(
+                    categoria.nombre,
+                    textAlign: TextAlign.center,
+                    style: CategoriaTextStyles.gridCategoryNameStyle,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: CategoriaConstants.maxLines,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGridImage(Categoria categoria) {
+    if (categoria.imagen != null && categoria.imagen!.isNotEmpty) {
+      return Image.network(
+        categoria.imagen!,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => Container(
+          decoration: CategoriaDecorations.getImagePlaceholderDecoration(),
+          child: Icon(
+            CategoriaTheme.brokenImageIcon,
+            size: CategoriaConstants.gridImageIconSize,
+            color: CategoriaTheme.placeholderIcon,
+          ),
+        ),
+      );
+    } else {
+      return Container(
+        decoration: CategoriaDecorations.getImagePlaceholderDecoration(),
+        child: Image.asset(
+          CategoriaConstants.defaultImagePath,
+          fit: BoxFit.cover,
+        ),
+      );
+    }
   }
 }

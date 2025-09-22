@@ -8,6 +8,130 @@ import '../models/request_models.dart';
 class CarritoService {
   final String _baseUrl = '${dotenv.env['API_URL']}/carrito';
 
+  /// Agregar producto al carrito - Método con debugging mejorado
+  Future<bool> agregarProducto(String token, String productoId, int cantidad) async {
+    try {
+      // 🔍 Debug: Mostrar qué se está enviando
+      final requestBody = {
+        'productoId': productoId,
+        'cantidad': cantidad,
+      };
+      
+      print('📤 Enviando al carrito:');
+      print('   - URL: $_baseUrl');
+      print('   - Body: ${json.encode(requestBody)}');
+      print('   - ProductoId: $productoId (${productoId.runtimeType})');
+      print('   - Cantidad: $cantidad');
+
+      final response = await http.post(
+        Uri.parse(_baseUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode(requestBody),
+      );
+
+      print('📥 Respuesta del servidor:');
+      print('   - Status: ${response.statusCode}');
+      print('   - Body: ${response.body}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        print('✅ Producto agregado exitosamente');
+        return true;
+      } else if (response.statusCode == 401) {
+        throw Exception('Unauthorized');
+      } else {
+        print('❌ Error al agregar producto (${response.statusCode}): ${response.body}');
+        
+        // 🔍 Intentar parsear el error para más detalles
+        try {
+          final errorData = json.decode(response.body);
+          if (errorData is Map && errorData.containsKey('mensaje')) {
+            throw Exception(errorData['mensaje']);
+          } else if (errorData is Map && errorData.containsKey('error')) {
+            throw Exception(errorData['error']);
+          }
+        } catch (parseError) {
+          // Si no se puede parsear, usar mensaje genérico
+        }
+        
+        return false;
+      }
+    } catch (e) {
+      print('❌ Excepción en agregarProducto: $e');
+      rethrow; // Re-lanzar la excepción para que se muestre en la UI
+    }
+  }
+
+  /// Agregar producto con validación de ID
+  Future<bool> agregarProductoConValidacion(String token, String productoId, int cantidad) async {
+    // 🔍 Validar que el productoId no esté vacío y tenga formato correcto
+    if (productoId.isEmpty) {
+      throw Exception('ID de producto vacío');
+    }
+    
+    // Si parece ser un ID de variación (muy largo o con formato específico),
+    // podría necesitar un endpoint diferente
+    if (productoId.length > 50) {
+      print('⚠️  ID muy largo, podría ser ID de variación: $productoId');
+    }
+    
+    return await agregarProducto(token, productoId, cantidad);
+  }
+
+  /// Método alternativo: Agregar producto base siempre
+  Future<bool> agregarProductoBase(String token, String productoBaseId, int cantidad, {Map<String, dynamic>? variacionSeleccionada}) async {
+    try {
+      final requestBody = {
+        'productoId': productoBaseId, // Siempre el ID del producto base
+        'cantidad': cantidad,
+      };
+
+      // Si hay variación seleccionada, agregarla como metadata
+      if (variacionSeleccionada != null) {
+        // Dependiendo de cómo maneje tu backend las variaciones:
+        if (variacionSeleccionada['id'] != null) {
+          requestBody['variacionId'] = variacionSeleccionada['id'];
+        }
+        if (variacionSeleccionada['color'] != null) {
+          requestBody['color'] = variacionSeleccionada['color'];
+        }
+        if (variacionSeleccionada['talla'] != null) {
+          requestBody['talla'] = variacionSeleccionada['talla'];
+        }
+      }
+
+      print('📤 Enviando producto base con variación:');
+      print('   - Body: ${json.encode(requestBody)}');
+
+      final response = await http.post(
+        Uri.parse(_baseUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode(requestBody),
+      );
+
+      print('📥 Respuesta: ${response.statusCode} - ${response.body}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return true;
+      } else if (response.statusCode == 401) {
+        throw Exception('Unauthorized');
+      } else {
+        print('❌ Error al agregar producto base (${response.statusCode}): ${response.body}');
+        return false;
+      }
+    } catch (e) {
+      print('❌ Excepción en agregarProductoBase: $e');
+      return false;
+    }
+  }
+
+  // ... resto de los métodos sin cambios ...
+
   /// Obtener carrito completo (JWT) - Retorna modelo Carrito
   Future<Carrito?> obtenerCarritoModelo(String token) async {
     try {
@@ -156,35 +280,6 @@ class CarritoService {
     } else {
       print('❌ Error al obtener resumen raw (${response.statusCode}): ${response.body}');
       return {};
-    }
-  }
-
-  /// Agregar producto al carrito - Método simple (sin variaciones)
-  Future<bool> agregarProducto(String token, String productoId, int cantidad) async {
-    try {
-      final response = await http.post(
-        Uri.parse(_baseUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: json.encode({
-          'productoId': productoId,
-          'cantidad': cantidad,
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        return true;
-      } else if (response.statusCode == 401) {
-        throw Exception('Unauthorized');
-      } else {
-        print('❌ Error al agregar producto (${response.statusCode}): ${response.body}');
-        return false;
-      }
-    } catch (e) {
-      print('❌ Excepción en agregarProducto: $e');
-      return false;
     }
   }
 

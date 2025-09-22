@@ -1,8 +1,10 @@
+// bienvenida_admin_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'styles/bienvenida_admin_styles.dart'; // Import de los estilos
 
 class BienvenidaAdminScreen extends StatefulWidget {
-  final String rol; // admin o superAdmin
+  final String rol;
 
   const BienvenidaAdminScreen({
     super.key,
@@ -15,18 +17,16 @@ class BienvenidaAdminScreen extends StatefulWidget {
 
 class _BienvenidaAdminScreenState extends State<BienvenidaAdminScreen>
     with TickerProviderStateMixin {
+  // Controllers de animación
   late AnimationController _controller;
   late AnimationController _slideController;
   late AnimationController _fadeController;
+  
+  // Animaciones
   late Animation<double> _scaleAnimation;
   late Animation<Offset> _slideAnimation;
   late Animation<double> _fadeAnimation;
   late Animation<double> _buttonBounceAnimation;
-  
-  final Color primaryColor = const Color(0xFFBE0C0C);
-  final Color accentColor = const Color(0xFFE8F4FD);
-  final Color gradientStart = const Color(0xFFFAFAFA);
-  final Color gradientEnd = const Color(0xFFE3F2FD);
 
   @override
   void initState() {
@@ -36,64 +36,58 @@ class _BienvenidaAdminScreenState extends State<BienvenidaAdminScreen>
   }
 
   void _setupAnimations() {
-    // Animación principal del botón
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 600),
+      duration: BienvenidaAdminAnimations.mainDuration,
       vsync: this,
     );
     
-    // Animación de deslizamiento para el contenido
     _slideController = AnimationController(
-      duration: const Duration(milliseconds: 1200),
+      duration: BienvenidaAdminAnimations.slideDuration,
       vsync: this,
     );
     
-    // Animación de fade para elementos
     _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 1500),
+      duration: BienvenidaAdminAnimations.fadeDuration,
       vsync: this,
     );
 
-    _scaleAnimation = Tween<double>(
-      begin: 0.95,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.elasticOut,
-    ));
+    _scaleAnimation = BienvenidaAdminAnimations.getScaleTween().animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: BienvenidaAdminAnimations.elasticCurve,
+      ),
+    );
 
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.3),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _slideController,
-      curve: Curves.easeOutCubic,
-    ));
+    _slideAnimation = BienvenidaAdminAnimations.getSlideTween().animate(
+      CurvedAnimation(
+        parent: _slideController,
+        curve: BienvenidaAdminAnimations.slideEaseCurve,
+      ),
+    );
 
     _fadeAnimation = CurvedAnimation(
       parent: _fadeController,
-      curve: Curves.easeInOut,
+      curve: BienvenidaAdminAnimations.fadeEaseCurve,
     );
 
-    _buttonBounceAnimation = Tween<double>(
-      begin: 1.0,
-      end: 1.1,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.elasticOut,
-    ));
+    _buttonBounceAnimation = BienvenidaAdminAnimations.getBounceTween().animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: BienvenidaAdminAnimations.elasticCurve,
+      ),
+    );
   }
 
   void _startAnimationSequence() {
-    Future.delayed(const Duration(milliseconds: 300), () {
+    Future.delayed(BienvenidaAdminAnimations.slideDelay, () {
       _slideController.forward();
     });
     
-    Future.delayed(const Duration(milliseconds: 500), () {
+    Future.delayed(BienvenidaAdminAnimations.fadeDelay, () {
       _fadeController.forward();
     });
     
-    Future.delayed(const Duration(milliseconds: 800), () {
+    Future.delayed(BienvenidaAdminAnimations.scaleDelay, () {
       _controller.forward();
     });
   }
@@ -106,133 +100,17 @@ class _BienvenidaAdminScreenState extends State<BienvenidaAdminScreen>
     super.dispose();
   }
 
-  void _onTap() async {
-    // Feedback háptico
-    HapticFeedback.lightImpact();
-    
-    // Animación de tap
-    await _controller.reverse();
-    await Future.delayed(const Duration(milliseconds: 100));
-    await _controller.forward();
-
-    // Navegación con delay para mejor UX
-    await Future.delayed(const Duration(milliseconds: 200));
-    
-    if (mounted) {
-      Navigator.pushReplacementNamed(
-        context,
-        '/control-panel',
-        arguments: {
-          'rol': widget.rol,
-        },
-      );
-    }
-  }
-
-  Map<String, double> _getResponsiveDimensions(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = MediaQuery.of(context).size.height;
-    final isTablet = screenWidth >= 768;
-    final isDesktop = screenWidth >= 1024;
-    final isSmallHeight = screenHeight < 700;
-    
-    if (isDesktop) {
-      return {
-        'titleFontSize': isSmallHeight ? 32.0 : 42.0,
-        'subtitleFontSize': 18.0,
-        'horizontalPadding': 80.0,
-        'verticalPadding': 40.0,
-        'buttonSize': 88.0,
-        'iconSize': 40.0,
-        'buttonTextSize': 18.0,
-        'imageWidthRatio': 0.45,
-        'maxWidth': 1000.0,
-        'bottomSpacing': 32.0,
-        'cardPadding': 40.0,
-      };
-    } else if (isTablet) {
-      return {
-        'titleFontSize': isSmallHeight ? 28.0 : 36.0,
-        'subtitleFontSize': 16.0,
-        'horizontalPadding': 48.0,
-        'verticalPadding': 32.0,
-        'buttonSize': 80.0,
-        'iconSize': 36.0,
-        'buttonTextSize': 17.0,
-        'imageWidthRatio': 0.55,
-        'maxWidth': 750.0,
-        'bottomSpacing': 28.0,
-        'cardPadding': 32.0,
-      };
-    } else {
-      return {
-        'titleFontSize': isSmallHeight ? 26.0 : 32.0,
-        'subtitleFontSize': 15.0,
-        'horizontalPadding': 28.0,
-        'verticalPadding': 24.0,
-        'buttonSize': 72.0,
-        'iconSize': 32.0,
-        'buttonTextSize': 16.0,
-        'imageWidthRatio': 0.65,
-        'maxWidth': double.infinity,
-        'bottomSpacing': 24.0,
-        'cardPadding': 24.0,
-      };
-    }
-  }
-
-  Widget _buildRoleIndicator() {
-    final isSuper = widget.rol.toLowerCase() == 'superadmin';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: isSuper ? const Color(0xFFFFD700).withOpacity(0.2) : primaryColor.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isSuper ? const Color(0xFFFFD700) : primaryColor,
-          width: 1.5,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            isSuper ? Icons.admin_panel_settings : Icons.shield,
-            size: 18,
-            color: isSuper ? const Color(0xFFB8860B) : primaryColor,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            isSuper ? 'Super Admin' : 'Admin',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: isSuper ? const Color(0xFFB8860B) : primaryColor,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final dimensions = _getResponsiveDimensions(context);
+        final dimensions = BienvenidaAdminDimensions.getResponsiveDimensions(context);
         final media = MediaQuery.of(context);
-        final isSmall = constraints.maxHeight < 700;
+        final isSmall = BienvenidaAdminDimensions.isSmallHeight(context);
 
         return Scaffold(
           body: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [gradientStart, gradientEnd],
-                stops: const [0.0, 1.0],
-              ),
-            ),
+            decoration: BienvenidaAdminDecorations.getBackgroundDecoration(),
             child: SafeArea(
               child: Center(
                 child: Container(
@@ -244,161 +122,30 @@ class _BienvenidaAdminScreenState extends State<BienvenidaAdminScreen>
                     ),
                     child: Column(
                       children: [
-                        // Indicador de rol
-                        FadeTransition(
-                          opacity: _fadeAnimation,
-                          child: SlideTransition(
-                            position: _slideAnimation,
-                            child: _buildRoleIndicator(),
-                          ),
+                        _RoleIndicator(
+                          rol: widget.rol,
+                          slideAnimation: _slideAnimation,
+                          fadeAnimation: _fadeAnimation,
                         ),
                         
-                        const SizedBox(height: 20),
+                        const SizedBox(height: BienvenidaAdminDimensions.roleIndicatorSpacing),
                         
-                        // Contenido principal
-                        Expanded(
-                          child: SlideTransition(
-                            position: _slideAnimation,
-                            child: FadeTransition(
-                              opacity: _fadeAnimation,
-                              child: Card(
-                                elevation: 12,
-                                shadowColor: Colors.black.withOpacity(0.1),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(24),
-                                ),
-                                child: Container(
-                                  padding: EdgeInsets.all(dimensions['cardPadding']!),
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(24),
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                      colors: [
-                                        Colors.white,
-                                        Colors.white.withOpacity(0.95),
-                                      ],
-                                    ),
-                                  ),
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      // Título principal
-                                      Text(
-                                        "¡Bienvenido!",
-                                        style: TextStyle(
-                                          fontSize: dimensions['titleFontSize']!,
-                                          fontWeight: FontWeight.w800,
-                                          color: Colors.black87,
-                                          letterSpacing: -0.5,
-                                        ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                      
-                                      SizedBox(height: isSmall ? 8 : 12),
-                                      
-                                      // Subtítulo
-                                      Text(
-                                        "Panel de Administración",
-                                        style: TextStyle(
-                                          fontSize: dimensions['subtitleFontSize']!,
-                                          fontWeight: FontWeight.w500,
-                                          color: Colors.black54,
-                                          letterSpacing: 0.5,
-                                        ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                      
-                                      SizedBox(height: isSmall ? 20 : 32),
-                                      
-                                      // Imagen con animación flotante
-                                      Expanded(
-                                        child: Container(
-                                          constraints: BoxConstraints(
-                                            maxWidth: media.size.width * dimensions['imageWidthRatio']!,
-                                            maxHeight: constraints.maxHeight * 0.4,
-                                          ),
-                                          child: TweenAnimationBuilder<double>(
-                                            duration: const Duration(seconds: 3),
-                                            tween: Tween(begin: 0.0, end: 1.0),
-                                            builder: (context, value, child) {
-                                              return Transform.translate(
-                                                offset: Offset(0, 8 * (0.5 - (value % 1.0 - 0.5).abs())),
-                                                child: Image.asset(
-                                                  'assets/bienvenida.png',
-                                                  fit: BoxFit.contain,
-                                                ),
-                                              );
-                                            },
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
+                        _MainContent(
+                          dimensions: dimensions,
+                          media: media,
+                          constraints: constraints,
+                          isSmall: isSmall,
+                          slideAnimation: _slideAnimation,
+                          fadeAnimation: _fadeAnimation,
                         ),
                         
                         SizedBox(height: dimensions['bottomSpacing']!),
                         
-                        // Botón de continuar mejorado
-                        ScaleTransition(
-                          scale: _buttonBounceAnimation,
-                          child: GestureDetector(
-                            onTap: _onTap,
-                            child: Container(
-                              width: dimensions['buttonSize']!,
-                              height: dimensions['buttonSize']!,
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [
-                                    primaryColor,
-                                    primaryColor.withOpacity(0.8),
-                                  ],
-                                ),
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: primaryColor.withOpacity(0.4),
-                                    blurRadius: 15,
-                                    offset: const Offset(0, 8),
-                                    spreadRadius: 0,
-                                  ),
-                                  BoxShadow(
-                                    color: Colors.white.withOpacity(0.8),
-                                    blurRadius: 10,
-                                    offset: const Offset(-5, -5),
-                                    spreadRadius: 0,
-                                  ),
-                                ],
-                              ),
-                              child: Icon(
-                                Icons.arrow_forward_ios_rounded,
-                                color: Colors.white,
-                                size: dimensions['iconSize']!,
-                              ),
-                            ),
-                          ),
-                        ),
-                        
-                        const SizedBox(height: 16),
-                        
-                        // Texto de continuar
-                        FadeTransition(
-                          opacity: _fadeAnimation,
-                          child: Text(
-                            "Toca para continuar",
-                            style: TextStyle(
-                              fontSize: dimensions['buttonTextSize']!,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.black54,
-                              letterSpacing: 0.3,
-                            ),
-                          ),
+                        _ContinueButton(
+                          dimensions: dimensions,
+                          buttonBounceAnimation: _buttonBounceAnimation,
+                          fadeAnimation: _fadeAnimation,
+                          onTap: _onTap,
                         ),
                       ],
                     ),
@@ -409,6 +156,256 @@ class _BienvenidaAdminScreenState extends State<BienvenidaAdminScreen>
           ),
         );
       },
+    );
+  }
+
+  void _onTap() async {
+    HapticFeedback.lightImpact();
+    
+    await _controller.reverse();
+    await Future.delayed(BienvenidaAdminAnimations.tapDelay);
+    await _controller.forward();
+
+    await Future.delayed(BienvenidaAdminAnimations.navigationDelay);
+    
+    if (mounted) {
+      Navigator.pushReplacementNamed(
+        context,
+        BienvenidaAdminConstants.controlPanelRoute,
+        arguments: {'rol': widget.rol},
+      );
+    }
+  }
+}
+
+class _RoleIndicator extends StatelessWidget {
+  final String rol;
+  final Animation<Offset> slideAnimation;
+  final Animation<double> fadeAnimation;
+
+  const _RoleIndicator({
+    required this.rol,
+    required this.slideAnimation,
+    required this.fadeAnimation,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isSuper = rol.toLowerCase() == BienvenidaAdminConstants.superAdminRoleKey;
+    
+    return FadeTransition(
+      opacity: fadeAnimation,
+      child: SlideTransition(
+        position: slideAnimation,
+        child: Container(
+          padding: BienvenidaAdminLayout.roleIndicatorPadding,
+          decoration: BienvenidaAdminDecorations.getRoleIndicatorDecoration(
+            isSuper: isSuper,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isSuper 
+                  ? BienvenidaAdminTheme.superAdminIcon 
+                  : BienvenidaAdminTheme.adminIcon,
+                size: BienvenidaAdminDimensions.roleIconSize,
+                color: isSuper 
+                  ? BienvenidaAdminTheme.superAdminTextColor 
+                  : BienvenidaAdminTheme.primaryColor,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                isSuper 
+                  ? BienvenidaAdminConstants.superAdminRole 
+                  : BienvenidaAdminConstants.adminRole,
+                style: BienvenidaAdminTextStyles.roleTextStyle.copyWith(
+                  color: isSuper 
+                    ? BienvenidaAdminTheme.superAdminTextColor 
+                    : BienvenidaAdminTheme.primaryColor,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MainContent extends StatelessWidget {
+  final Map<String, double> dimensions;
+  final MediaQueryData media;
+  final BoxConstraints constraints;
+  final bool isSmall;
+  final Animation<Offset> slideAnimation;
+  final Animation<double> fadeAnimation;
+
+  const _MainContent({
+    required this.dimensions,
+    required this.media,
+    required this.constraints,
+    required this.isSmall,
+    required this.slideAnimation,
+    required this.fadeAnimation,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: SlideTransition(
+        position: slideAnimation,
+        child: FadeTransition(
+          opacity: fadeAnimation,
+          child: Card(
+            elevation: BienvenidaAdminDimensions.cardElevation,
+            shadowColor: BienvenidaAdminTheme.cardShadowColor,
+            shape: BienvenidaAdminConstants.getCardShape(),
+            child: Container(
+              padding: EdgeInsets.all(dimensions['cardPadding']!),
+              decoration: BienvenidaAdminDecorations.getCardDecoration(),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _TitleSection(dimensions: dimensions, isSmall: isSmall),
+                  _FloatingImage(
+                    dimensions: dimensions,
+                    media: media,
+                    constraints: constraints,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TitleSection extends StatelessWidget {
+  final Map<String, double> dimensions;
+  final bool isSmall;
+
+  const _TitleSection({
+    required this.dimensions,
+    required this.isSmall,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          BienvenidaAdminConstants.welcomeTitle,
+          style: BienvenidaAdminTextStyles.getTitleStyle(dimensions),
+          textAlign: TextAlign.center,
+        ),
+        
+        SizedBox(
+          height: isSmall 
+            ? BienvenidaAdminDimensions.titleSubtitleSpacing
+            : BienvenidaAdminDimensions.titleSubtitleSpacingLarge,
+        ),
+        
+        Text(
+          BienvenidaAdminConstants.adminPanelSubtitle,
+          style: BienvenidaAdminTextStyles.getSubtitleStyle(dimensions),
+          textAlign: TextAlign.center,
+        ),
+        
+        SizedBox(
+          height: isSmall 
+            ? BienvenidaAdminDimensions.contentImageSpacing
+            : BienvenidaAdminDimensions.contentImageSpacingLarge,
+        ),
+      ],
+    );
+  }
+}
+
+class _FloatingImage extends StatelessWidget {
+  final Map<String, double> dimensions;
+  final MediaQueryData media;
+  final BoxConstraints constraints;
+
+  const _FloatingImage({
+    required this.dimensions,
+    required this.media,
+    required this.constraints,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        constraints: BienvenidaAdminLayout.getImageConstraints(
+          maxWidth: media.size.width,
+          maxHeight: constraints.maxHeight,
+          widthRatio: dimensions['imageWidthRatio']!,
+        ),
+        child: TweenAnimationBuilder<double>(
+          duration: BienvenidaAdminAnimations.floatingDuration,
+          tween: BienvenidaAdminAnimations.getFloatingTween(),
+          builder: (context, value, child) {
+            return Transform.translate(
+              offset: BienvenidaAdminLayout.getFloatingOffset(value),
+              child: Image.asset(
+                BienvenidaAdminConstants.welcomeImagePath,
+                fit: BoxFit.contain,
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _ContinueButton extends StatelessWidget {
+  final Map<String, double> dimensions;
+  final Animation<double> buttonBounceAnimation;
+  final Animation<double> fadeAnimation;
+  final VoidCallback onTap;
+
+  const _ContinueButton({
+    required this.dimensions,
+    required this.buttonBounceAnimation,
+    required this.fadeAnimation,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        ScaleTransition(
+          scale: buttonBounceAnimation,
+          child: GestureDetector(
+            onTap: onTap,
+            child: Container(
+              width: dimensions['buttonSize']!,
+              height: dimensions['buttonSize']!,
+              decoration: BienvenidaAdminDecorations.getButtonDecoration(),
+              child: Icon(
+                BienvenidaAdminTheme.continueIcon,
+                color: BienvenidaAdminTheme.buttonIconColor,
+                size: dimensions['iconSize']!,
+              ),
+            ),
+          ),
+        ),
+        
+        const SizedBox(height: BienvenidaAdminDimensions.buttonTextSpacing),
+        
+        FadeTransition(
+          opacity: fadeAnimation,
+          child: Text(
+            BienvenidaAdminConstants.continueText,
+            style: BienvenidaAdminTextStyles.getButtonTextStyle(dimensions),
+          ),
+        ),
+      ],
     );
   }
 }

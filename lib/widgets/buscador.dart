@@ -3,80 +3,75 @@ import 'package:flutter/material.dart';
 class BuscadorProductos extends StatelessWidget {
   final String busqueda;
   final ValueChanged<String> onBusquedaChanged;
-  final VoidCallback onTap;
-  final VoidCallback? onClear;
+  final VoidCallback? onTap; // ✅ opcional
+  final VoidCallback? onClear; // ✅ opcional
   final TextEditingController controller;
 
   const BuscadorProductos({
     Key? key,
     required this.busqueda,
     required this.onBusquedaChanged,
-    required this.onTap,
+    this.onTap,
     this.onClear,
     required this.controller,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final tieneTexto = busqueda.isNotEmpty;
+    final tieneTexto = controller.text.isNotEmpty;
 
     return Container(
-      height: 48,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      height: 40, // 🔥 más delgado
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(30),
+        borderRadius: BorderRadius.circular(20), // 🔥 bordes más compactos
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
           ),
         ],
-        border: Border.all(
-          color: Colors.grey.shade300,
-          width: 1,
-        ),
       ),
-      child: Row(
-        children: [
-          Icon(Icons.search, color: Colors.amber.shade700, size: 26),
-          const SizedBox(width: 10),
-          Expanded(
-            child: TextField(
-              controller: controller,
-              onTap: () {
-                print("[BuscadorProductos] onTap disparado");
-                onTap();
-              },
-              onChanged: (value) {
-                print("[BuscadorProductos] onChanged: '$value'");
-                onBusquedaChanged(value);
-              },
-              decoration: InputDecoration(
-                hintText: 'Buscar productos',
-                hintStyle: TextStyle(
-                  color: Colors.grey.shade600,
-                  fontWeight: FontWeight.w400,
-                ),
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: EdgeInsets.zero,
-              ),
-              style: const TextStyle(fontSize: 16),
-              cursorColor: Colors.amber.shade700,
-            ),
+      child: TextField(
+        controller: controller,
+        autofocus: false,
+        onTap: () {
+          debugPrint("[BuscadorProductos] onTap disparado");
+          onTap?.call();
+        },
+        onChanged: (value) {
+          debugPrint("[BuscadorProductos] onChanged: '$value'");
+          onBusquedaChanged(value);
+        },
+        decoration: InputDecoration(
+          prefixIcon: Icon(Icons.search,
+              color: Colors.amber.shade700, size: 22), // 🔥 ícono más pequeño
+          hintText: 'Buscar productos',
+          hintStyle: TextStyle(
+            color: Colors.grey.shade600,
+            fontWeight: FontWeight.w400,
+            fontSize: 14, // 🔥 texto más pequeño
           ),
-          if (tieneTexto && onClear != null)
-            GestureDetector(
-              onTap: () {
-                print("[BuscadorProductos] onClear disparado");
-                onClear!();
-                onBusquedaChanged('');
-              },
-              child: Icon(Icons.clear, color: Colors.grey.shade500, size: 20),
-            ),
-        ],
+          border: InputBorder.none,
+          isDense: true,
+          contentPadding: const EdgeInsets.only(top: 8), // 🔥 ajusta altura
+          suffixIcon: tieneTexto && onClear != null
+              ? GestureDetector(
+                  onTap: () {
+                    debugPrint("[BuscadorProductos] onClear disparado");
+                    controller.clear();
+                    onClear?.call();
+                    onBusquedaChanged('');
+                  },
+                  child: Icon(Icons.clear,
+                      color: Colors.grey.shade500, size: 18), // 🔥 más pequeño
+                )
+              : null,
+        ),
+        style: const TextStyle(fontSize: 14), // 🔥 fuente más compacta
+        cursorColor: Colors.amber.shade700,
       ),
     );
   }

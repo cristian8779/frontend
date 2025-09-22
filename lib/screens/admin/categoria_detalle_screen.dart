@@ -1,8 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import '../../services/categoria_service.dart';
+import 'package:provider/provider.dart';
+
+import '../../providers/categoria_admin_provider.dart';
 import '../../models/categoria.dart';
+import '../../providers/auth_provider.dart';
 
 class CategoriaDetalleScreen extends StatefulWidget {
   final Categoria categoria;
@@ -20,31 +23,20 @@ class _CategoriaDetalleScreenState extends State<CategoriaDetalleScreen>
     with TickerProviderStateMixin {
   late TextEditingController nombreController;
   late AnimationController _animationController;
+  late AnimationController _loadingAnimationController;
   late Animation<double> _fadeAnimation;
+  late Animation<double> _loadingScaleAnimation;
   
   bool habilitarEdicion = false;
-  bool procesando = false;
   bool _hasChanges = false;
 
   File? _imagenLocal;
   String? _imagenInternet;
 
-  // Helper methods for responsive design
-  bool get _isTablet {
-    return MediaQuery.of(context).size.width > 600;
-  }
-
-  bool get _isDesktop {
-    return MediaQuery.of(context).size.width > 1200;
-  }
-
-  bool get _isSmallScreen {
-    return MediaQuery.of(context).size.width < 360;
-  }
-
-  double get _screenWidth {
-    return MediaQuery.of(context).size.width;
-  }
+  bool get _isTablet => MediaQuery.of(context).size.width > 600;
+  bool get _isDesktop => MediaQuery.of(context).size.width > 1200;
+  bool get _isSmallScreen => MediaQuery.of(context).size.width < 360;
+  double get _screenWidth => MediaQuery.of(context).size.width;
 
   double get _maxContentWidth {
     if (_isDesktop) return 800;
@@ -91,10 +83,16 @@ class _CategoriaDetalleScreenState extends State<CategoriaDetalleScreen>
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
+
+    _loadingAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    _loadingScaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
+      CurvedAnimation(parent: _loadingAnimationController, curve: Curves.elasticOut),
+    );
     
     _animationController.forward();
-    
-    // Listeners para detectar cambios
     nombreController.addListener(_checkForChanges);
   }
 
@@ -102,6 +100,7 @@ class _CategoriaDetalleScreenState extends State<CategoriaDetalleScreen>
   void dispose() {
     nombreController.dispose();
     _animationController.dispose();
+    _loadingAnimationController.dispose();
     super.dispose();
   }
 
@@ -114,6 +113,18 @@ class _CategoriaDetalleScreenState extends State<CategoriaDetalleScreen>
     });
   }
 
+  void _volverAControlPanel() {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final rol = authProvider.rol ?? 'admin';
+    
+    Navigator.pushNamedAndRemoveUntil(
+      context,
+      '/control-panel',
+      (route) => false,
+      arguments: {'rol': rol},
+    );
+  }
+
   Future<void> eliminarCategoria() async {
     final confirmed = await _showConfirmationDialog(
       title: '¿Eliminar categoría?',
@@ -124,26 +135,28 @@ class _CategoriaDetalleScreenState extends State<CategoriaDetalleScreen>
     );
 
     if (confirmed == true) {
-      setState(() => procesando = true);
-      final service = CategoriaService();
+      final categoriasProvider = Provider.of<CategoriasProvider>(context, listen: false);
 
       try {
-        final ok = await service.eliminarCategoria(widget.categoria.id);
-        setState(() => procesando = false);
+        final success = await categoriasProvider.eliminarCategoria(widget.categoria.id);
 
-        if (ok) {
+        if (success) {
           await _showSuccessDialog(
             title: "¡Categoría eliminada!",
             message: "La categoría ha sido eliminada exitosamente.",
             icon: Icons.check_circle_outline,
+            onAccept: () {
+              Navigator.pop(context);
+              _volverAControlPanel();
+            }
           );
-          // CAMBIO: Retornar true para indicar que hubo una eliminación
-          if (mounted) Navigator.of(context).pop(true);
         } else {
-          _showErrorDialog("No se pudo eliminar la categoría. Inténtalo de nuevo.");
+          final errorMessage = categoriasProvider.errorMessage ?? 'Error desconocido al eliminar la categoría';
+          // Si el mensaje ya tiene el emoji ❌, no lo agregamos de nuevo
+          final mensajeFinal = errorMessage.startsWith('❌') ? errorMessage : '❌ $errorMessage';
+          _showErrorDialog(mensajeFinal);
         }
       } catch (e) {
-        setState(() => procesando = false);
         _showErrorDialog("Error: ${e.toString()}");
       }
     }
@@ -152,19 +165,16 @@ class _CategoriaDetalleScreenState extends State<CategoriaDetalleScreen>
   Future<void> actualizarCategoria() async {
     if (!_validateInputs()) return;
     
-    setState(() => procesando = true);
-    final service = CategoriaService();
+    final categoriasProvider = Provider.of<CategoriasProvider>(context, listen: false);
 
     try {
-      final updated = await service.actualizarCategoria(
+      final success = await categoriasProvider.actualizarCategoria(
         id: widget.categoria.id,
-        nombre: nombreController.text,
+        nombre: nombreController.text.trim(),
         imagenLocal: _imagenLocal,
       );
 
-      setState(() => procesando = false);
-
-      if (updated.isNotEmpty) {
+      if (success) {
         setState(() {
           habilitarEdicion = false;
           _hasChanges = false;
@@ -177,15 +187,16 @@ class _CategoriaDetalleScreenState extends State<CategoriaDetalleScreen>
           title: "¡Categoría actualizada!",
           message: "Los cambios se han guardado exitosamente.",
           icon: Icons.check_circle_outline,
+          onAccept: () {
+            Navigator.pop(context);
+            _volverAControlPanel();
+          }
         );
-        
-        // Retornar true para indicar que hubo cambios
-        if (mounted) Navigator.of(context).pop(true);
       } else {
-        throw Exception("No se recibió respuesta del servidor");
+        final errorMessage = categoriasProvider.errorMessage ?? 'Error desconocido';
+        _showErrorDialog("Error al actualizar: $errorMessage");
       }
     } catch (e) {
-      setState(() => procesando = false);
       _showErrorDialog("Error al actualizar: ${e.toString()}");
     }
   }
@@ -272,9 +283,11 @@ class _CategoriaDetalleScreenState extends State<CategoriaDetalleScreen>
     required String title,
     required String message,
     required IconData icon,
+    VoidCallback? onAccept,
   }) {
     return showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         content: Column(
@@ -312,7 +325,7 @@ class _CategoriaDetalleScreenState extends State<CategoriaDetalleScreen>
         actions: [
           Center(
             child: ElevatedButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: onAccept ?? () => Navigator.pop(context),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.green,
                 foregroundColor: Colors.white,
@@ -395,19 +408,6 @@ class _CategoriaDetalleScreenState extends State<CategoriaDetalleScreen>
   }
 
   Future<void> seleccionarImagen() async {
-    // Mostrar loader mientras se abre la galería
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => Center(
-        child: SizedBox(
-          width: _isSmallScreen ? 40 : (_isTablet ? 60 : 50),
-          height: _isSmallScreen ? 40 : (_isTablet ? 60 : 50),
-          child: const CircularProgressIndicator(),
-        ),
-      ),
-    );
-
     try {
       final picker = ImagePicker();
       final pickedFile = await picker.pickImage(
@@ -417,9 +417,6 @@ class _CategoriaDetalleScreenState extends State<CategoriaDetalleScreen>
         imageQuality: 85,
       );
 
-      // Cerrar loader
-      Navigator.of(context).pop();
-
       if (pickedFile != null) {
         setState(() {
           _imagenLocal = File(pickedFile.path);
@@ -427,7 +424,6 @@ class _CategoriaDetalleScreenState extends State<CategoriaDetalleScreen>
         });
         _checkForChanges();
         
-        // Mostrar confirmación visual
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
@@ -452,8 +448,6 @@ class _CategoriaDetalleScreenState extends State<CategoriaDetalleScreen>
         );
       }
     } catch (e) {
-      // Cerrar loader si hay error
-      Navigator.of(context).pop();
       _showErrorDialog("Error al seleccionar imagen: ${e.toString()}");
     }
   }
@@ -474,183 +468,262 @@ class _CategoriaDetalleScreenState extends State<CategoriaDetalleScreen>
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: _onWillPop,
-      child: Scaffold(
-        backgroundColor: const Color(0xFFF8F9FA),
-        body: FadeTransition(
-          opacity: _fadeAnimation,
-          child: CustomScrollView(
-            slivers: [
-              SliverAppBar(
-                expandedHeight: _isSmallScreen ? 100 : (_isTablet ? 140 : 120),
-                floating: false,
-                pinned: true,
-                backgroundColor: Colors.white,
-                elevation: 0,
-                leading: IconButton(
-                  icon: Icon(
-                    Icons.arrow_back_ios, 
-                    color: Colors.black87,
-                    size: _responsiveIconSize,
-                  ),
-                  onPressed: () async {
-                    if (await _onWillPop()) {
-                      Navigator.pop(context);
-                    }
-                  },
-                ),
-                flexibleSpace: FlexibleSpaceBar(
-                  title: Text(
-                    habilitarEdicion ? 'Editando categoría' : 'Detalle categoría',
-                    style: TextStyle(
-                      color: Colors.black87,
-                      fontSize: _isSmallScreen ? 14 : (_screenWidth < 350 ? 16 : (_isTablet ? 20 : 18)),
-                      fontWeight: FontWeight.w600,
-                    ),
-                    overflow: TextOverflow.fade,
-                    softWrap: false,
-                  ),
-                  centerTitle: true,
-                ),
-                actions: [
-                  if (habilitarEdicion && _hasChanges)
-                    Container(
-                      margin: EdgeInsets.only(right: _isSmallScreen ? 4 : (_isTablet ? 12 : 8)),
-                      child: IconButton(
-                        icon: Container(
-                          padding: EdgeInsets.all(_isSmallScreen ? 4 : (_isTablet ? 8 : 6)),
-                          decoration: BoxDecoration(
-                            color: Colors.orange.withOpacity(0.1),
-                            shape: BoxShape.circle,
+    return Consumer<CategoriasProvider>(
+      builder: (context, categoriasProvider, child) {
+        final isProcessing = categoriasProvider.isUpdating || categoriasProvider.isDeleting;
+        final loadingMessage = categoriasProvider.isUpdating 
+            ? 'Guardando cambios...' 
+            : categoriasProvider.isDeleting 
+                ? 'Eliminando categoría...' 
+                : '';
+
+        return WillPopScope(
+          onWillPop: _onWillPop,
+          child: Scaffold(
+            backgroundColor: const Color(0xFFF8F9FA),
+            body: Stack(
+              children: [
+                FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: CustomScrollView(
+                    slivers: [
+                      SliverAppBar(
+                        expandedHeight: _isSmallScreen ? 100 : (_isTablet ? 140 : 120),
+                        floating: false,
+                        pinned: true,
+                        backgroundColor: Colors.white,
+                        elevation: 0,
+                        leading: IconButton(
+                          icon: Icon(
+                            Icons.arrow_back_ios, 
+                            color: Colors.black87,
+                            size: _responsiveIconSize,
                           ),
-                          child: Icon(
-                            Icons.save, 
-                            color: Colors.orange, 
-                            size: _responsiveIconSize
-                          ),
-                        ),
-                        onPressed: procesando ? null : actualizarCategoria,
-                      ),
-                    ),
-                  IconButton(
-                    icon: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: EdgeInsets.all(_isSmallScreen ? 4 : (_isTablet ? 8 : 6)),
-                      decoration: BoxDecoration(
-                        color: habilitarEdicion
-                            ? Colors.green.withOpacity(0.1)
-                            : Colors.blue.withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        habilitarEdicion ? Icons.check : Icons.edit,
-                        color: habilitarEdicion ? Colors.green : Colors.blue,
-                        size: _responsiveIconSize,
-                      ),
-                    ),
-                    onPressed: procesando
-                        ? null
-                        : () async {
-                            if (habilitarEdicion && _hasChanges) {
-                              final shouldSave = await _showConfirmationDialog(
-                                title: '¿Guardar cambios?',
-                                content: 'Tienes cambios sin guardar. ¿Quieres guardarlos antes de salir del modo edición?',
-                                confirmText: 'Guardar',
-                                cancelText: 'Descartar',
-                              );
-                              if (shouldSave == true) {
-                                await actualizarCategoria();
-                              } else {
-                                setState(() {
-                                  habilitarEdicion = false;
-                                  _hasChanges = false;
-                                  nombreController.text = widget.categoria.nombre;
-                                  _imagenLocal = null;
-                                  _imagenInternet = widget.categoria.imagen;
-                                });
-                              }
-                            } else {
-                              setState(() {
-                                habilitarEdicion = !habilitarEdicion;
-                              });
+                          onPressed: isProcessing ? null : () async {
+                            if (await _onWillPop()) {
+                              Navigator.pop(context, true);
                             }
                           },
-                  ),
-                  PopupMenuButton<String>(
-                    icon: Icon(
-                      Icons.more_vert, 
-                      color: Colors.black87,
-                      size: _responsiveIconSize,
-                    ),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    itemBuilder: (context) => [
-                      PopupMenuItem(
-                        value: 'delete',
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.delete_outline, 
-                              color: Colors.red, 
-                              size: _responsiveIconSize
+                        ),
+                        flexibleSpace: FlexibleSpaceBar(
+                          title: Text(
+                            habilitarEdicion ? 'Editando categoría' : 'Detalle categoría',
+                            style: TextStyle(
+                              color: Colors.black87,
+                              fontSize: _isSmallScreen ? 14 : (_screenWidth < 350 ? 16 : (_isTablet ? 20 : 18)),
+                              fontWeight: FontWeight.w600,
                             ),
-                            SizedBox(width: _isSmallScreen ? 6 : (_isTablet ? 12 : 8)),
-                            Flexible(
-                              child: Text(
-                                'Eliminar categoría',
-                                style: TextStyle(fontSize: _isSmallScreen ? 13 : (_isTablet ? 16 : 14)),
-                                overflow: TextOverflow.ellipsis,
+                            overflow: TextOverflow.fade,
+                            softWrap: false,
+                          ),
+                          centerTitle: true,
+                        ),
+                        actions: [
+                          if (habilitarEdicion && _hasChanges)
+                            Container(
+                              margin: EdgeInsets.only(right: _isSmallScreen ? 4 : (_isTablet ? 12 : 8)),
+                              child: IconButton(
+                                icon: Container(
+                                  padding: EdgeInsets.all(_isSmallScreen ? 4 : (_isTablet ? 8 : 6)),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.withOpacity(0.1),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    Icons.save, 
+                                    color: Colors.orange, 
+                                    size: _responsiveIconSize
+                                  ),
+                                ),
+                                onPressed: isProcessing ? null : actualizarCategoria,
                               ),
                             ),
-                          ],
+                          IconButton(
+                            icon: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: EdgeInsets.all(_isSmallScreen ? 4 : (_isTablet ? 8 : 6)),
+                              decoration: BoxDecoration(
+                                color: habilitarEdicion
+                                    ? Colors.green.withOpacity(0.1)
+                                    : Colors.blue.withOpacity(0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                habilitarEdicion ? Icons.check : Icons.edit,
+                                color: habilitarEdicion ? Colors.green : Colors.blue,
+                                size: _responsiveIconSize,
+                              ),
+                            ),
+                            onPressed: isProcessing
+                                ? null
+                                : () async {
+                                    if (habilitarEdicion && _hasChanges) {
+                                      final shouldSave = await _showConfirmationDialog(
+                                        title: '¿Guardar cambios?',
+                                        content: 'Tienes cambios sin guardar. ¿Quieres guardarlos antes de salir del modo edición?',
+                                        confirmText: 'Guardar',
+                                        cancelText: 'Descartar',
+                                      );
+                                      if (shouldSave == true) {
+                                        await actualizarCategoria();
+                                      } else {
+                                        setState(() {
+                                          habilitarEdicion = false;
+                                          _hasChanges = false;
+                                          nombreController.text = widget.categoria.nombre;
+                                          _imagenLocal = null;
+                                          _imagenInternet = widget.categoria.imagen;
+                                        });
+                                      }
+                                    } else {
+                                      setState(() {
+                                        habilitarEdicion = !habilitarEdicion;
+                                      });
+                                    }
+                                  },
+                          ),
+                          PopupMenuButton<String>(
+                            icon: Icon(
+                              Icons.more_vert, 
+                              color: Colors.black87,
+                              size: _responsiveIconSize,
+                            ),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            enabled: !isProcessing,
+                            itemBuilder: (context) => [
+                              PopupMenuItem(
+                                value: 'delete',
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.delete_outline, 
+                                      color: Colors.red, 
+                                      size: _responsiveIconSize
+                                    ),
+                                    SizedBox(width: _isSmallScreen ? 6 : (_isTablet ? 12 : 8)),
+                                    Flexible(
+                                      child: Text(
+                                        'Eliminar categoría',
+                                        style: TextStyle(fontSize: _isSmallScreen ? 13 : (_isTablet ? 16 : 14)),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            onSelected: (value) {
+                              if (value == 'delete') {
+                                eliminarCategoria();
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                      SliverToBoxAdapter(
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(maxWidth: _maxContentWidth),
+                            child: Padding(
+                              padding: _responsivePadding,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildImageSection(isProcessing),
+                                  SizedBox(height: _isSmallScreen ? 24 : (_isTablet ? 40 : 32)),
+                                  _buildFormSection(isProcessing),
+                                  SizedBox(height: _isSmallScreen ? 24 : (_isTablet ? 40 : 32)),
+                                ],
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ],
-                    onSelected: (value) {
-                      if (value == 'delete') {
-                        eliminarCategoria();
-                      }
-                    },
                   ),
-                ],
-              ),
-              SliverToBoxAdapter(
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: _maxContentWidth),
-                    child: Padding(
-                      padding: _responsivePadding,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildImageSection(),
-                          SizedBox(height: _isSmallScreen ? 24 : (_isTablet ? 40 : 32)),
-                          _buildFormSection(),
-                          SizedBox(height: _isSmallScreen ? 24 : (_isTablet ? 40 : 32)),
-                          if (procesando) _buildLoadingSection(),
-                        ],
-                      ),
+                ),
+                _buildLoadingOverlay(isProcessing, loadingMessage),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLoadingOverlay(bool isProcessing, String loadingMessage) {
+    return Visibility(
+      visible: isProcessing,
+      child: Container(
+        color: Colors.black.withOpacity(0.6),
+        child: Center(
+          child: Container(
+            padding: EdgeInsets.all(_isSmallScreen ? 20 : (_isTablet ? 32 : 24)),
+            margin: EdgeInsets.symmetric(horizontal: _isSmallScreen ? 24 : (_isTablet ? 40 : 32)),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(_isSmallScreen ? 16 : (_isTablet ? 24 : 20)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: EdgeInsets.all(_isSmallScreen ? 12 : (_isTablet ? 16 : 14)),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: SizedBox(
+                    width: _isSmallScreen ? 40 : (_isTablet ? 56 : 48),
+                    height: _isSmallScreen ? 40 : (_isTablet ? 56 : 48),
+                    child: CircularProgressIndicator(
+                      strokeWidth: _isSmallScreen ? 3 : (_isTablet ? 5 : 4),
+                      valueColor: const AlwaysStoppedAnimation<Color>(Colors.blue),
                     ),
                   ),
                 ),
-              ),
-            ],
+                SizedBox(height: _isSmallScreen ? 16 : (_isTablet ? 24 : 20)),
+                Text(
+                  loadingMessage.isNotEmpty ? loadingMessage : 'Procesando...',
+                  style: TextStyle(
+                    fontSize: _responsiveFontSize,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(height: _isSmallScreen ? 8 : (_isTablet ? 12 : 10)),
+                Text(
+                  'Por favor espera un momento...',
+                  style: TextStyle(
+                    fontSize: _isSmallScreen ? 13 : (_isTablet ? 16 : 14),
+                    color: Colors.grey[600],
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildImageSection() {
+  Widget _buildImageSection(bool isProcessing) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Use Column with separate rows for better responsive handling
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Title row - always fits
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -668,7 +741,6 @@ class _CategoriaDetalleScreenState extends State<CategoriaDetalleScreen>
                 ),
               ],
             ),
-            // Status chip on separate line for small screens
             SizedBox(height: _isSmallScreen ? 8 : 0),
             if (_isSmallScreen)
               Container(
@@ -714,7 +786,7 @@ class _CategoriaDetalleScreenState extends State<CategoriaDetalleScreen>
         ),
         SizedBox(height: _isSmallScreen ? 12 : (_isTablet ? 20 : 16)),
         GestureDetector(
-          onTap: habilitarEdicion ? seleccionarImagen : null,
+          onTap: (habilitarEdicion && !isProcessing) ? seleccionarImagen : null,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             height: _imageHeight,
@@ -740,14 +812,14 @@ class _CategoriaDetalleScreenState extends State<CategoriaDetalleScreen>
                   child: _imagenLocal != null
                       ? Image.file(
                           _imagenLocal!,
-                          fit: BoxFit.contain,
+                          fit: BoxFit.cover,
                           width: double.infinity,
                           height: double.infinity,
                         )
                       : _imagenInternet != null && _imagenInternet!.isNotEmpty
                           ? Image.network(
                               _imagenInternet!,
-                              fit: BoxFit.contain,
+                              fit: BoxFit.cover,
                               width: double.infinity,
                               height: double.infinity,
                               loadingBuilder: (context, child, loadingProgress) {
@@ -764,7 +836,7 @@ class _CategoriaDetalleScreenState extends State<CategoriaDetalleScreen>
                             )
                           : _buildImagePlaceholder(),
                 ),
-                if (habilitarEdicion)
+                if (habilitarEdicion && !isProcessing)
                   Positioned.fill(
                     child: Container(
                       decoration: BoxDecoration(
@@ -881,7 +953,7 @@ class _CategoriaDetalleScreenState extends State<CategoriaDetalleScreen>
     );
   }
 
-  Widget _buildFormSection() {
+  Widget _buildFormSection(bool isProcessing) {
     return Container(
       padding: EdgeInsets.all(_isSmallScreen ? 16 : (_isTablet ? 28 : 24)),
       decoration: BoxDecoration(
@@ -919,10 +991,10 @@ class _CategoriaDetalleScreenState extends State<CategoriaDetalleScreen>
             controller: nombreController,
             label: 'Nombre de la categoría',
             icon: Icons.category_outlined,
-            enabled: habilitarEdicion,
+            enabled: habilitarEdicion && !isProcessing,
             validator: (value) => value?.isEmpty ?? true ? 'Campo obligatorio' : null,
           ),
-          if (habilitarEdicion && _hasChanges) ...[
+          if (habilitarEdicion && _hasChanges && !isProcessing) ...[
             SizedBox(height: _isSmallScreen ? 12 : (_isTablet ? 20 : 16)),
             Container(
               padding: EdgeInsets.all(_isSmallScreen ? 8 : (_isTablet ? 16 : 12)),
@@ -1020,40 +1092,6 @@ class _CategoriaDetalleScreenState extends State<CategoriaDetalleScreen>
               )
             : null,
         ),
-      ),
-    );
-  }
-
-  Widget _buildLoadingSection() {
-    return Container(
-      padding: EdgeInsets.all(_isSmallScreen ? 16 : (_isTablet ? 28 : 24)),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(_isSmallScreen ? 16 : (_isTablet ? 20 : 16)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: _isSmallScreen ? 8 : (_isTablet ? 12 : 10),
-            offset: Offset(0, _isSmallScreen ? 3 : (_isTablet ? 6 : 4)),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          SizedBox(
-            width: _isSmallScreen ? 40 : (_isTablet ? 60 : 50),
-            height: _isSmallScreen ? 40 : (_isTablet ? 60 : 50),
-            child: const CircularProgressIndicator(),
-          ),
-          SizedBox(height: _isSmallScreen ? 12 : (_isTablet ? 20 : 16)),
-          Text(
-            'Procesando...',
-            style: TextStyle(
-              color: Colors.grey[600],
-              fontSize: _isSmallScreen ? 14 : (_isTablet ? 18 : 16),
-            ),
-          ),
-        ],
       ),
     );
   }

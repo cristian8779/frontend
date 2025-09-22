@@ -1,21 +1,20 @@
 import 'package:flutter/material.dart';
-import '../../providers/auth_provider.dart';
 import 'package:provider/provider.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/bottom_nav_provider.dart';
 
 class CustomBottomNavigationBar extends StatelessWidget {
-  final int currentIndex;
-  final Function(int) onTap;
+  final Function(int)? onTap; // 🔹 Función que llama la pantalla al tocar
 
-  const CustomBottomNavigationBar({
-    super.key,
-    required this.currentIndex,
-    required this.onTap,
-  });
+  const CustomBottomNavigationBar({super.key, this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
+    final bottomNavProvider = context.watch<BottomNavProvider>();
+
     final isUserLoggedIn = authProvider.isAuthenticated;
+    final currentIndex = bottomNavProvider.currentIndex;
 
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
@@ -33,8 +32,8 @@ class CustomBottomNavigationBar extends StatelessWidget {
           ),
           child: Stack(
             children: [
-              _buildNavigationRow(context, dimensions, isUserLoggedIn),
-              _buildCenterButton(context, dimensions),
+              _buildNavigationRow(context, dimensions, isUserLoggedIn, currentIndex),
+              _buildCenterButton(context, dimensions, currentIndex),
             ],
           ),
         ),
@@ -139,7 +138,7 @@ class CustomBottomNavigationBar extends StatelessWidget {
     );
   }
 
-  Widget _buildNavigationRow(BuildContext context, NavigationDimensions dimensions, bool isUserLoggedIn) {
+  Widget _buildNavigationRow(BuildContext context, NavigationDimensions dimensions, bool isUserLoggedIn, int currentIndex) {
     final leftItems = _getLeftNavigationItems(isUserLoggedIn);
     final rightItems = _getRightNavigationItems(isUserLoggedIn);
 
@@ -149,7 +148,7 @@ class CustomBottomNavigationBar extends StatelessWidget {
           flex: isUserLoggedIn ? 2 : 1,
           child: Row(
             mainAxisAlignment: isUserLoggedIn ? MainAxisAlignment.spaceEvenly : MainAxisAlignment.center,
-            children: leftItems.map((item) => _buildNavItem(context: context, item: item, dimensions: dimensions)).toList(),
+            children: leftItems.map((item) => _buildNavItem(context: context, item: item, dimensions: dimensions, currentIndex: currentIndex)).toList(),
           ),
         ),
         SizedBox(width: dimensions.buttonSize + 16),
@@ -157,7 +156,7 @@ class CustomBottomNavigationBar extends StatelessWidget {
           flex: isUserLoggedIn ? 2 : 1,
           child: Row(
             mainAxisAlignment: isUserLoggedIn ? MainAxisAlignment.spaceEvenly : MainAxisAlignment.center,
-            children: rightItems.map((item) => _buildNavItem(context: context, item: item, dimensions: dimensions)).toList(),
+            children: rightItems.map((item) => _buildNavItem(context: context, item: item, dimensions: dimensions, currentIndex: currentIndex)).toList(),
           ),
         ),
       ],
@@ -171,7 +170,6 @@ class CustomBottomNavigationBar extends StatelessWidget {
         activeIcon: Icons.home_rounded,
         index: 0,
         label: 'Inicio',
-        route: '/bienvenida',
       ),
     ];
 
@@ -181,7 +179,6 @@ class CustomBottomNavigationBar extends StatelessWidget {
         activeIcon: Icons.favorite_rounded,
         index: 1,
         label: 'Favoritos',
-        route: '/favorites',
       ));
     }
 
@@ -197,7 +194,6 @@ class CustomBottomNavigationBar extends StatelessWidget {
         activeIcon: Icons.person_rounded,
         index: 3,
         label: 'Perfil',
-        route: '/profile',
       ));
     }
 
@@ -206,18 +202,22 @@ class CustomBottomNavigationBar extends StatelessWidget {
       activeIcon: Icons.menu_rounded,
       index: 4,
       label: 'Más',
-      route: '/more',
     ));
 
     return items;
   }
 
-  Widget _buildCenterButton(BuildContext context, NavigationDimensions dimensions) {
+  Widget _buildCenterButton(BuildContext context, NavigationDimensions dimensions, int currentIndex) {
+    final bottomNavProvider = context.read<BottomNavProvider>();
+    final isActive = currentIndex == 2;
+
     return Positioned.fill(
       child: Center(
         child: GestureDetector(
-          onTap: () => _handleNavigation(context,
-              NavigationItem(icon: Icons.shopping_cart, activeIcon: Icons.shopping_cart, index: 2, label: 'Carrito', route: '/cart')),
+          onTap: () {
+            bottomNavProvider.setIndex(2);
+            if (onTap != null) onTap!(2); // 🔹 Llama a la pantalla
+          },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 250),
             width: dimensions.buttonSize,
@@ -244,7 +244,7 @@ class CustomBottomNavigationBar extends StatelessWidget {
             ),
             child: AnimatedScale(
               duration: const Duration(milliseconds: 150),
-              scale: currentIndex == 2 ? 1.05 : 1.0,
+              scale: isActive ? 1.05 : 1.0,
               child: Container(
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
@@ -270,12 +270,17 @@ class CustomBottomNavigationBar extends StatelessWidget {
     required BuildContext context,
     required NavigationItem item,
     required NavigationDimensions dimensions,
+    required int currentIndex,
   }) {
-    final isActive = currentIndex == item.index;
+    final bottomNavProvider = context.read<BottomNavProvider>();
+    final isActive = item.index == currentIndex;
 
     return Flexible(
       child: GestureDetector(
-        onTap: () => _handleNavigation(context, item),
+        onTap: () {
+          bottomNavProvider.setIndex(item.index);
+          if (onTap != null) onTap!(item.index); // 🔹 Llama a la pantalla
+        },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           padding: dimensions.itemPadding,
@@ -309,34 +314,12 @@ class CustomBottomNavigationBar extends StatelessWidget {
       ),
     );
   }
-
-  void _handleNavigation(BuildContext context, NavigationItem item) {
-    switch (item.index) {
-      case 0: // Inicio
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          '/bienvenida',
-          (route) => false,
-        );
-        break;
-      case 2: // Carrito
-        Navigator.pushNamed(context, '/cart').then((_) {
-          onTap(item.index);
-        });
-        break;
-      case 3: // Perfil
-        Navigator.pushNamed(context, '/profile').then((_) {
-          onTap(item.index);
-        });
-        break;
-      default:
-        onTap(item.index);
-        break;
-    }
-  }
 }
 
-// Resto de clases (sin cambios)
+// ==================
+// Clases auxiliares
+// ==================
+
 class NavigationDimensions {
   final double containerHeight;
   final double horizontalPadding;
@@ -376,13 +359,11 @@ class NavigationItem {
   final IconData activeIcon;
   final int index;
   final String label;
-  final String route;
 
   NavigationItem({
     required this.icon,
     required this.activeIcon,
     required this.index,
     required this.label,
-    required this.route,
   });
 }

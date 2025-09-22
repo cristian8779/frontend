@@ -3,9 +3,18 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter/services.dart'; // 👈 agregado para controlar la orientación
+import 'package:flutter_localizations/flutter_localizations.dart'; // 👈 agregado para español
 
 // Providers
 import 'providers/auth_provider.dart';
+import 'providers/categoria_provider.dart'; // 👈 NUEVO provider agregado
+import 'providers/bottom_nav_provider.dart';
+import 'providers/producto_provider.dart';
+import 'providers/anuncio_provider.dart';
+import 'providers/producto_admin_provider.dart';
+import 'providers/categoria_admin_provider.dart';
+import 'providers/anuncio_admin_provider.dart';
+import 'providers/variacion_admin_provider.dart';
 
 // Widgets de búsqueda
 import 'widgets/buscador.dart';
@@ -32,6 +41,11 @@ import 'screens/admin/gestion_anuncios_screen.dart';
 import 'screens/admin/anuncios_screen.dart';
 import 'screens/admin/pantalla_rol.dart';
 import 'screens/admin/invitaciones.dart';
+import 'screens/admin/transferir_rol.dart';
+import 'screens/admin/confirmar_codigo_rol_screen.dart';
+
+
+
 import 'screens/usuario/bienvenida_usuario_screen.dart';
 import 'screens/usuario/favorito.dart';
 import 'screens/usuario/historial/historial_screen.dart';
@@ -43,6 +57,9 @@ import 'screens/cart/cart_page.dart';
 import 'screens/profile/profile_page.dart';
 import 'screens/bold_payment_page.dart';
 import 'screens/more/more_page.dart';
+
+// 👇 AGREGAR: RouteObserver global
+final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -67,6 +84,15 @@ class AppProviders extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => CategoriaProvider()), // 👈 agregado
+        ChangeNotifierProvider(create: (_) => BottomNavProvider()),
+        ChangeNotifierProvider(create: (_) => ProductosProvider()),
+        ChangeNotifierProvider(create: (_) => AnuncioProvider()),
+        ChangeNotifierProvider(create: (_) => ProductoProvider()),
+        ChangeNotifierProvider(create: (_) => CategoriasProvider()),
+        ChangeNotifierProvider(create: (_) => AnunciosProvider()),
+        ChangeNotifierProvider(create: (_) => VariacionProvider()),
+
       ],
       child: const MyApp(),
     );
@@ -87,7 +113,21 @@ class MyApp extends StatelessWidget {
             primarySwatch: Colors.red,
             scaffoldBackgroundColor: Colors.white,
           ),
+          navigatorObservers: [routeObserver],
           home: const SplashScreenWrapper(),
+
+          // 👇 agregado para soporte de español
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: const [
+            Locale('es', 'ES'), // Español
+            Locale('en', 'US'), // Inglés opcional
+          ],
+          locale: const Locale('es', 'ES'),
+
           routes: {
             '/login': (_) => const LoginScreen(),
             '/forgot': (_) => const ForgotPasswordScreen(),
@@ -102,6 +142,9 @@ class MyApp extends StatelessWidget {
             '/pantalla-rol': (_) => const PantallaRol(),
             '/invitaciones': (_) =>
                 const InvitacionRolScreen(rolActual: 'superAdmin'),
+           '/transferir': (_) => const TransferenciaSuperAdminScreen(),
+           '/confirmar-codigo-rol': (_) => const ConfirmarCodigoRolScreen(),
+
             '/bienvenida': (_) => const BienvenidaUsuarioScreen(),
             '/favorites': (_) => FavoritesPage(),
             '/cart': (_) => const CartPage(),

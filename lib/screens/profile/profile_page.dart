@@ -1047,7 +1047,8 @@ class _ProfilePageState extends State<ProfilePage> {
         actions: [
           if (_hasProfile) ...[
             if (!_isEditing) ...[
-              SettingsButton(onLogout: _handleLogout),
+              const SettingsButton(),
+
               const SizedBox(width: 8),
             ],
             TextButton(

@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:lottie/lottie.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-import '../../services/categoria_service.dart';
-import '../../providers/auth_provider.dart';
 import 'package:provider/provider.dart';
+
+import '../../providers/categoria_admin_provider.dart';
+import '../../providers/auth_provider.dart';
 
 class CreateCategoryScreen extends StatefulWidget {
   const CreateCategoryScreen({super.key});
@@ -19,7 +20,6 @@ class _CreateCategoryScreenState extends State<CreateCategoryScreen> {
   String? _errorNombre;
 
   File? _imagenLocal;
-  bool _cargando = false;
 
   final Color _colorPrimario = const Color(0xFF4A4A4A);
   final Color _appBarColor = const Color(0xFFFDFDFD);
@@ -107,17 +107,16 @@ class _CreateCategoryScreenState extends State<CreateCategoryScreen> {
       return;
     }
 
-    setState(() => _cargando = true);
+    // 🎯 USAR EL PROVIDER EN LUGAR DEL SERVICE DIRECTO
+    final categoriasProvider = Provider.of<CategoriasProvider>(context, listen: false);
 
     try {
-      final service = CategoriaService();
-
-      final response = await service.crearCategoriaConImagenLocal(
-        nombre: _nombreController.text,
+      final success = await categoriasProvider.crearCategoria(
+        nombre: _nombreController.text.trim(),
         imagenLocal: _imagenLocal!,
       );
 
-      if (response.isNotEmpty && response.containsKey('categoria')) {
+      if (success) {
         _mostrarDialogoConAnimacion(
           titulo: "¡Éxito!",
           mensaje: "Categoría creada correctamente.",
@@ -128,12 +127,12 @@ class _CreateCategoryScreenState extends State<CreateCategoryScreen> {
           },
         );
       } else {
-        _mostrarErrorToast("❌ No se pudo crear la categoría.");
+        // El error ya está manejado en el provider
+        final errorMessage = categoriasProvider.errorMessage ?? 'Error desconocido';
+        _mostrarErrorToast("❌ $errorMessage");
       }
     } catch (e) {
-      _mostrarErrorToast("❌ Ocurrió un error: ${e.toString()}");
-    } finally {
-      setState(() => _cargando = false);
+      _mostrarErrorToast("❌ Ocurrió un error inesperado: ${e.toString()}");
     }
   }
 
@@ -209,71 +208,100 @@ class _CreateCategoryScreenState extends State<CreateCategoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _fondoClaro,
-      appBar: AppBar(
-        title: const Text(
-          'Crear Categoría',
-          style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600),
-        ),
-        centerTitle: true,
-        backgroundColor: _appBarColor,
-        iconTheme: const IconThemeData(color: Colors.black87),
-        elevation: 1,
-      ),
-      body: Stack(
-        children: [
-          SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Imagen de la categoría',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 10),
-                _buildContenedorImagen(),
-                const SizedBox(height: 30),
-                TextField(
-                  controller: _nombreController,
-                  decoration: _inputDecoration('Nombre de la categoría', Icons.category)
-                      .copyWith(errorText: _errorNombre),
-                ),
-                const SizedBox(height: 40),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    icon: _cargando
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : const Icon(Icons.check_circle_outline),
-                    label: Text(
-                      _cargando ? 'Creando...' : 'Crear Categoría',
-                      style: const TextStyle(fontSize: 16),
+    return Consumer<CategoriasProvider>(
+      builder: (context, categoriasProvider, child) {
+        // 🎯 USAR EL ESTADO DEL PROVIDER PARA MOSTRAR LOADING
+        final isCreating = categoriasProvider.isCreating;
+
+        return Scaffold(
+          backgroundColor: _fondoClaro,
+          appBar: AppBar(
+            title: const Text(
+              'Crear Categoría',
+              style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600),
+            ),
+            centerTitle: true,
+            backgroundColor: _appBarColor,
+            iconTheme: const IconThemeData(color: Colors.black87),
+            elevation: 1,
+          ),
+          body: Stack(
+            children: [
+              SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Imagen de la categoría',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                     ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _colorPrimario,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                    const SizedBox(height: 10),
+                    _buildContenedorImagen(),
+                    const SizedBox(height: 30),
+                    TextField(
+                      controller: _nombreController,
+                      enabled: !isCreating, // 🎯 DESHABILITAR DURANTE CREACIÓN
+                      decoration: _inputDecoration('Nombre de la categoría', Icons.category)
+                          .copyWith(errorText: _errorNombre),
+                    ),
+                    const SizedBox(height: 40),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        icon: isCreating
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.check_circle_outline),
+                        label: Text(
+                          isCreating ? 'Creando...' : 'Crear Categoría',
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _colorPrimario,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        onPressed: isCreating ? null : _crearCategoria,
                       ),
                     ),
-                    onPressed: _cargando ? null : _crearCategoria,
+                  ],
+                ),
+              ),
+              
+              // 🎯 OVERLAY DE LOADING OPCIONAL (si quieres bloquear toda la pantalla)
+              if (isCreating)
+                Container(
+                  color: Colors.black26,
+                  child: const Center(
+                    child: Card(
+                      child: Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CircularProgressIndicator(),
+                            SizedBox(height: 16),
+                            Text('Creando categoría...'),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
                 ),
-              ],
-            ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 

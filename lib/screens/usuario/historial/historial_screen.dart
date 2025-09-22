@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../services/HistorialService.dart';
 import '../../../services/FavoritoService.dart';
 import 'package:shimmer/shimmer.dart';
+import '../../producto/producto_screen.dart';
 
 class HistorialScreen extends StatefulWidget {
   const HistorialScreen({super.key});
@@ -68,76 +69,40 @@ class _HistorialScreenState extends State<HistorialScreen> {
     }
   }
 
-  Future<void> _toggleFavorito(String productoId, String nombreProducto) async {
-    try {
-      if (_productosFavoritos.contains(productoId)) {
-        // Eliminar de favoritos
-        await _favoritoService.eliminarFavorito(productoId);
-        setState(() {
-          _productosFavoritos.remove(productoId);
-        });
-        
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Row(
-                children: [
-                  Icon(Icons.heart_broken, color: Colors.white, size: 20),
-                  SizedBox(width: 8),
-                  Flexible(child: Text('Eliminado de favoritos')),
-                ],
-              ),
-              backgroundColor: Colors.grey.shade600,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        }
-      } else {
-        // Agregar a favoritos
-        await _favoritoService.agregarFavorito(productoId);
-        setState(() {
-          _productosFavoritos.add(productoId);
-        });
-        
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Row(
-                children: [
-                  Icon(Icons.favorite, color: Colors.white, size: 20),
-                  SizedBox(width: 8),
-                  Flexible(child: Text('Agregado a favoritos')),
-                ],
-              ),
-              backgroundColor: Colors.red.shade600,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.error, color: Colors.white, size: 20),
-                const SizedBox(width: 8),
-                Expanded(child: Text('Error: $e')),
-              ],
-            ),
-            backgroundColor: Colors.red.shade600,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+ Future<void> _toggleFavorito(String productoId, String nombreProducto) async {
+  try {
+    if (_productosFavoritos.contains(productoId)) {
+      // Eliminar de favoritos
+      await _favoritoService.eliminarFavorito(productoId);
+      setState(() {
+        _productosFavoritos.remove(productoId);
+      });
+    } else {
+      // Agregar a favoritos
+      await _favoritoService.agregarFavorito(productoId);
+      setState(() {
+        _productosFavoritos.add(productoId);
+      });
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Expanded(child: Text('Error: $e')),
+            ],
           ),
-        );
-      }
+          backgroundColor: Colors.red.shade600,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
     }
   }
+}
 
   Future<void> _eliminarItem(String id) async {
     try {
@@ -268,6 +233,17 @@ class _HistorialScreenState extends State<HistorialScreen> {
             child: const Text("Borrar todo", style: TextStyle(fontWeight: FontWeight.w600)),
           ),
         ],
+      ),
+    );
+  }
+
+  // Función para navegar al detalle del producto
+  void _navegarADetalleProducto(String productoId) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ProductoScreen(productId: productoId),
+
       ),
     );
   }
@@ -504,127 +480,134 @@ class _HistorialScreenState extends State<HistorialScreen> {
     final fecha = item['fecha'];
     final productoId = producto['_id'];
 
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Fecha y favorito
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  fecha,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                if (productoId != null)
-                  GestureDetector(
-                    onTap: () => _toggleFavorito(productoId, nombre),
-                    child: Icon(
-                      _productosFavoritos.contains(productoId)
-                          ? Icons.favorite
-                          : Icons.favorite_border,
-                      color: _productosFavoritos.contains(productoId)
-                          ? Colors.red
-                          : Colors.grey[400],
-                      size: 20,
+    return GestureDetector(
+      onTap: () {
+        if (productoId != null) {
+          _navegarADetalleProducto(productoId);
+        }
+      },
+      child: Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Fecha y favorito
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    fecha,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            // Imagen del producto
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
-                  color: Colors.grey[100],
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: imagen != null
-                      ? Image.network(
-                          imagen,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Icon(
-                              Icons.image_not_supported,
-                              color: Colors.grey[400],
-                              size: 40,
-                            );
-                          },
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return Shimmer.fromColors(
-                              baseColor: Colors.grey.shade300,
-                              highlightColor: Colors.grey.shade100,
-                              child: Container(color: Colors.white),
-                            );
-                          },
-                        )
-                      : Icon(
-                          Icons.image_not_supported,
-                          color: Colors.grey[400],
-                          size: 40,
-                        ),
-                ),
+                  if (productoId != null)
+                    GestureDetector(
+                      onTap: () => _toggleFavorito(productoId, nombre),
+                      child: Icon(
+                        _productosFavoritos.contains(productoId)
+                            ? Icons.favorite
+                            : Icons.favorite_border,
+                        color: _productosFavoritos.contains(productoId)
+                            ? Colors.red
+                            : Colors.grey[400],
+                        size: 20,
+                      ),
+                    ),
+                ],
               ),
-            ),
-            const SizedBox(height: 12),
-            // Nombre del producto
-            Text(
-              nombre,
-              style: const TextStyle(
-                fontSize: 14,
-                color: Colors.black87,
-                height: 1.3,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 8),
-            // Precio
-            if (precio != null) ...[
-              Text(
-                _formatoPesos.format(precio),
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black87,
+              const SizedBox(height: 12),
+              // Imagen del producto
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    color: Colors.grey[100],
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: imagen != null
+                        ? Image.network(
+                            imagen,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Icon(
+                                Icons.image_not_supported,
+                                color: Colors.grey[400],
+                                size: 40,
+                              );
+                            },
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return Shimmer.fromColors(
+                                baseColor: Colors.grey.shade300,
+                                highlightColor: Colors.grey.shade100,
+                                child: Container(color: Colors.white),
+                              );
+                            },
+                          )
+                        : Icon(
+                            Icons.image_not_supported,
+                            color: Colors.grey[400],
+                            size: 40,
+                          ),
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
-            ],
-            // Botón eliminar
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton(
-                onPressed: () => _eliminarItem(item['_id']),
-                style: TextButton.styleFrom(
-                  foregroundColor: const Color(0xFF3483FA),
-                  padding: EdgeInsets.zero,
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              // Nombre del producto
+              Text(
+                nombre,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Colors.black87,
+                  height: 1.3,
                 ),
-                child: const Text(
-                  "Eliminar",
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 8),
+              // Precio
+              if (precio != null) ...[
+                Text(
+                  _formatoPesos.format(precio),
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              // Botón eliminar
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () => _eliminarItem(item['_id']),
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFF3483FA),
+                    padding: EdgeInsets.zero,
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text(
+                    "Eliminar",
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -640,132 +623,139 @@ class _HistorialScreenState extends State<HistorialScreen> {
     final imagen = producto['imagen'];
     final productoId = producto['_id'];
 
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          bottom: BorderSide(color: Color(0xFFE5E5E5), width: 1),
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Imagen del producto - más grande
-          Container(
-            width: 120,
-            height: 120,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              color: Colors.grey[100],
-              border: Border.all(color: Colors.grey.shade300),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: imagen != null
-                  ? Image.network(
-                      imagen,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Icon(
-                          Icons.image_not_supported,
-                          color: Colors.grey[400],
-                          size: 40,
-                        );
-                      },
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return Shimmer.fromColors(
-                          baseColor: Colors.grey.shade300,
-                          highlightColor: Colors.grey.shade100,
-                          child: Container(color: Colors.white),
-                        );
-                      },
-                    )
-                  : Icon(
-                      Icons.image_not_supported,
-                      color: Colors.grey[400],
-                      size: 40,
-                    ),
-            ),
+    return GestureDetector(
+      onTap: () {
+        if (productoId != null) {
+          _navegarADetalleProducto(productoId);
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          border: Border(
+            bottom: BorderSide(color: Color(0xFFE5E5E5), width: 1),
           ),
-          const SizedBox(width: 16),
-          // Información del producto
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Icono de favorito
-                Row(
-                  children: [
-                    const Spacer(),
-                    if (productoId != null)
-                      GestureDetector(
-                        onTap: () => _toggleFavorito(productoId, nombre),
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          child: Icon(
-                            _productosFavoritos.contains(productoId)
-                                ? Icons.favorite
-                                : Icons.favorite_border,
-                            color: _productosFavoritos.contains(productoId)
-                                ? Colors.red
-                                : Colors.grey[400],
-                            size: 24,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Imagen del producto - más grande
+            Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                color: Colors.grey[100],
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: imagen != null
+                    ? Image.network(
+                        imagen,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Icon(
+                            Icons.image_not_supported,
+                            color: Colors.grey[400],
+                            size: 40,
+                          );
+                        },
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Shimmer.fromColors(
+                            baseColor: Colors.grey.shade300,
+                            highlightColor: Colors.grey.shade100,
+                            child: Container(color: Colors.white),
+                          );
+                        },
+                      )
+                    : Icon(
+                        Icons.image_not_supported,
+                        color: Colors.grey[400],
+                        size: 40,
+                      ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            // Información del producto
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Icono de favorito
+                  Row(
+                    children: [
+                      const Spacer(),
+                      if (productoId != null)
+                        GestureDetector(
+                          onTap: () => _toggleFavorito(productoId, nombre),
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            child: Icon(
+                              _productosFavoritos.contains(productoId)
+                                  ? Icons.favorite
+                                  : Icons.favorite_border,
+                              color: _productosFavoritos.contains(productoId)
+                                  ? Colors.red
+                                  : Colors.grey[400],
+                              size: 24,
+                            ),
                           ),
                         ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                // Nombre del producto
-                Text(
-                  nombre,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    color: Colors.black87,
-                    height: 1.3,
+                    ],
                   ),
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 12),
-                // Precio
-                if (precio != null) ...[
+                  const SizedBox(height: 8),
+                  // Nombre del producto
                   Text(
-                    _formatoPesos.format(precio),
+                    nombre,
                     style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
                       color: Colors.black87,
+                      height: 1.3,
                     ),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 16),
-                ],
-                // Botón eliminar
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton(
-                    onPressed: () => _eliminarItem(item['_id']),
-                    style: TextButton.styleFrom(
-                      foregroundColor: const Color(0xFF3483FA),
-                      padding: EdgeInsets.zero,
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  const SizedBox(height: 12),
+                  // Precio
+                  if (precio != null) ...[
+                    Text(
+                      _formatoPesos.format(precio),
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
                     ),
-                    child: const Text(
-                      "Eliminar",
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
+                    const SizedBox(height: 16),
+                  ],
+                  // Botón eliminar
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      onPressed: () => _eliminarItem(item['_id']),
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFF3483FA),
+                        padding: EdgeInsets.zero,
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Text(
+                        "Eliminar",
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../usuario/todas_categorias_screen.dart';
+import '../../widgets/pantalla_busqueda.dart';
+
 
 class MorePage extends StatelessWidget {
   const MorePage({super.key});
@@ -280,12 +282,20 @@ class MorePage extends StatelessWidget {
               subtitle: "Volver a la página principal",
               onTap: () => Navigator.pushNamed(context, '/bienvenida'),
             ),
-            _MenuItem(
-              icon: Icons.search_outlined,
-              title: "Buscar",
-              subtitle: "Encuentra lo que necesitas",
-              onTap: () => Navigator.pushNamed(context, '/search'),
-            ),
+           _MenuItem(
+             icon: Icons.search_outlined,
+            title: "Buscar",
+             subtitle: "Encuentra lo que necesitas",
+              onTap: () {
+             Navigator.push(
+             context,
+            MaterialPageRoute(
+           builder: (context) => const PantallaBusqueda(), // 👈 aquí va tu pantalla
+          ),
+         );
+        },
+      ),
+
             _MenuItem(
               icon: Icons.category_outlined,
               title: "Categorías",

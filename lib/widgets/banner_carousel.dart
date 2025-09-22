@@ -2,92 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../services/anuncio_service.dart';
+import 'package:provider/provider.dart';
+import '../providers/anuncio_provider.dart';
 
-class BannerCarousel extends StatefulWidget {
+class BannerCarousel extends StatelessWidget {
   const BannerCarousel({Key? key}) : super(key: key);
 
-  @override
-  State<BannerCarousel> createState() => _BannerCarouselState();
-}
-
-class _BannerCarouselState extends State<BannerCarousel> {
-  final AnuncioService _anuncioService = AnuncioService();
-
-  List<Map<String, String>> _anuncios = [];
-  bool _isLoading = true;
-  bool _hasError = false;
-  int _currentIndex = 0;
-
-  // Relación similar a Mercado Libre (~3.33:1)
   static const double aspectRatioML = 10 / 3;
   static const double maxBannerHeight = 240;
   static const double minBannerHeight = 120;
   static const EdgeInsets containerMargin =
       EdgeInsets.symmetric(horizontal: 16, vertical: 12);
 
-  @override
-  void initState() {
-    super.initState();
-    _loadAnuncios();
-  }
-
   double _calculateBannerHeight(double screenWidth, double screenHeight) {
-    double height = (screenWidth - 32) / aspectRatioML; // margen horizontal
-    // 🔹 límite dinámico respecto al alto de pantalla
+    double height = (screenWidth - 32) / aspectRatioML;
     return height.clamp(minBannerHeight, screenHeight * 0.3);
   }
 
   double _getViewportFraction(double screenWidth) {
-    if (screenWidth >= 1400) return 0.6; // 🔹 desktop grande: se ven 2 banners
+    if (screenWidth >= 1400) return 0.6;
     if (screenWidth >= 1024) return 0.75;
     if (screenWidth >= 768) return 0.85;
     if (screenWidth >= 600) return 0.9;
     return 0.92;
-  }
-
-  Future<void> _loadAnuncios() async {
-    setState(() {
-      _isLoading = true;
-      _hasError = false;
-    });
-
-    try {
-      final anuncios = await _anuncioService.obtenerAnunciosActivos();
-      setState(() {
-        _anuncios = anuncios;
-      });
-
-      if (mounted) {
-        _prefetchImages();
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _hasError = true;
-        });
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _prefetchImages() async {
-    for (int i = 0; i < _anuncios.length && i < 3; i++) {
-      final url = _anuncios[i]['imagen'];
-      if (url != null && url.isNotEmpty && mounted) {
-        try {
-          await precacheImage(
-            CachedNetworkImageProvider(url),
-            context,
-          );
-        } catch (_) {}
-      }
-    }
   }
 
   Widget _buildShimmer(double width, double height) {
@@ -119,15 +56,15 @@ class _BannerCarouselState extends State<BannerCarousel> {
     );
   }
 
-  Widget _buildModernDotsIndicator() {
-    if (_anuncios.length <= 1) return const SizedBox.shrink();
+  Widget _buildModernDotsIndicator(BuildContext context, AnuncioProvider provider) {
+    if (provider.anuncios.length <= 1) return const SizedBox.shrink();
 
     return Container(
       margin: const EdgeInsets.only(top: 12),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
-        children: _anuncios.asMap().entries.map((entry) {
-          final isActive = entry.key == _currentIndex;
+        children: provider.anuncios.asMap().entries.map((entry) {
+          final isActive = entry.key == provider.currentIndex;
           return AnimatedContainer(
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeOutCubic,
@@ -147,16 +84,16 @@ class _BannerCarouselState extends State<BannerCarousel> {
   }
 
   Widget _buildBannerItem(
-      Map<String, String> anuncio, double width, double height) {
+      BuildContext context,
+      Map<String, String> anuncio,
+      double width,
+      double height,
+      ) {
     final deeplink = anuncio['deeplink'];
     final imageUrl = anuncio['imagen'] ?? '';
 
     return GestureDetector(
-      onTap: () {
-        if (deeplink != null && deeplink.isNotEmpty) {
-          Navigator.pushNamed(context, deeplink);
-        }
-      },
+      onTap: () => context.read<AnuncioProvider>().navigateToDeeplink(context, deeplink),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 6),
         decoration: BoxDecoration(
@@ -197,11 +134,7 @@ class _BannerCarouselState extends State<BannerCarousel> {
                   color: Colors.transparent,
                   child: InkWell(
                     borderRadius: BorderRadius.circular(16),
-                    onTap: () {
-                      if (deeplink != null && deeplink.isNotEmpty) {
-                        Navigator.pushNamed(context, deeplink);
-                      }
-                    },
+                    onTap: () => context.read<AnuncioProvider>().navigateToDeeplink(context, deeplink),
                     splashColor: Colors.white.withOpacity(0.2),
                     highlightColor: Colors.white.withOpacity(0.1),
                   ),
@@ -214,7 +147,7 @@ class _BannerCarouselState extends State<BannerCarousel> {
     );
   }
 
-  Widget _buildErrorState(double height) {
+  Widget _buildErrorState(BuildContext context, double height) {
     return Container(
       height: height,
       margin: containerMargin,
@@ -239,7 +172,7 @@ class _BannerCarouselState extends State<BannerCarousel> {
             ),
             const SizedBox(height: 12),
             TextButton.icon(
-              onPressed: _loadAnuncios,
+              onPressed: () => context.read<AnuncioProvider>().loadAnuncios(),
               icon: const Icon(Icons.refresh, size: 18),
               label: const Text('Reintentar'),
               style: TextButton.styleFrom(
@@ -256,83 +189,96 @@ class _BannerCarouselState extends State<BannerCarousel> {
     );
   }
 
+  Widget _buildLoadingState(double screenWidth, double bannerHeight, double viewportFraction) {
+    return Container(
+      margin: containerMargin,
+      height: bannerHeight,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: 3,
+        itemBuilder: (context, index) => _buildShimmer(
+          screenWidth * viewportFraction - 12,
+          bannerHeight,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCarousel(BuildContext context, AnuncioProvider provider,
+      double screenWidth, double bannerHeight, double viewportFraction) {
+    return Container(
+      margin: containerMargin,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: screenWidth,
+            height: bannerHeight,
+            child: CarouselSlider.builder(
+              itemCount: provider.anuncios.length,
+              itemBuilder: (context, index, realIndex) {
+                return _buildBannerItem(
+                  context,
+                  provider.anuncios[index],
+                  screenWidth * viewportFraction - 12,
+                  bannerHeight,
+                );
+              },
+              options: CarouselOptions(
+                height: bannerHeight,
+                autoPlay: provider.anuncios.length > 1,
+                autoPlayInterval: const Duration(seconds: 6),
+                autoPlayAnimationDuration: const Duration(milliseconds: 1000),
+                autoPlayCurve: Curves.easeOutCubic,
+                enlargeCenterPage: false,
+                viewportFraction: viewportFraction,
+                enableInfiniteScroll: provider.anuncios.length > 1,
+                pauseAutoPlayOnTouch: true,
+                pauseAutoPlayOnManualNavigate: true,
+                onPageChanged: (index, reason) {
+                  provider.setCurrentIndex(index);
+                },
+              ),
+            ),
+          ),
+          _buildModernDotsIndicator(context, provider),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final double screenWidth = constraints.maxWidth;
         final double screenHeight = MediaQuery.of(context).size.height;
-
-        final double bannerHeight =
-            _calculateBannerHeight(screenWidth, screenHeight);
+        final double bannerHeight = _calculateBannerHeight(screenWidth, screenHeight);
         final double viewportFraction = _getViewportFraction(screenWidth);
 
-        if (_isLoading) {
-          return Container(
-            margin: containerMargin,
-            height: bannerHeight,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: 3,
-              itemBuilder: (context, index) => _buildShimmer(
-                screenWidth * viewportFraction - 12,
-                bannerHeight,
-              ),
-            ),
-          );
-        }
+        return Consumer<AnuncioProvider>(
+          builder: (context, provider, child) {
+            // 🔹 Mostrar shimmer solo al iniciar la app y antes de que el provider tenga datos
+            if (provider.anuncios.isEmpty && provider.state == AnuncioState.loading) {
+              return _buildLoadingState(screenWidth, bannerHeight, viewportFraction);
+            }
 
-        if (_hasError) {
-          return _buildErrorState(bannerHeight);
-        }
+            // 🔹 Si hay anuncios, mostrar carousel
+            if (provider.anuncios.isNotEmpty) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                provider.prefetchImages(context);
+              });
+              return _buildCarousel(context, provider, screenWidth, bannerHeight, viewportFraction);
+            }
 
-        if (_anuncios.isEmpty) {
-          return const SizedBox.shrink();
-        }
+            // 🔹 Si hay error o está vacío, mostrar estado correspondiente
+            if (provider.state == AnuncioState.error) {
+              return _buildErrorState(context, bannerHeight);
+            }
 
-        return Container(
-          margin: containerMargin,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                width: screenWidth,
-                height: bannerHeight,
-                child: CarouselSlider.builder(
-                  itemCount: _anuncios.length,
-                  itemBuilder: (context, index, realIndex) {
-                    return _buildBannerItem(
-                      _anuncios[index],
-                      screenWidth * viewportFraction - 12,
-                      bannerHeight,
-                    );
-                  },
-                  options: CarouselOptions(
-                    height: bannerHeight,
-                    autoPlay: _anuncios.length > 1,
-                    autoPlayInterval: const Duration(seconds: 6),
-                    autoPlayAnimationDuration:
-                        const Duration(milliseconds: 1000),
-                    autoPlayCurve: Curves.easeOutCubic,
-                    enlargeCenterPage: false,
-                    viewportFraction: viewportFraction,
-                    enableInfiniteScroll: _anuncios.length > 1,
-                    pauseAutoPlayOnTouch: true,
-                    pauseAutoPlayOnManualNavigate: true,
-                    onPageChanged: (index, reason) {
-                      if (mounted) {
-                        setState(() {
-                          _currentIndex = index;
-                        });
-                      }
-                    },
-                  ),
-                ),
-              ),
-              _buildModernDotsIndicator(),
-            ],
-          ),
+            return const SizedBox.shrink();
+          },
         );
       },
     );

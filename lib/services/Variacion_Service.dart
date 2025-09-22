@@ -5,7 +5,6 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart';
-// ✅ NUEVAS IMPORTACIONES
 import 'package:mime/mime.dart';
 import 'package:http_parser/http_parser.dart';
 
@@ -18,7 +17,6 @@ class VariacionService {
   String? _token;
 
   // --- MÉTODOS DE AUTENTICACIÓN ---
-
   Future<String?> _getAccessToken() async {
     _token ??= await _secureStorage.read(key: 'accessToken');
     debugPrint('ℹ️ Token de acceso obtenido: ${_token != null ? '✅' : '❌'}');
@@ -71,9 +69,9 @@ class VariacionService {
     return token;
   }
 
-  // --- MÉTODOS DEL CRUD DE VARIACIONES (Corregidos) ---
+  // --- CRUD VARIACIONES ---
 
-  /// ✅ Crear variación con imagen y nombre del color
+  /// ✅ Crear variación con imagen y color
   Future<void> crearVariacionDesdeModelo(Variacion variacion) async {
     if (variacion.imagenes.isEmpty || variacion.imagenes.first.localFile == null) {
       throw Exception('⚠️ No se ha proporcionado una imagen local válida.');
@@ -85,22 +83,17 @@ class VariacionService {
 
     final String colorHex = variacion.colorHex ?? '';
     final String nombreColor = variacion.colorNombre ?? Colores.getNombreColor(colorHex);
-
     final String fileName = p.basename(imagenLocal.path);
 
     final request = http.MultipartRequest('POST', url)
       ..headers['Authorization'] = 'Bearer $token'
       ..fields['tallaNumero'] = variacion.tallaNumero ?? ''
       ..fields['tallaLetra'] = variacion.tallaLetra ?? ''
-      ..fields['color'] = jsonEncode({
-        'nombre': nombreColor,
-        'hex': colorHex,
-      })
+      ..fields['color'] = jsonEncode({'nombre': nombreColor, 'hex': colorHex})
       ..fields['stock'] = variacion.stock.toString()
       ..fields['precio'] = variacion.precio.toString();
 
-    // ✅ CORRECCIÓN CLAVE: Obtener y especificar el tipo MIME del archivo
-    final mimeTypeData = lookupMimeType(imagenLocal.path, headerBytes: [0xFF, 0xD8])?.split('/');
+    final mimeTypeData = lookupMimeType(imagenLocal.path)?.split('/');
     if (mimeTypeData == null || mimeTypeData.length != 2) {
       throw Exception('❌ No se pudo determinar el tipo MIME del archivo.');
     }
@@ -115,37 +108,28 @@ class VariacionService {
     );
 
     debugPrint('➡️ Creando variación en: $url');
-    debugPrint('➡️ Campos a enviar: ${request.fields}');
-    debugPrint('➡️ Archivo a enviar: $fileName con tipo MIME: ${mimeTypeData.join('/')}');
+    debugPrint('➡️ Campos: ${request.fields}');
+    debugPrint('➡️ Archivo: $fileName (${mimeTypeData.join("/")})');
 
     try {
       final response = await request.send();
       final body = await response.stream.bytesToString();
 
-      debugPrint('⬅️ Respuesta de crear variación: Status ${response.statusCode}');
-      debugPrint('⬅️ Cuerpo de la respuesta: $body');
+      debugPrint('⬅️ Respuesta crear variación: Status ${response.statusCode}');
+      debugPrint('⬅️ Body: $body');
 
       if (response.statusCode == 401) {
         final renovado = await _renovarToken();
-        if (renovado) {
-          return await crearVariacionDesdeModelo(variacion);
-        } else {
-          throw Exception('❌ Sesión expirada. No se pudo renovar.');
-        }
+        if (renovado) return await crearVariacionDesdeModelo(variacion);
+        throw Exception('❌ Sesión expirada.');
       }
 
       if (response.statusCode != 201) {
-        try {
-          final error = jsonDecode(body);
-          throw Exception(error['mensaje'] ?? '❌ Error al crear la variación');
-        } on FormatException {
-          throw Exception('❌ Error del servidor: Respuesta inesperada. Cuerpo: $body');
-        }
+        final error = _tryDecodeError(body);
+        throw Exception(error);
       }
     } on SocketException {
-      throw Exception('❌ Sin conexión a Internet. Por favor, verifica tu red.');
-    } catch (e) {
-      throw Exception(e.toString());
+      throw Exception('❌ Sin conexión a Internet.');
     }
   }
 
@@ -153,13 +137,13 @@ class VariacionService {
     final token = await _obtenerTokenValido();
     final url = Uri.parse('$_baseUrl/productos/$productoId/variaciones');
 
-    debugPrint('➡️ Obteniendo variaciones para producto $productoId en: $url');
+    debugPrint('➡️ Obteniendo variaciones: $url');
 
     try {
-      final response = await http.get(url, headers: _getHeaders(token)).timeout(const Duration(seconds: 15));
+      final response = await http.get(url, headers: _getHeaders(token));
 
-      debugPrint('⬅️ Respuesta de obtener variaciones: Status ${response.statusCode}');
-      debugPrint('⬅️ Cuerpo de la respuesta: ${response.body}');
+      debugPrint('⬅️ Respuesta obtener variaciones: ${response.statusCode}');
+      debugPrint('⬅️ Body: ${response.body}');
 
       if (response.statusCode == 401) {
         final renovado = await _renovarToken();
@@ -169,14 +153,18 @@ class VariacionService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return List<Map<String, dynamic>>.from(data['variaciones'] ?? []);
+        final variaciones = List<Map<String, dynamic>>.from(data['variaciones'] ?? []);
+
+        for (final v in variaciones) {
+          debugPrint("🆔 VARIACIÓN ID: ${v['_id']}");
+        }
+
+        return variaciones;
       } else {
         throw Exception('❌ Error al obtener variaciones: ${response.reasonPhrase}');
       }
     } on SocketException {
       throw Exception('❌ Sin conexión a Internet.');
-    } catch (e) {
-      throw Exception('❌ Error inesperado al obtener variaciones: $e');
     }
   }
 
@@ -191,6 +179,10 @@ class VariacionService {
     double? precio,
     File? imagenLocal,
   }) async {
+    if (variacionId.isEmpty || variacionId.length != 24) {
+      throw Exception('❌ ID de variación inválido: $variacionId');
+    }
+
     final token = await _obtenerTokenValido();
     final url = Uri.parse('$_baseUrl/productos/$productoId/variaciones/$variacionId');
 
@@ -210,12 +202,11 @@ class VariacionService {
 
     if (imagenLocal != null) {
       final String fileName = p.basename(imagenLocal.path);
-      // ✅ CORRECCIÓN CLAVE: Obtener y especificar el tipo MIME
-      final mimeTypeData = lookupMimeType(imagenLocal.path, headerBytes: [0xFF, 0xD8])?.split('/');
+      final mimeTypeData = lookupMimeType(imagenLocal.path)?.split('/');
       if (mimeTypeData == null || mimeTypeData.length != 2) {
-        throw Exception('❌ No se pudo determinar el tipo MIME del archivo para la actualización.');
+        throw Exception('❌ Tipo MIME inválido.');
       }
-      
+
       request.files.add(
         await http.MultipartFile.fromPath(
           'imagenes',
@@ -227,15 +218,15 @@ class VariacionService {
     }
 
     debugPrint('➡️ Actualizando variación en: $url');
-    debugPrint('➡️ Campos a enviar: ${request.fields}');
+    debugPrint('➡️ Campos: ${request.fields}');
 
     try {
-      final response = await request.send().timeout(const Duration(seconds: 15));
+      final response = await request.send();
       final body = await response.stream.bytesToString();
 
-      debugPrint('⬅️ Respuesta de actualizar variación: Status ${response.statusCode}');
-      debugPrint('⬅️ Cuerpo de la respuesta: $body');
-      
+      debugPrint('⬅️ Respuesta actualizar variación: ${response.statusCode}');
+      debugPrint('⬅️ Body: $body');
+
       if (response.statusCode == 401) {
         final renovado = await _renovarToken();
         if (renovado) {
@@ -254,39 +245,61 @@ class VariacionService {
         throw Exception('❌ Sesión expirada.');
       }
 
+      if (response.statusCode == 404) {
+        throw Exception('❌ Variación no encontrada.');
+      }
+
       if (response.statusCode == 200) {
         return jsonDecode(body);
       } else {
-        try {
-          final error = jsonDecode(body);
-          throw Exception(error['mensaje'] ?? '❌ Error al actualizar la variación');
-        } on FormatException {
-          throw Exception('❌ Error del servidor: Respuesta inesperada. Cuerpo: $body');
-        }
+        final error = _tryDecodeError(body);
+        throw Exception(error);
       }
     } on SocketException {
       throw Exception('❌ Sin conexión a Internet.');
-    } catch (e) {
-      throw Exception('❌ Error al actualizar la variación: $e');
     }
+  }
+
+  Future<void> actualizarVariacionDesdeModelo(Variacion variacion) async {
+    await actualizarVariacion(
+      productoId: variacion.productoId,
+      variacionId: variacion.id!,
+      tallaNumero: variacion.tallaNumero,
+      tallaLetra: variacion.tallaLetra,
+      colorHex: variacion.colorHex,
+      colorNombre: variacion.colorNombre,
+      stock: variacion.stock,
+      precio: variacion.precio,
+      imagenLocal: variacion.imagenes.isNotEmpty && variacion.imagenes.first.isLocal == true
+          ? variacion.imagenes.first.localFile
+          : null,
+    );
   }
 
   Future<void> eliminarVariacion({
     required String productoId,
     required String variacionId,
   }) async {
+    if (variacionId.isEmpty || variacionId.length != 24) {
+      throw Exception('❌ ID de variación inválido: $variacionId');
+    }
+
     final token = await _obtenerTokenValido();
     final url = Uri.parse('$_baseUrl/productos/$productoId/variaciones/$variacionId');
 
     debugPrint('➡️ Eliminando variación en: $url');
 
     final response = await http.delete(url, headers: _getHeaders(token));
-    debugPrint('⬅️ Respuesta de eliminar variación: Status ${response.statusCode}');
-    debugPrint('⬅️ Cuerpo de la respuesta: ${response.body}');
+    debugPrint('⬅️ Respuesta eliminar: ${response.statusCode}');
+    debugPrint('⬅️ Body: ${response.body}');
+
+    if (response.statusCode == 404) {
+      throw Exception('❌ Variación no encontrada.');
+    }
 
     if (response.statusCode != 200) {
-      final error = jsonDecode(response.body);
-      throw Exception('❌ No se pudo eliminar la variación: ${error['mensaje'] ?? 'Error desconocido'}');
+      final error = _tryDecodeError(response.body);
+      throw Exception('❌ No se pudo eliminar: $error');
     }
   }
 
@@ -295,11 +308,14 @@ class VariacionService {
     required String variacionId,
     required int cantidad,
   }) async {
+    if (variacionId.isEmpty || variacionId.length != 24) {
+      throw Exception('❌ ID de variación inválido: $variacionId');
+    }
+
     final token = await _obtenerTokenValido();
     final url = Uri.parse('$_baseUrl/productos/$productoId/variaciones/$variacionId/reducir-stock');
 
-    debugPrint('➡️ Reduciendo stock de la variación en: $url');
-    debugPrint('➡️ Cantidad a reducir: $cantidad');
+    debugPrint('➡️ Reduciendo stock en: $url (cantidad: $cantidad)');
 
     final response = await http.put(
       url,
@@ -307,14 +323,28 @@ class VariacionService {
       body: jsonEncode({'cantidad': cantidad}),
     );
 
-    debugPrint('⬅️ Respuesta de reducir stock: Status ${response.statusCode}');
-    debugPrint('⬅️ Cuerpo de la respuesta: ${response.body}');
+    debugPrint('⬅️ Respuesta reducir stock: ${response.statusCode}');
+    debugPrint('⬅️ Body: ${response.body}');
+
+    if (response.statusCode == 404) {
+      throw Exception('❌ Variación no encontrada.');
+    }
 
     if (response.statusCode == 200) {
       return jsonDecode(response.body);
     } else {
-      final error = jsonDecode(response.body);
-      throw Exception(error['mensaje'] ?? '❌ Error al reducir el stock');
+      final error = _tryDecodeError(response.body);
+      throw Exception('❌ Error al reducir stock: $error');
+    }
+  }
+
+  // --- HELPER ---
+  String _tryDecodeError(String body) {
+    try {
+      final error = jsonDecode(body);
+      return error['mensaje'] ?? body;
+    } catch (_) {
+      return body;
     }
   }
 }

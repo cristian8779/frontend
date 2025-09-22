@@ -1,105 +1,86 @@
+// top_icons.dart
 import 'package:flutter/material.dart';
 import '../../../utils/show_settings_modal.dart';
+import '../styles/top_icons_styles.dart'; // Import de los estilos
 
 class TopIcons extends StatelessWidget {
   final String rol;
-  final bool showNotificationIcon; // <-- Nuevo parámetro opcional
+  final bool showNotificationIcon;
 
   const TopIcons({
     super.key,
     required this.rol,
-    this.showNotificationIcon = true, // Por defecto visible
+    this.showNotificationIcon = TopIconsTheme.defaultShowNotification,
   });
-
-  // Función para obtener dimensiones responsivas
-  Map<String, double> _getResponsiveDimensions(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isTablet = screenWidth >= 768;
-    final isDesktop = screenWidth >= 1024;
-    
-    if (isDesktop) {
-      return {
-        'iconSize': 32.0,
-        'buttonSize': 56.0,
-        'spacing': 16.0,
-      };
-    } else if (isTablet) {
-      return {
-        'iconSize': 30.0,
-        'buttonSize': 52.0,
-        'spacing': 12.0,
-      };
-    } else {
-      return {
-        'iconSize': 28.0,
-        'buttonSize': 48.0,
-        'spacing': 8.0,
-      };
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final dimensions = _getResponsiveDimensions(context);
+        final dimensions = TopIconsDimensions.getResponsiveDimensions(context);
         
         return Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          mainAxisAlignment: TopIconsLayout.mainAxisAlignment,
           children: [
-            Container(
-              width: dimensions['buttonSize']!,
-              height: dimensions['buttonSize']!,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                color: Colors.transparent,
-              ),
-              child: IconButton(
-                icon: Icon(
-                  Icons.settings,
-                  color: Colors.black87,
-                  size: dimensions['iconSize']!,
-                ),
-                onPressed: () {
-                  mostrarOpcionesDeConfiguracion(
-                    context: context,
-                    rol: rol,
-                  );
-                },
-                padding: EdgeInsets.all(dimensions['spacing']!),
-                constraints: BoxConstraints(
-                  minWidth: dimensions['buttonSize']!,
-                  minHeight: dimensions['buttonSize']!,
-                ),
-              ),
-            ),
-
-            // Solo mostramos el ícono si showNotificationIcon es true
+            _buildSettingsButton(context, dimensions),
             if (showNotificationIcon)
-              Container(
-                width: dimensions['buttonSize']!,
-                height: dimensions['buttonSize']!,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  color: Colors.transparent,
-                ),
-                child: IconButton(
-                  icon: Icon(
-                    Icons.notifications,
-                    color: Colors.red,
-                    size: dimensions['iconSize']!,
-                  ),
-                  onPressed: () {},
-                  padding: EdgeInsets.all(dimensions['spacing']!),
-                  constraints: BoxConstraints(
-                    minWidth: dimensions['buttonSize']!,
-                    minHeight: dimensions['buttonSize']!,
-                  ),
-                ),
-              ),
+              _buildNotificationButton(context, dimensions),
           ],
         );
       },
     );
+  }
+
+  Widget _buildSettingsButton(BuildContext context, Map<String, double> dimensions) {
+    return _buildIconButton(
+      dimensions: dimensions,
+      icon: TopIconsTheme.settingsIcon,
+      color: TopIconsTheme.settingsIconColor,
+      onPressed: () => _handleSettingsPressed(context),
+    );
+  }
+
+  Widget _buildNotificationButton(BuildContext context, Map<String, double> dimensions) {
+    return _buildIconButton(
+      dimensions: dimensions,
+      icon: TopIconsTheme.notificationIcon,
+      color: TopIconsTheme.notificationIconColor,
+      onPressed: _handleNotificationPressed,
+    );
+  }
+
+  Widget _buildIconButton({
+    required Map<String, double> dimensions,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onPressed,
+  }) {
+    return Container(
+      width: dimensions['buttonSize']!,
+      height: dimensions['buttonSize']!,
+      decoration: TopIconsDecorations.getButtonContainerDecoration(),
+      child: IconButton(
+        icon: Icon(
+          icon,
+          color: color,
+          size: dimensions['iconSize']!,
+        ),
+        onPressed: onPressed,
+        padding: TopIconsLayout.getIconPadding(dimensions),
+        constraints: TopIconsLayout.getButtonConstraints(dimensions),
+      ),
+    );
+  }
+
+  // Handlers de eventos
+  void _handleSettingsPressed(BuildContext context) {
+    mostrarOpcionesDeConfiguracion(
+      context: context,
+      rol: rol,
+    );
+  }
+
+  void _handleNotificationPressed() {
+    // TODO: Implementar lógica de notificaciones
   }
 }

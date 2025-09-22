@@ -6,6 +6,8 @@ import 'package:intl/intl.dart';
 import 'package:shimmer/shimmer.dart';
 import '../../services/Carrito_Service.dart';
 import '../../models/request_models.dart';
+// Importar la pantalla de detalle del producto
+import '../producto/producto_screen.dart';
 
 class FavoritesPage extends StatefulWidget {
   @override
@@ -65,6 +67,40 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
       return _currencyFormatter.format(value);
     } catch (e) {
       return '\$0';
+    }
+  }
+
+  // Método para navegar al detalle del producto
+  void _navegarADetalleProducto(Map<String, dynamic> favorito) {
+    try {
+      final producto = favorito['producto'] ?? {};
+      final productoId = producto['_id'] ?? producto['id'] ?? '';
+      
+      if (productoId.isEmpty) {
+        _mostrarSnackbar(
+          'Error: ID de producto no válido',
+          isSuccess: false,
+          duration: 2
+        );
+        return;
+      }
+
+      // Navegar a la pantalla de detalle del producto
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ProductoScreen(productId: productoId),
+
+        ),
+      );
+      
+    } catch (e) {
+      _mostrarSnackbar(
+        'Error al abrir el producto',
+        isSuccess: false,
+        duration: 2
+      );
+      print('❌ Error al navegar al detalle del producto: $e');
     }
   }
 
@@ -177,14 +213,7 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
         _isLoading = false;
       });
       
-      // Solo mostrar mensaje si NO es un refresh
-      if (_favoritos.isNotEmpty && !_isRefreshing) {
-        _mostrarSnackbar(
-          'Se cargaron ${_favoritos.length} productos favoritos', 
-          isSuccess: true,
-          duration: 2
-        );
-      }
+     
       
       // Reset refresh flag
       _isRefreshing = false;
@@ -822,14 +851,14 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
-                            primaryColor.withOpacity(0.1),
-                            accentColor.withOpacity(0.05),
+                            favoriteColor.withOpacity(0.1), // Cambio a rojo
+                            favoriteColor.withOpacity(0.05), // Cambio a rojo
                           ],
                         ),
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: primaryColor.withOpacity(0.2),
+                            color: favoriteColor.withOpacity(0.2), // Cambio a rojo
                             blurRadius: 30,
                             offset: const Offset(0, 15),
                           ),
@@ -838,7 +867,7 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
                       child: Icon(
                         Icons.favorite_rounded,
                         size: isTablet ? 80 : 64,
-                        color: primaryColor,
+                        color: favoriteColor, // Cambio a rojo
                       ),
                     ),
                   );
@@ -1087,14 +1116,14 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                               colors: [
-                                primaryColor.withOpacity(0.15),
-                                accentColor.withOpacity(0.05),
+                                favoriteColor.withOpacity(0.15), // Cambio a rojo
+                                favoriteColor.withOpacity(0.05), // Cambio a rojo
                               ],
                             ),
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(
-                                color: primaryColor.withOpacity(0.15),
+                                color: favoriteColor.withOpacity(0.15), // Cambio a rojo
                                 blurRadius: 40,
                                 offset: const Offset(0, 20),
                               ),
@@ -1103,7 +1132,7 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
                           child: Icon(
                             Icons.favorite_border_rounded,
                             size: isTablet ? 100 : 80,
-                            color: primaryColor,
+                            color: favoriteColor, // Cambio a rojo
                           ),
                         ),
                       );
@@ -1146,7 +1175,7 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
                         ),
                       ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: primaryColor,
+                        backgroundColor: Color(0xFF8E9AAF), // Gris suave
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(isTablet ? 20 : 16),
@@ -1233,7 +1262,7 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
     );
   }
 
-  /// Card de producto favorito para tablet con nueva UI
+  /// Card de producto favorito para tablet con navegación al detalle
   Widget _buildFavoriteCardTablet(Map<String, dynamic> favorito, int index) {
     final producto = favorito['producto'] ?? {};
     final precio = producto['precio']?.toString() ?? '0';
@@ -1252,6 +1281,7 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
         borderRadius: BorderRadius.circular(24),
         onTap: () {
           HapticFeedback.lightImpact();
+          _navegarADetalleProducto(favorito);
         },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1391,13 +1421,13 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
                     ),
                     const SizedBox(height: 8),
                     
-                    // Precio formateado
+                    // Precio formateado en negro
                     Text(
                       _formatCurrency(precio),
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w800,
-                        color: primaryColor,
+                        color: textColor, // Cambio de primaryColor a textColor (negro)
                         letterSpacing: -0.3,
                       ),
                     ),
@@ -1454,7 +1484,7 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
     );
   }
 
-  /// Card de producto favorito para móvil con nueva UI
+  /// Card de producto favorito para móvil con navegación al detalle
   Widget _buildFavoriteCard(Map<String, dynamic> favorito, int index) {
     final producto = favorito['producto'] ?? {};
     final precio = producto['precio']?.toString() ?? '0';
@@ -1462,7 +1492,6 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
     final disponible = producto['disponible'] ?? true;
     final nombre = producto['nombre'] ?? 'Producto sin nombre';
     final imagen = producto['imagen'];
-    final descripcion = producto['descripcion'];
     final productoId = producto['_id'] ?? producto['id'] ?? '';
     final screenWidth = MediaQuery.of(context).size.width;
 
@@ -1475,6 +1504,7 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
         borderRadius: BorderRadius.circular(20),
         onTap: () {
           HapticFeedback.lightImpact();
+          _navegarADetalleProducto(favorito);
         },
         child: Padding(
           padding: EdgeInsets.all(screenWidth > 400 ? 16 : 14),
@@ -1576,29 +1606,15 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    SizedBox(height: screenWidth > 400 ? 6 : 4),
+                    SizedBox(height: screenWidth > 400 ? 12 : 10),
                     
-                    if (descripcion != null && descripcion.isNotEmpty) ...[
-                      Text(
-                        descripcion,
-                        style: TextStyle(
-                          fontSize: screenWidth > 400 ? 13 : 12,
-                          color: subtextColor,
-                          height: 1.3,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      SizedBox(height: screenWidth > 400 ? 8 : 6),
-                    ],
-                    
-                    // Precio formateado
+                    // Precio formateado en negro
                     Text(
                       _formatCurrency(precio),
                       style: TextStyle(
                         fontSize: screenWidth > 400 ? 18 : 16,
                         fontWeight: FontWeight.w800,
-                        color: primaryColor,
+                        color: textColor, // Cambio de primaryColor a textColor (negro)
                         letterSpacing: -0.3,
                       ),
                     ),
