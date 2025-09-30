@@ -1,12 +1,22 @@
 import '../../services/FavoritoService.dart';
+import '../../providers/FavoritoProvider.dart';
+import '../../theme/favorito/favorito_colors.dart';
+import '../../theme/favorito/favorito_text_styles.dart';
+import '../../theme/favorito/favorito_decorations.dart';
+import '../../theme/favorito/favorito_dimensions.dart';
+import '../../theme/favorito/favorito_widgets.dart';
+import '../../theme/favorito/favorito_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:provider/provider.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:another_flushbar/flushbar.dart';
+import 'dart:io';
 import '../../services/Carrito_Service.dart';
 import '../../models/request_models.dart';
-// Importar la pantalla de detalle del producto
 import '../producto/producto_screen.dart';
 
 class FavoritesPage extends StatefulWidget {
@@ -16,15 +26,16 @@ class FavoritesPage extends StatefulWidget {
 
 class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateMixin {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
-  final FavoritoService _favoritoService = FavoritoService();
   final CarritoService _carritoService = CarritoService();
   
-  List<Map<String, dynamic>> _favoritos = [];
-  bool _isLoading = true;
   bool _isLoggedIn = false;
   bool _isCheckingAuth = true;
   String? _errorMessage;
-  bool _isRefreshing = false; // Nueva variable para controlar si es un refresh
+  
+  // Variables de conexión
+  bool _isConnected = true;
+  bool _showNoConnectionScreen = false;
+  bool _hasCheckedInitialConnection = false;
   
   // Controladores de animación
   late AnimationController _fadeController;
@@ -35,30 +46,188 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
   late Animation<Offset> _slideAnimation;
   late Animation<double> _pulseAnimation;
 
-  // Nueva paleta de colores más suave
-  static const Color primaryColor = Color(0xFF6C5CE7);      // Púrpura suave
-  static const Color accentColor = Color(0xFFA29BFE);       // Púrpura claro
-  static const Color backgroundColor = Color(0xFFFBFBFC);    // Blanco cálido
-  static const Color cardColor = Colors.white;              // Blanco puro
-  static const Color textColor = Color(0xFF2D3436);         // Gris oscuro
-  static const Color subtextColor = Color(0xFF636E72);      // Gris medio
-  static const Color successColor = Color(0xFF00B894);      // Verde menta
-  static const Color warningColor = Color(0xFFE17055);      // Coral suave
-  static const Color errorColor = Color(0xFFFF6B9D);        // Rosa suave
-  static const Color favoriteColor = Color(0xFFE74C3C);     // Rojo para favoritos
-
   // Formateador de moneda colombiana
   final NumberFormat _currencyFormatter = NumberFormat.currency(
     locale: 'es_CO',
     symbol: '\$',
     decimalDigits: 0,
+    customPattern: '\u00A4#,##0',
   );
 
   @override
   void initState() {
     super.initState();
     _initAnimations();
-    _verificarEstadoUsuario();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_hasCheckedInitialConnection) {
+        _checkInitialConnection();
+      }
+    });
+  }
+
+  // Verificación inicial de conexión
+  Future<void> _checkInitialConnection() async {
+    if (_hasCheckedInitialConnection) return;
+    _hasCheckedInitialConnection = true;
+
+    print("🔍 Verificando conexión inicial en Favoritos...");
+    
+    final connectivityResult = await Connectivity().checkConnectivity();
+    final isConnected = connectivityResult != ConnectivityResult.none;
+    
+    print("📶 Conexión inicial en Favoritos: $isConnected");
+    
+    setState(() {
+      _isConnected = isConnected;
+    });
+
+    if (!isConnected) {
+      // Sin conexión: verificar si hay favoritos en caché
+      final hasCache = await _checkCacheData();
+      
+      if (!hasCache) {
+        print("🚫 Sin conexión y sin favoritos en caché - Mostrando pantalla sin conexión");
+        setState(() {
+          _showNoConnectionScreen = true;
+          _isCheckingAuth = false;
+        });
+        _monitorConnectivity();
+        return;
+      } else {
+        print("📱 Sin conexión pero con favoritos en caché - Mostrando datos disponibles");
+        setState(() {
+          _showNoConnectionScreen = false;
+        });
+      }
+    } else {
+      // Con conexión: proceder normalmente
+      print("✅ Con conexión en Favoritos - Procediendo normalmente");
+      setState(() {
+        _showNoConnectionScreen = false;
+      });
+      
+      await _verificarEstadoUsuario();
+    }
+    
+    _monitorConnectivity();
+  }
+
+  // Verificar si hay datos de favoritos en caché
+  Future<bool> _checkCacheData() async {
+    try {
+      final favoritoProvider = Provider.of<FavoritoProvider>(context, listen: false);
+      final hasFavoritos = favoritoProvider.favoritos.isNotEmpty;
+      
+      print("📦 Estado del caché de favoritos: $hasFavoritos");
+      
+      return hasFavoritos;
+    } catch (e) {
+      print("❌ Error verificando caché de favoritos: $e");
+      return false;
+    }
+  }
+
+  // Verificar conexión real a internet
+  Future<bool> _checkRealInternetConnection() async {
+    try {
+      final connectivityResult = await Connectivity().checkConnectivity();
+      if (connectivityResult == ConnectivityResult.none) {
+        print("❌ Sin conectividad según connectivity_plus en Favoritos");
+        return false;
+      }
+      
+      print("🔍 Verificando conexión real con petición de prueba en Favoritos...");
+      
+      try {
+        final client = HttpClient();
+        client.connectionTimeout = const Duration(seconds: 5);
+        
+        final request = await client.getUrl(Uri.parse('https://www.google.com'));
+        final response = await request.close();
+        client.close();
+        
+        if (response.statusCode == 200) {
+          print("✅ Petición de prueba exitosa en Favoritos - Internet funcional");
+          return true;
+        } else {
+          print("❌ Petición de prueba falló en Favoritos - Status: ${response.statusCode}");
+          return false;
+        }
+      } catch (e) {
+        print("❌ Petición de prueba falló en Favoritos: $e");
+        
+        final errorStr = e.toString().toLowerCase();
+        if (errorStr.contains('failed host lookup') ||
+            errorStr.contains('network unreachable') ||
+            errorStr.contains('connection failed') ||
+            errorStr.contains('timeout') ||
+            errorStr.contains('no route to host')) {
+          return false;
+        }
+        
+        return true;
+      }
+    } catch (e) {
+      print("❌ Error verificando conexión real en Favoritos: $e");
+      return false;
+    }
+  }
+
+  // Monitorear cambios de conectividad
+  void _monitorConnectivity() {
+    bool? _ultimoEstado;
+
+    Connectivity().onConnectivityChanged.listen((status) async {
+      final conectado = status != ConnectivityResult.none;
+      print("📡 Cambio de conectividad en Favoritos: $_ultimoEstado -> $conectado");
+
+      // Transición de sin conexión a con conexión desde pantalla sin conexión
+      if (_showNoConnectionScreen && conectado && (_ultimoEstado == false || _ultimoEstado == null)) {
+        print("🔄 Saliendo de pantalla sin conexión en Favoritos...");
+        setState(() {
+          _showNoConnectionScreen = false;
+        });
+        
+        await _verificarEstadoUsuario();
+        _mostrarFlushbarConexion(true);
+      }
+      // Cambios de conexión normales
+      else if (_ultimoEstado != null && _ultimoEstado != conectado && !_showNoConnectionScreen) {
+        _mostrarFlushbarConexion(conectado);
+
+        // Recargar favoritos si se recupera la conexión
+        if (conectado && _isLoggedIn) {
+          print("🔄 Recargando favoritos tras recuperar conexión...");
+          try {
+            await Provider.of<FavoritoProvider>(context, listen: false).cargarFavoritos();
+          } catch (e) {
+            print("❌ Error recargando favoritos: $e");
+          }
+        }
+      }
+
+      _ultimoEstado = conectado;
+      if (mounted) {
+        setState(() => _isConnected = conectado);
+      }
+    });
+  }
+
+  void _mostrarFlushbarConexion(bool conectado) {
+    if (!mounted) return;
+    
+    Flushbar(
+      message: conectado ? "✅ Conexión restablecida" : "⚠️ Sin conexión a internet",
+      icon: Icon(
+        conectado ? Icons.wifi : Icons.wifi_off,
+        color: Colors.white,
+      ),
+      duration: const Duration(seconds: 3),
+      backgroundColor: conectado ? Colors.green : Colors.red,
+      margin: const EdgeInsets.all(16),
+      borderRadius: BorderRadius.circular(12),
+      flushbarPosition: FlushbarPosition.TOP,
+    ).show(context);
   }
 
   String _formatCurrency(dynamic precio) {
@@ -70,7 +239,6 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
     }
   }
 
-  // Método para navegar al detalle del producto
   void _navegarADetalleProducto(Map<String, dynamic> favorito) {
     try {
       final producto = favorito['producto'] ?? {};
@@ -85,12 +253,10 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
         return;
       }
 
-      // Navegar a la pantalla de detalle del producto
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => ProductoScreen(productId: productoId),
-
         ),
       );
       
@@ -106,19 +272,19 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
 
   void _initAnimations() {
     _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 800),
+      duration: FavoritoDimensions.mediumAnimationDuration,
       vsync: this,
     );
     _slideController = AnimationController(
-      duration: const Duration(milliseconds: 1000),
+      duration: FavoritoDimensions.longAnimationDuration,
       vsync: this,
     );
     _pulseController = AnimationController(
-      duration: const Duration(milliseconds: 1800),
+      duration: FavoritoDimensions.pulseAnimationDuration,
       vsync: this,
     );
     _staggerController = AnimationController(
-      duration: const Duration(milliseconds: 1200),
+      duration: FavoritoDimensions.staggerAnimationDuration,
       vsync: this,
     );
     
@@ -150,11 +316,10 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
   Future<void> _verificarEstadoUsuario() async {
     setState(() {
       _isCheckingAuth = true;
-      _isLoading = false;
     });
 
     try {
-      await Future.delayed(const Duration(milliseconds: 800));
+      await Future.delayed(FavoritoDimensions.longDelay);
       
       final token = await _secureStorage.read(key: 'accessToken');
       
@@ -164,7 +329,7 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
           _isCheckingAuth = false;
         });
         
-        await Future.delayed(const Duration(milliseconds: 600));
+        await Future.delayed(FavoritoDimensions.mediumDelay);
         
         if (mounted) {
           Navigator.pushReplacementNamed(context, '/login');
@@ -178,11 +343,13 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
       });
       
       _fadeController.forward();
-      await Future.delayed(const Duration(milliseconds: 200));
+      await Future.delayed(FavoritoDimensions.shortDelay);
       _slideController.forward();
       _staggerController.forward();
       
-      await _cargarFavoritos();
+      if (mounted) {
+        await Provider.of<FavoritoProvider>(context, listen: false).cargarFavoritos();
+      }
     } catch (e) {
       setState(() {
         _isLoggedIn = false;
@@ -190,46 +357,9 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
         _errorMessage = 'Error al verificar usuario';
       });
       
-      await Future.delayed(const Duration(milliseconds: 800));
+      await Future.delayed(FavoritoDimensions.longDelay);
       if (mounted) {
         Navigator.pushReplacementNamed(context, '/login');
-      }
-    }
-  }
-
-  Future<void> _cargarFavoritos() async {
-    if (!_isLoggedIn) return;
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    try {
-      final favoritos = await _favoritoService.obtenerFavoritos();
-      
-      setState(() {
-        _favoritos = favoritos;
-        _isLoading = false;
-      });
-      
-     
-      
-      // Reset refresh flag
-      _isRefreshing = false;
-    } catch (e) {
-      setState(() {
-        _errorMessage = e.toString().replaceFirst('Exception: ', '');
-        _isLoading = false;
-      });
-      
-      _isRefreshing = false;
-      
-      if (_errorMessage!.contains('token') || _errorMessage!.contains('acceso')) {
-        await Future.delayed(const Duration(milliseconds: 800));
-        if (mounted) {
-          Navigator.pushReplacementNamed(context, '/login');
-        }
       }
     }
   }
@@ -242,24 +372,12 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
     
     if (!confirm) return;
 
-    setState(() {
-      _favoritos.removeAt(index);
-    });
-
     try {
-      final favorito = _favoritos.length > index ? _favoritos[index] : null;
-      final idProducto = favorito != null 
-        ? (favorito['producto']['_id'] ?? favorito['producto']['id'] ?? productoId)
-        : productoId;
-      
-      await _favoritoService.eliminarFavorito(idProducto);
+      await Provider.of<FavoritoProvider>(context, listen: false)
+          .eliminarFavorito(productoId);
       
       _mostrarSnackbar('Producto eliminado de favoritos', isSuccess: true, duration: 2);
     } catch (e) {
-      setState(() {
-        _favoritos.insert(index, _favoritos.removeAt(index));
-      });
-      
       _mostrarSnackbar(
         e.toString().replaceFirst('Exception: ', ''), 
         isSuccess: false,
@@ -270,7 +388,6 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
 
   Future<void> _agregarAlCarrito(Map<String, dynamic> favorito) async {
     try {
-      // Obtener el token de autenticación
       final token = await _secureStorage.read(key: 'accessToken');
       if (token == null || token.isEmpty) {
         _mostrarSnackbar(
@@ -286,7 +403,6 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
       final productoId = producto['_id'] ?? producto['id'];
       final nombre = producto['nombre'] ?? 'Producto';
       
-      // Verificar que el producto esté disponible
       final disponible = producto['disponible'] ?? true;
       if (!disponible) {
         _mostrarSnackbar(
@@ -297,19 +413,16 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
         return;
       }
 
-      // Mostrar indicador de carga
       _mostrarSnackbar(
         'Agregando $nombre al carrito...',
         isSuccess: true,
         duration: 1
       );
 
-      // Verificar si el producto tiene variaciones
       final variaciones = producto['variaciones'] as List<dynamic>?;
       bool agregado = false;
 
       if (variaciones != null && variaciones.isNotEmpty) {
-        // Si hay variaciones, usar la primera disponible o crear request completo
         final primeraVariacion = variaciones.first;
         final variacionId = primeraVariacion['_id'] ?? primeraVariacion['id'];
         
@@ -321,14 +434,11 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
         
         agregado = await _carritoService.agregarProductoCompleto(token, request);
       } else {
-        // Si no hay variaciones, usar el método simple
         agregado = await _carritoService.agregarProducto(token, productoId, 1);
       }
 
       if (agregado) {
-        // Usar HapticFeedback para mejor UX
         HapticFeedback.lightImpact();
-        
         _mostrarSnackbar(
           '$nombre agregado al carrito exitosamente',
           isSuccess: true,
@@ -345,12 +455,11 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
     } catch (e) {
       String errorMessage = 'Error al agregar al carrito';
       
-      // Manejar errores específicos
       if (e.toString().contains('Unauthorized') || 
           e.toString().contains('token') || 
           e.toString().contains('401')) {
         errorMessage = 'Sesión expirada. Inicia sesión nuevamente.';
-        await Future.delayed(const Duration(milliseconds: 800));
+        await Future.delayed(FavoritoDimensions.longDelay);
         if (mounted) {
           Navigator.pushReplacementNamed(context, '/login');
         }
@@ -378,87 +487,65 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
       barrierDismissible: false,
       builder: (BuildContext context) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          shape: FavoritoDecorations.dialogShape,
           contentPadding: EdgeInsets.zero,
-          backgroundColor: cardColor,
+          backgroundColor: FavoritoColors.cardColor,
           title: Container(
-            padding: const EdgeInsets.all(24),
+            padding: FavoritoDimensions.dialogTitlePadding,
             child: Row(
               children: [
                 Container(
                   padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        errorColor.withOpacity(0.15),
-                        errorColor.withOpacity(0.05),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
+                  decoration: FavoritoDecorations.dialogIconDecoration,
                   child: Icon(
                     Icons.delete_outline_rounded,
-                    color: errorColor,
+                    color: FavoritoColors.errorColor,
                     size: 28,
                   ),
                 ),
-                const SizedBox(width: 16),
+                FavoritoDimensions.mediumHorizontalSpace,
                 Expanded(
                   child: Text(
                     titulo,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                      color: textColor,
-                    ),
+                    style: FavoritoTextStyles.dialogTitle,
                   ),
                 ),
               ],
             ),
           ),
           content: Container(
-            padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+            padding: FavoritoDimensions.dialogContentPadding,
             child: Text(
               mensaje,
-              style: const TextStyle(
-                fontSize: 16,
-                color: subtextColor,
-                height: 1.5,
-              ),
+              style: FavoritoTextStyles.dialogContent,
             ),
           ),
-          actionsPadding: const EdgeInsets.all(20),
+          actionsPadding: FavoritoDimensions.dialogActionsPadding,
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
               style: TextButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                foregroundColor: subtextColor,
+                shape: FavoritoDecorations.smallButtonShape,
+                foregroundColor: FavoritoColors.subtextColor,
               ),
               child: const Text(
                 'Cancelar',
-                style: TextStyle(
-                  fontWeight: FontWeight.w500,
-                  fontSize: 16,
-                ),
+                style: FavoritoTextStyles.buttonLabel,
               ),
             ),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(true),
               style: ElevatedButton.styleFrom(
-                backgroundColor: errorColor,
+                backgroundColor: FavoritoColors.errorColor,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: FavoritoDecorations.smallButtonShape,
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                elevation: 2,
+                elevation: FavoritoDimensions.buttonElevation,
               ),
               child: const Text(
                 'Eliminar',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 16,
-                ),
+                style: FavoritoTextStyles.elevatedButtonLabel,
               ),
             ),
           ],
@@ -474,34 +561,28 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
           children: [
             Container(
               padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(12),
-              ),
+              decoration: FavoritoDecorations.snackbarIconDecoration,
               child: Icon(
                 isSuccess ? Icons.check_circle_rounded : Icons.error_rounded,
                 color: Colors.white,
-                size: 20,
+                size: FavoritoDimensions.snackbarIconSize,
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
                 mensaje,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
+                style: FavoritoTextStyles.snackbarText,
               ),
             ),
           ],
         ),
-        backgroundColor: isSuccess ? successColor : errorColor,
+        backgroundColor: isSuccess ? FavoritoColors.successColor : FavoritoColors.errorColor,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: FavoritoDecorations.snackbarShape,
         duration: Duration(seconds: duration),
-        margin: EdgeInsets.all(MediaQuery.of(context).size.width * 0.04),
-        elevation: 6,
+        margin: FavoritoDimensions.snackbarMargin(context),
+        elevation: FavoritoDimensions.snackbarElevation,
         action: SnackBarAction(
           label: 'OK',
           textColor: Colors.white.withOpacity(0.9),
@@ -513,22 +594,161 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
 
   Future<void> _onRefresh() async {
     HapticFeedback.lightImpact();
-    _isRefreshing = true; // Marcar como refresh
-    await _cargarFavoritos();
+    
+    // Si estamos en pantalla sin conexión
+    if (_showNoConnectionScreen) {
+      print("📱 Verificando conexión desde pantalla sin conexión en Favoritos...");
+      final hasRealConnection = await _checkRealInternetConnection();
+      
+      if (hasRealConnection) {
+        print("✅ Conexión real detectada en Favoritos, cargando datos...");
+        setState(() {
+          _isConnected = true;
+          _showNoConnectionScreen = false;
+        });
+        
+        await _verificarEstadoUsuario();
+        return;
+      } else {
+        print("❌ Aún sin conexión real en Favoritos");
+        _mostrarFlushbarConexion(false);
+        return;
+      }
+    }
+    
+    // Refresh normal: verificar conexión real antes de proceder
+    print("🔄 Verificando conexión real antes del refresh en Favoritos...");
+    final hasRealConnection = await _checkRealInternetConnection();
+    
+    if (!hasRealConnection) {
+      print("❌ Sin conexión real durante refresh en Favoritos");
+      setState(() {
+        _isConnected = false;
+      });
+      _mostrarFlushbarConexion(false);
+      return;
+    }
+    
+    try {
+      await Provider.of<FavoritoProvider>(context, listen: false).cargarFavoritos();
+    } catch (e) {
+      if (_isErrorDeConexion(e.toString())) {
+        setState(() {
+          _isConnected = false;
+        });
+        _mostrarFlushbarConexion(false);
+      } else {
+        _mostrarSnackbar(
+          'Error al actualizar favoritos',
+          isSuccess: false,
+          duration: 2
+        );
+      }
+    }
   }
 
-  // Widget para shimmer effect
+  // Detectar si un error es de conexión
+  bool _isErrorDeConexion(String error) {
+    final errorLower = error.toLowerCase();
+    return errorLower.contains('conexión') ||
+           errorLower.contains('connection') ||
+           errorLower.contains('internet') ||
+           errorLower.contains('network') ||
+           errorLower.contains('timeout') ||
+           errorLower.contains('unreachable') ||
+           errorLower.contains('failed host lookup');
+  }
+
+  // Pantalla sin conexión
+  Widget _buildNoConnectionScreen() {
+    final isTablet = FavoritoDimensions.isTablet(context);
+    
+    return Scaffold(
+      backgroundColor: FavoritoColors.backgroundColor,
+      appBar: AppBar(
+        title: Text(
+          'Mis Favoritos',
+          style: FavoritoTextStyles.appBarTitle,
+        ),
+        backgroundColor: FavoritoColors.cardColor,
+        foregroundColor: FavoritoColors.textColor,
+        elevation: 0,
+        centerTitle: false,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back_ios_rounded, size: FavoritoDimensions.appBarIconSize),
+          onPressed: () {
+            Navigator.pushNamedAndRemoveUntil(
+              context, 
+              '/bienvenida', 
+              (route) => false,
+            );
+          },
+        ),
+      ),
+      body: RefreshIndicator(
+        onRefresh: _onRefresh,
+        color: FavoritoColors.primaryColor,
+        strokeWidth: 3,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Container(
+            height: MediaQuery.of(context).size.height * 0.7,
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Icono principal
+                  Icon(
+                    Icons.wifi_off_rounded,
+                    size: isTablet ? 120 : 100,
+                    color: Colors.grey.shade400,
+                  ),
+                  SizedBox(height: isTablet ? 40 : 32),
+                  
+                  // Mensaje principal
+                  Text(
+                    "Sin conexión a internet",
+                    style: TextStyle(
+                      fontSize: isTablet ? 28 : 24,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade800,
+                    ),
+                  ),
+                  SizedBox(height: isTablet ? 20 : 16),
+                  
+                  // Mensaje secundario
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: isTablet ? 60 : 40),
+                    child: Text(
+                      "Revisa tu conexión y desliza hacia abajo para intentar nuevamente",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: isTablet ? 18 : 16,
+                        color: Colors.grey.shade600,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildShimmerCard({bool isTablet = false}) {
     return Shimmer.fromColors(
-      baseColor: backgroundColor,
+      baseColor: FavoritoColors.backgroundColor,
       highlightColor: Colors.white,
       child: Card(
-        elevation: 2,
-        shadowColor: primaryColor.withOpacity(0.06),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        color: cardColor,
+        elevation: isTablet ? FavoritoDimensions.cardElevationTablet : FavoritoDimensions.cardElevation,
+        shadowColor: FavoritoColors.primaryColor.withOpacity(0.06),
+        shape: isTablet ? FavoritoDecorations.cardShapeTablet : FavoritoDecorations.cardShape,
+        color: FavoritoColors.cardColor,
         child: Padding(
-          padding: EdgeInsets.all(isTablet ? 18 : 14),
+          padding: FavoritoDimensions.cardPadding(isTablet),
           child: isTablet ? _buildShimmerContentTablet() : _buildShimmerContentMobile(),
         ),
       ),
@@ -537,22 +757,18 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
 
   Widget _buildShimmerContentMobile() {
     final screenWidth = MediaQuery.of(context).size.width;
+    final imageSize = FavoritoDimensions.imageSize(screenWidth);
     
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Imagen shimmer
         Container(
-          width: screenWidth > 400 ? 100 : 85,
-          height: screenWidth > 400 ? 100 : 85,
-          decoration: BoxDecoration(
-            color: backgroundColor,
-            borderRadius: BorderRadius.circular(16),
-          ),
+          width: imageSize,
+          height: imageSize,
+          decoration: FavoritoDecorations.imageContainerDecoration,
         ),
-        SizedBox(width: screenWidth > 400 ? 16 : 12),
+        FavoritoDimensions.adaptiveHorizontalSpace(screenWidth),
         
-        // Contenido shimmer
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -560,16 +776,16 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
               Container(
                 height: 20,
                 decoration: BoxDecoration(
-                  color: backgroundColor,
+                  color: FavoritoColors.backgroundColor,
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              const SizedBox(height: 8),
+              FavoritoDimensions.smallVerticalSpace,
               Container(
                 height: 16,
                 width: double.infinity * 0.7,
                 decoration: BoxDecoration(
-                  color: backgroundColor,
+                  color: FavoritoColors.backgroundColor,
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
@@ -578,7 +794,7 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
                 height: 24,
                 width: 100,
                 decoration: BoxDecoration(
-                  color: backgroundColor,
+                  color: FavoritoColors.backgroundColor,
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
@@ -586,24 +802,23 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
           ),
         ),
         
-        // Botones shimmer
         Column(
           children: [
             Container(
-              width: 40,
-              height: 40,
+              width: FavoritoDimensions.smallButtonSize,
+              height: FavoritoDimensions.smallButtonSize,
               decoration: BoxDecoration(
-                color: backgroundColor,
-                borderRadius: BorderRadius.circular(12),
+                color: FavoritoColors.backgroundColor,
+                borderRadius: BorderRadius.circular(FavoritoDimensions.smallBorderRadius),
               ),
             ),
-            const SizedBox(height: 8),
+            FavoritoDimensions.smallVerticalSpace,
             Container(
-              width: 40,
-              height: 40,
+              width: FavoritoDimensions.smallButtonSize,
+              height: FavoritoDimensions.smallButtonSize,
               decoration: BoxDecoration(
-                color: backgroundColor,
-                borderRadius: BorderRadius.circular(12),
+                color: FavoritoColors.backgroundColor,
+                borderRadius: BorderRadius.circular(FavoritoDimensions.smallBorderRadius),
               ),
             ),
           ],
@@ -620,13 +835,10 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
           flex: 3,
           child: Container(
             width: double.infinity,
-            decoration: BoxDecoration(
-              color: backgroundColor,
-              borderRadius: BorderRadius.circular(16),
-            ),
+            decoration: FavoritoDecorations.imageContainerDecoration,
           ),
         ),
-        const SizedBox(height: 16),
+        FavoritoDimensions.mediumVerticalSpace,
         
         Expanded(
           flex: 2,
@@ -636,16 +848,16 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
               Container(
                 height: 20,
                 decoration: BoxDecoration(
-                  color: backgroundColor,
+                  color: FavoritoColors.backgroundColor,
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              const SizedBox(height: 8),
+              FavoritoDimensions.smallVerticalSpace,
               Container(
                 height: 24,
                 width: 100,
                 decoration: BoxDecoration(
-                  color: backgroundColor,
+                  color: FavoritoColors.backgroundColor,
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
@@ -656,18 +868,18 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
                     child: Container(
                       height: 16,
                       decoration: BoxDecoration(
-                        color: backgroundColor,
+                        color: FavoritoColors.backgroundColor,
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Container(
-                    width: 40,
-                    height: 40,
+                    width: FavoritoDimensions.smallButtonSize,
+                    height: FavoritoDimensions.smallButtonSize,
                     decoration: BoxDecoration(
-                      color: backgroundColor,
-                      borderRadius: BorderRadius.circular(12),
+                      color: FavoritoColors.backgroundColor,
+                      borderRadius: BorderRadius.circular(FavoritoDimensions.smallBorderRadius),
                     ),
                   ),
                 ],
@@ -680,25 +892,19 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
   }
 
   Widget _buildShimmerList() {
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.width > 600;
+    final isTablet = FavoritoDimensions.isTablet(context);
 
     return CustomScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
         if (isTablet) ...[
           SliverPadding(
-            padding: const EdgeInsets.all(24),
+            padding: FavoritoDimensions.listPadding,
             sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                childAspectRatio: 0.85,
-                crossAxisSpacing: 20,
-                mainAxisSpacing: 20,
-              ),
+              gridDelegate: FavoritoDimensions.tabletGridDelegate,
               delegate: SliverChildBuilderDelegate(
                 (context, index) => _buildShimmerCard(isTablet: true),
-                childCount: 6, // Mostrar 6 cards shimmer
+                childCount: 6,
               ),
             ),
           ),
@@ -706,16 +912,16 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
           SliverList(
             delegate: SliverChildBuilderDelegate(
               (context, index) => Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                margin: FavoritoDimensions.cardMargin,
                 child: _buildShimmerCard(isTablet: false),
               ),
-              childCount: 8, // Mostrar 8 cards shimmer
+              childCount: 8,
             ),
           ),
         ],
         
         SliverToBoxAdapter(
-          child: SizedBox(height: isTablet ? 32 : 24),
+          child: FavoritoDimensions.adaptiveVerticalSpace(isTablet),
         ),
       ],
     );
@@ -723,26 +929,26 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.width > 600;
+    final isTablet = FavoritoDimensions.isTablet(context);
+
+    // Mostrar pantalla sin conexión si corresponde
+    if (_showNoConnectionScreen) {
+      return _buildNoConnectionScreen();
+    }
 
     return Scaffold(
-      backgroundColor: backgroundColor,
+      backgroundColor: FavoritoColors.backgroundColor,
       appBar: _isCheckingAuth ? null : AppBar(
-        title: const Text(
+        title: Text(
           'Mis Favoritos',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 22,
-            letterSpacing: -0.5,
-          ),
+          style: FavoritoTextStyles.appBarTitle,
         ),
-        backgroundColor: cardColor,
-        foregroundColor: textColor,
+        backgroundColor: FavoritoColors.cardColor,
+        foregroundColor: FavoritoColors.textColor,
         elevation: 0,
         centerTitle: false,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_rounded, size: 20),
+          icon: Icon(Icons.arrow_back_ios_rounded, size: FavoritoDimensions.appBarIconSize),
           onPressed: () {
             Navigator.pushNamedAndRemoveUntil(
               context, 
@@ -752,53 +958,17 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
           },
         ),
         actions: [
-          if (_isLoggedIn && !_isLoading && _favoritos.isNotEmpty)
-            Container(
-              margin: EdgeInsets.only(
-                right: isTablet ? 24 : 16, 
-                top: 12, 
-                bottom: 12
-              ),
-              padding: EdgeInsets.symmetric(
-                horizontal: isTablet ? 16 : 12, 
-                vertical: 8
-              ),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    favoriteColor.withOpacity(0.2),
-                    favoriteColor.withOpacity(0.1),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: favoriteColor.withOpacity(0.3),
-                  width: 1.5,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: favoriteColor.withOpacity(0.1),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.favorite_rounded, size: 18, color: favoriteColor),
-                  const SizedBox(width: 6),
-                  Text(
-                    '${_favoritos.length}',
-                    style: TextStyle(
-                      fontSize: isTablet ? 16 : 15,
-                      fontWeight: FontWeight.w700,
-                      color: favoriteColor,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          Consumer<FavoritoProvider>(
+            builder: (context, provider, child) {
+              if (_isLoggedIn && !provider.isLoading && provider.favoritos.isNotEmpty) {
+                return FavoritoWidgets.favoriteCounter(
+                  count: provider.favoritos.length,
+                  isTablet: isTablet,
+                );
+              }
+              return const SizedBox();
+            },
+          ),
         ],
       ),
       body: _isCheckingAuth
@@ -809,15 +979,27 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
                 position: _slideAnimation,
                 child: RefreshIndicator(
                   onRefresh: _onRefresh,
-                  color: primaryColor,
+                  color: FavoritoColors.primaryColor,
                   strokeWidth: 3,
-                  child: _isLoading
-                      ? _buildShimmerList()
-                      : _errorMessage != null
-                          ? _buildErrorWidget()
-                          : _favoritos.isEmpty
-                              ? _buildEmptyState()
-                              : _buildFavoritesList(),
+                  child: Consumer<FavoritoProvider>(
+                    builder: (context, provider, child) {
+                      if (provider.isLoading && _isConnected && !_showNoConnectionScreen) {
+                        return _buildShimmerList();
+                      } else if (_errorMessage != null && !_showNoConnectionScreen) {
+                        return _buildErrorWidget();
+                      } else if (provider.favoritos.isEmpty && _isConnected && !_showNoConnectionScreen) {
+                        return _buildEmptyState();
+                      } else if (!_showNoConnectionScreen && provider.favoritos.isNotEmpty) {
+                        return _buildFavoritesList(provider.favoritos);
+                      } else {
+                        // Estado por defecto cuando no hay conexión pero sí hay datos en caché
+                        if (provider.favoritos.isNotEmpty && !_isConnected) {
+                          return _buildFavoritesList(provider.favoritos);
+                        }
+                        return const SizedBox.shrink();
+                      }
+                    },
+                  ),
                 ),
               ),
             ),
@@ -825,83 +1007,36 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
   }
 
   Widget _buildAuthLoadingWidget() {
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.width > 600;
+    final isTablet = FavoritoDimensions.isTablet(context);
 
     return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [cardColor, backgroundColor],
-        ),
+      decoration: BoxDecoration(
+        gradient: FavoritoColors.authLoadingGradient,
       ),
       child: SafeArea(
         child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              AnimatedBuilder(
+              FavoritoWidgets.pulseIcon(
                 animation: _pulseAnimation,
-                builder: (context, child) {
-                  return Transform.scale(
-                    scale: _pulseAnimation.value,
-                    child: Container(
-                      padding: EdgeInsets.all(isTablet ? 48 : 40),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            favoriteColor.withOpacity(0.1), // Cambio a rojo
-                            favoriteColor.withOpacity(0.05), // Cambio a rojo
-                          ],
-                        ),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: favoriteColor.withOpacity(0.2), // Cambio a rojo
-                            blurRadius: 30,
-                            offset: const Offset(0, 15),
-                          ),
-                        ],
-                      ),
-                      child: Icon(
-                        Icons.favorite_rounded,
-                        size: isTablet ? 80 : 64,
-                        color: favoriteColor, // Cambio a rojo
-                      ),
-                    ),
-                  );
-                },
+                icon: Icons.favorite_rounded,
+                isTablet: isTablet,
               ),
               SizedBox(height: isTablet ? 48 : 40),
               
-              SizedBox(
-                width: isTablet ? 48 : 40,
-                height: isTablet ? 48 : 40,
-                child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
-                  strokeWidth: 3.5,
-                  backgroundColor: accentColor.withOpacity(0.2),
-                ),
-              ),
+              FavoritoWidgets.circularProgress(isLarge: isTablet),
               SizedBox(height: isTablet ? 32 : 24),
               
               Text(
                 'Verificando sesión...',
-                style: TextStyle(
-                  color: textColor,
-                  fontSize: isTablet ? 18 : 16,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: FavoritoTextStyles.loadingTitle(isTablet),
               ),
               SizedBox(height: isTablet ? 8 : 6),
               
               Text(
                 'Un momento por favor',
-                style: TextStyle(
-                  color: subtextColor,
-                  fontSize: isTablet ? 15 : 14,
-                ),
+                style: FavoritoTextStyles.loadingSubtitle(isTablet),
               ),
             ],
           ),
@@ -911,173 +1046,30 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
   }
 
   Widget _buildErrorWidget() {
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.width > 600;
+    final isTablet = FavoritoDimensions.isTablet(context);
 
     return RefreshIndicator(
       onRefresh: _onRefresh,
-      color: primaryColor,
+      color: FavoritoColors.primaryColor,
       strokeWidth: 3,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         child: Container(
-          height: MediaQuery.of(context).size.height - 120,
-          child: Center(
-            child: Padding(
-              padding: EdgeInsets.all(isTablet ? 32 : 24),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: EdgeInsets.all(isTablet ? 32 : 24),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          errorColor.withOpacity(0.1),
-                          errorColor.withOpacity(0.05),
-                        ],
-                      ),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: errorColor.withOpacity(0.2), width: 2),
-                    ),
-                    child: Icon(
-                      Icons.error_outline_rounded,
-                      size: isTablet ? 80 : 64,
-                      color: errorColor,
-                    ),
-                  ),
-                  SizedBox(height: isTablet ? 32 : 24),
-                  
-                  Text(
-                    'Algo salió mal',
-                    style: TextStyle(
-                      fontSize: isTablet ? 28 : 22,
-                      fontWeight: FontWeight.bold,
-                      color: textColor,
-                    ),
-                  ),
-                  SizedBox(height: isTablet ? 16 : 12),
-                  
-                  Container(
-                    padding: EdgeInsets.all(isTablet ? 20 : 16),
-                    decoration: BoxDecoration(
-                      color: errorColor.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: errorColor.withOpacity(0.1)),
-                    ),
-                    child: Text(
-                      _errorMessage!,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: subtextColor,
-                        fontSize: isTablet ? 16 : 14,
-                        height: 1.4,
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: isTablet ? 40 : 32),
-                  
-                  if (isTablet) ...[
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                          width: 160,
-                          height: 56,
-                          child: OutlinedButton.icon(
-                            onPressed: () => Navigator.pushNamed(context, '/bienvenida'),
-                            icon: const Icon(Icons.home_outlined),
-                            label: const Text('Inicio'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: subtextColor,
-                              side: BorderSide(color: subtextColor),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        SizedBox(
-                          width: 160,
-                          height: 56,
-                          child: ElevatedButton.icon(
-                            onPressed: () {
-                              if (_errorMessage!.contains('token') || _errorMessage!.contains('acceso')) {
-                                Navigator.pushReplacementNamed(context, '/login');
-                              } else {
-                                _cargarFavoritos();
-                              }
-                            },
-                            icon: Icon(_errorMessage!.contains('token') 
-                              ? Icons.login_rounded 
-                              : Icons.refresh_rounded),
-                            label: Text(_errorMessage!.contains('token') 
-                              ? 'Iniciar Sesión' 
-                              : 'Reintentar'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: primaryColor,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ] else ...[
-                    Column(
-                      children: [
-                        SizedBox(
-                          width: double.infinity,
-                          height: 56,
-                          child: ElevatedButton.icon(
-                            onPressed: () {
-                              if (_errorMessage!.contains('token') || _errorMessage!.contains('acceso')) {
-                                Navigator.pushReplacementNamed(context, '/login');
-                              } else {
-                                _cargarFavoritos();
-                              }
-                            },
-                            icon: Icon(_errorMessage!.contains('token') 
-                              ? Icons.login_rounded 
-                              : Icons.refresh_rounded),
-                            label: Text(_errorMessage!.contains('token') 
-                              ? 'Iniciar Sesión' 
-                              : 'Reintentar'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: primaryColor,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 56,
-                          child: OutlinedButton.icon(
-                            onPressed: () => Navigator.pushNamed(context, '/bienvenida'),
-                            icon: const Icon(Icons.home_outlined),
-                            label: const Text('Volver al Inicio'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: subtextColor,
-                              side: BorderSide(color: subtextColor),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
+          height: FavoritoDimensions.screenHeightWithoutAppBar(context),
+          child: FavoritoWidgets.errorState(
+            title: 'Algo salió mal',
+            message: _errorMessage!,
+            primaryButtonText: _errorMessage!.contains('token') ? 'Iniciar Sesión' : 'Reintentar',
+            onPrimaryPressed: () {
+              if (_errorMessage!.contains('token') || _errorMessage!.contains('acceso')) {
+                Navigator.pushReplacementNamed(context, '/login');
+              } else {
+                _onRefresh();
+              }
+            },
+            secondaryButtonText: 'Inicio',
+            onSecondaryPressed: () => Navigator.pushNamed(context, '/bienvenida'),
+            isTablet: isTablet,
           ),
         ),
       ),
@@ -1085,156 +1077,52 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
   }
 
   Widget _buildEmptyState() {
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.width > 600;
+    final isTablet = FavoritoDimensions.isTablet(context);
 
     return RefreshIndicator(
       onRefresh: _onRefresh,
-      color: primaryColor,
+      color: FavoritoColors.primaryColor,
       strokeWidth: 3,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         child: Container(
-          height: MediaQuery.of(context).size.height - 120,
-          child: Center(
-            child: Padding(
-              padding: EdgeInsets.all(isTablet ? 32 : 24),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  TweenAnimationBuilder<double>(
-                    tween: Tween(begin: 0.8, end: 1.05),
-                    duration: const Duration(seconds: 2),
-                    curve: Curves.easeInOut,
-                    builder: (context, scale, child) {
-                      return Transform.scale(
-                        scale: scale,
-                        child: Container(
-                          padding: EdgeInsets.all(isTablet ? 48 : 40),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                favoriteColor.withOpacity(0.15), // Cambio a rojo
-                                favoriteColor.withOpacity(0.05), // Cambio a rojo
-                              ],
-                            ),
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: favoriteColor.withOpacity(0.15), // Cambio a rojo
-                                blurRadius: 40,
-                                offset: const Offset(0, 20),
-                              ),
-                            ],
-                          ),
-                          child: Icon(
-                            Icons.favorite_border_rounded,
-                            size: isTablet ? 100 : 80,
-                            color: favoriteColor, // Cambio a rojo
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                  SizedBox(height: isTablet ? 40 : 32),
-                  
-                  Text(
-                    'Sin favoritos aún',
-                    style: TextStyle(
-                      fontSize: isTablet ? 32 : 24,
-                      fontWeight: FontWeight.bold,
-                      color: textColor,
-                    ),
-                  ),
-                  SizedBox(height: isTablet ? 16 : 12),
-                  
-                  Text(
-                    'Descubre productos increíbles y agrega\ntus favoritos para encontrarlos fácilmente.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: isTablet ? 18 : 16,
-                      color: subtextColor,
-                      height: 1.5,
-                    ),
-                  ),
-                  SizedBox(height: isTablet ? 48 : 40),
-                  
-                  SizedBox(
-                    width: isTablet ? 320 : double.infinity,
-                    height: isTablet ? 64 : 56,
-                    child: ElevatedButton.icon(
-                      onPressed: () => Navigator.pushNamed(context, '/bienvenida'),
-                      icon: const Icon(Icons.explore_outlined),
-                      label: Text(
-                        'Explorar Productos',
-                        style: TextStyle(
-                          fontSize: isTablet ? 18 : 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Color(0xFF8E9AAF), // Gris suave
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(isTablet ? 20 : 16),
-                        ),
-                        elevation: 3,
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: isTablet ? 24 : 16),
-                  
-                  TextButton.icon(
-                    onPressed: () => Navigator.pushNamed(context, '/bienvenida'),
-                    icon: const Icon(Icons.arrow_back_ios_rounded, size: 16),
-                    label: const Text('Volver al Inicio'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: subtextColor,
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isTablet ? 20 : 16, 
-                        vertical: 12
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          height: FavoritoDimensions.screenHeightWithoutAppBar(context),
+          child: FavoritoWidgets.emptyState(
+            icon: Icons.favorite_border_rounded,
+            title: 'Sin favoritos aún',
+            description: 'Descubre productos increíbles y agrega\ntus favoritos para encontrarlos fácilmente.',
+            buttonText: 'Explorar Productos',
+            onButtonPressed: () => Navigator.pushNamed(context, '/bienvenida'),
+            secondaryButtonText: 'Volver al Inicio',
+            onSecondaryButtonPressed: () => Navigator.pushNamed(context, '/bienvenida'),
+            isTablet: isTablet,
           ),
         ),
       ),
     );
   }
 
-  Widget _buildFavoritesList() {
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.width > 600;
+  Widget _buildFavoritesList(List<Map<String, dynamic>> favoritos) {
+    final isTablet = FavoritoDimensions.isTablet(context);
 
     return CustomScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
-        // Lista de favoritos adaptativa
         if (isTablet) ...[
           SliverPadding(
-            padding: const EdgeInsets.all(24),
+            padding: FavoritoDimensions.listPadding,
             sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                childAspectRatio: 0.85,
-                crossAxisSpacing: 20,
-                mainAxisSpacing: 20,
-              ),
+              gridDelegate: FavoritoDimensions.tabletGridDelegate,
               delegate: SliverChildBuilderDelegate(
                 (context, index) {
-                  final favorito = _favoritos[index];
+                  final favorito = favoritos[index];
                   return AnimatedContainer(
-                    duration: Duration(milliseconds: 300 + (index * 100)),
+                    duration: FavoritoTheme.getStaggeredAnimationDurationTablet(index),
                     curve: Curves.easeOutBack,
                     child: _buildFavoriteCardTablet(favorito, index),
                   );
                 },
-                childCount: _favoritos.length,
+                childCount: favoritos.length,
               ),
             ),
           ),
@@ -1242,27 +1130,26 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
           SliverList(
             delegate: SliverChildBuilderDelegate(
               (context, index) {
-                final favorito = _favoritos[index];
+                final favorito = favoritos[index];
                 return AnimatedContainer(
-                  duration: Duration(milliseconds: 300 + (index * 80)),
+                  duration: FavoritoTheme.getStaggeredAnimationDuration(index),
                   curve: Curves.easeOutBack,
-                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  margin: FavoritoDimensions.cardMargin,
                   child: _buildFavoriteCard(favorito, index),
                 );
               },
-              childCount: _favoritos.length,
+              childCount: favoritos.length,
             ),
           ),
         ],
         
         SliverToBoxAdapter(
-          child: SizedBox(height: isTablet ? 32 : 24),
+          child: FavoritoDimensions.adaptiveVerticalSpace(isTablet),
         ),
       ],
     );
   }
 
-  /// Card de producto favorito para tablet con navegación al detalle
   Widget _buildFavoriteCardTablet(Map<String, dynamic> favorito, int index) {
     final producto = favorito['producto'] ?? {};
     final precio = producto['precio']?.toString() ?? '0';
@@ -1273,12 +1160,12 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
     final productoId = producto['_id'] ?? producto['id'] ?? '';
 
     return Card(
-      elevation: 3,
-      shadowColor: primaryColor.withOpacity(0.08),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      color: cardColor,
+      elevation: FavoritoDimensions.cardElevationTablet,
+      shadowColor: FavoritoColors.primaryColor.withOpacity(0.08),
+      shape: FavoritoDecorations.cardShapeTablet,
+      color: FavoritoColors.cardColor,
       child: InkWell(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(FavoritoDimensions.cardBorderRadiusTablet),
         onTap: () {
           HapticFeedback.lightImpact();
           _navegarADetalleProducto(favorito);
@@ -1294,76 +1181,26 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
                     tag: 'product_${productoId}_$index',
                     child: ClipRRect(
                       borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(24),
-                        topRight: Radius.circular(24),
+                        topLeft: Radius.circular(FavoritoDimensions.cardBorderRadiusTablet),
+                        topRight: Radius.circular(FavoritoDimensions.cardBorderRadiusTablet),
                       ),
-                      child: Container(
+                      child: FavoritoWidgets.imageContainer(
+                        imageUrl: imagen,
                         width: double.infinity,
-                        decoration: BoxDecoration(
-                          color: backgroundColor,
-                        ),
-                        child: imagen != null
-                            ? Image.network(
-                                imagen,
-                                fit: BoxFit.cover,
-                                loadingBuilder: (context, child, loadingProgress) {
-                                  if (loadingProgress == null) return child;
-                                  return Center(
-                                    child: CircularProgressIndicator(
-                                      value: loadingProgress.expectedTotalBytes != null
-                                          ? loadingProgress.cumulativeBytesLoaded / 
-                                            loadingProgress.expectedTotalBytes!
-                                          : null,
-                                      strokeWidth: 2.5,
-                                      valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
-                                    ),
-                                  );
-                                },
-                                errorBuilder: (context, error, stackTrace) => Center(
-                                  child: Icon(
-                                    Icons.image_not_supported_outlined,
-                                    color: subtextColor,
-                                    size: 48,
-                                  ),
-                                ),
-                              )
-                            : Center(
-                                child: Icon(
-                                  Icons.image_outlined,
-                                  color: subtextColor,
-                                  size: 48,
-                                ),
-                              ),
+                        height: double.infinity,
+                        fit: BoxFit.cover,
                       ),
                     ),
                   ),
-                  // Botón eliminar más intuitivo
+                  // Botón eliminar
                   Positioned(
                     top: 12,
                     right: 12,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: cardColor,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: IconButton(
-                        onPressed: () {
-                          HapticFeedback.mediumImpact();
-                          _eliminarFavorito(productoId, index);
-                        },
-                        icon: const Icon(Icons.close_rounded),
-                        color: subtextColor,
-                        iconSize: 20,
-                        padding: const EdgeInsets.all(8),
-                        tooltip: 'Eliminar de favoritos',
-                      ),
+                    child: FavoritoWidgets.closeButton(
+                      onPressed: () {
+                        HapticFeedback.mediumImpact();
+                        _eliminarFavorito(productoId, index);
+                      },
                     ),
                   ),
                   // Badge de descuento
@@ -1371,29 +1208,9 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
                     Positioned(
                       top: 12,
                       left: 12,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [successColor, successColor.withOpacity(0.8)],
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: successColor.withOpacity(0.3),
-                              blurRadius: 6,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                        ),
-                        child: Text(
-                          '-$descuento%',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                      child: FavoritoWidgets.discountBadge(
+                        discount: descuento,
+                        isSmall: false,
                       ),
                     ),
                 ],
@@ -1410,26 +1227,15 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
                   children: [
                     Text(
                       nombre,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: textColor,
-                        letterSpacing: -0.2,
-                      ),
+                      style: FavoritoTextStyles.productNameTablet,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 8),
+                    FavoritoDimensions.smallVerticalSpace,
                     
-                    // Precio formateado en negro
                     Text(
                       _formatCurrency(precio),
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: textColor, // Cambio de primaryColor a textColor (negro)
-                        letterSpacing: -0.3,
-                      ),
+                      style: FavoritoTextStyles.productPriceTablet,
                     ),
                     const Spacer(),
                     
@@ -1437,40 +1243,12 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        // Botón agregar al carrito
-                        Container(
-                          decoration: BoxDecoration(
-                            gradient: disponible 
-                              ? LinearGradient(
-                                  colors: [successColor, successColor.withOpacity(0.8)],
-                                )
-                              : LinearGradient(
-                                  colors: [subtextColor.withOpacity(0.3), subtextColor.withOpacity(0.2)],
-                                ),
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: disponible ? [
-                              BoxShadow(
-                                color: successColor.withOpacity(0.2),
-                                blurRadius: 6,
-                                offset: const Offset(0, 2),
-                              ),
-                            ] : null,
-                          ),
-                          child: IconButton(
-                            onPressed: disponible ? () {
-                              HapticFeedback.lightImpact();
-                              _agregarAlCarrito(favorito);
-                            } : null,
-                            icon: Icon(
-                              disponible 
-                                ? Icons.add_shopping_cart_outlined
-                                : Icons.remove_shopping_cart_outlined,
-                            ),
-                            color: disponible ? Colors.white : subtextColor,
-                            iconSize: 18,
-                            padding: const EdgeInsets.all(12),
-                            tooltip: disponible ? 'Agregar al carrito' : 'Producto agotado',
-                          ),
+                        FavoritoWidgets.cartButton(
+                          onPressed: disponible ? () {
+                            HapticFeedback.lightImpact();
+                            _agregarAlCarrito(favorito);
+                          } : null,
+                          disponible: disponible,
                         ),
                       ],
                     ),
@@ -1484,7 +1262,6 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
     );
   }
 
-  /// Card de producto favorito para móvil con navegación al detalle
   Widget _buildFavoriteCard(Map<String, dynamic> favorito, int index) {
     final producto = favorito['producto'] ?? {};
     final precio = producto['precio']?.toString() ?? '0';
@@ -1496,18 +1273,18 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
     final screenWidth = MediaQuery.of(context).size.width;
 
     return Card(
-      elevation: 2,
-      shadowColor: primaryColor.withOpacity(0.06),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      color: cardColor,
+      elevation: FavoritoDimensions.cardElevation,
+      shadowColor: FavoritoColors.primaryColor.withOpacity(0.06),
+      shape: FavoritoDecorations.cardShape,
+      color: FavoritoColors.cardColor,
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(FavoritoDimensions.cardBorderRadius),
         onTap: () {
           HapticFeedback.lightImpact();
           _navegarADetalleProducto(favorito);
         },
         child: Padding(
-          padding: EdgeInsets.all(screenWidth > 400 ? 16 : 14),
+          padding: FavoritoDimensions.cardPaddingTablet(FavoritoDimensions.isLargeScreen(context)),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1516,79 +1293,25 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
                 tag: 'product_${productoId}_$index',
                 child: Stack(
                   children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: Container(
-                        width: screenWidth > 400 ? 100 : 85,
-                        height: screenWidth > 400 ? 100 : 85,
-                        decoration: BoxDecoration(
-                          color: backgroundColor,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: imagen != null
-                            ? Image.network(
-                                imagen,
-                                fit: BoxFit.cover,
-                                loadingBuilder: (context, child, loadingProgress) {
-                                  if (loadingProgress == null) return child;
-                                  return Center(
-                                    child: CircularProgressIndicator(
-                                      value: loadingProgress.expectedTotalBytes != null
-                                          ? loadingProgress.cumulativeBytesLoaded / 
-                                            loadingProgress.expectedTotalBytes!
-                                          : null,
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
-                                    ),
-                                  );
-                                },
-                                errorBuilder: (context, error, stackTrace) => Icon(
-                                  Icons.image_not_supported_outlined,
-                                  color: subtextColor,
-                                  size: 32,
-                                ),
-                              )
-                            : Icon(
-                                Icons.image_outlined,
-                                color: subtextColor,
-                                size: 32,
-                              ),
-                      ),
+                    FavoritoWidgets.imageContainer(
+                      imageUrl: imagen,
+                      width: FavoritoDimensions.imageSize(screenWidth),
+                      height: FavoritoDimensions.imageSize(screenWidth),
                     ),
                     // Badge de descuento
                     if (descuento > 0)
                       Positioned(
                         top: -2,
                         left: -2,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [successColor, successColor.withOpacity(0.8)],
-                            ),
-                            borderRadius: BorderRadius.circular(8),
-                            boxShadow: [
-                              BoxShadow(
-                                color: successColor.withOpacity(0.3),
-                                blurRadius: 4,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Text(
-                            '-$descuento%',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                        child: FavoritoWidgets.discountBadge(
+                          discount: descuento,
+                          isSmall: true,
                         ),
                       ),
                   ],
                 ),
               ),
-              SizedBox(width: screenWidth > 400 ? 16 : 12),
+              FavoritoDimensions.adaptiveHorizontalSpace(screenWidth),
               
               // Información del producto
               Expanded(
@@ -1597,26 +1320,15 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
                   children: [
                     Text(
                       nombre,
-                      style: TextStyle(
-                        fontSize: screenWidth > 400 ? 16 : 15,
-                        fontWeight: FontWeight.w600,
-                        color: textColor,
-                        letterSpacing: -0.2,
-                      ),
+                      style: FavoritoTextStyles.productNameMobile(screenWidth),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                     SizedBox(height: screenWidth > 400 ? 12 : 10),
                     
-                    // Precio formateado en negro
                     Text(
                       _formatCurrency(precio),
-                      style: TextStyle(
-                        fontSize: screenWidth > 400 ? 18 : 16,
-                        fontWeight: FontWeight.w800,
-                        color: textColor, // Cambio de primaryColor a textColor (negro)
-                        letterSpacing: -0.3,
-                      ),
+                      style: FavoritoTextStyles.productPriceMobile(screenWidth),
                     ),
                   ],
                 ),
@@ -1626,64 +1338,20 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
               Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Botón eliminar más claro
-                  Container(
-                    decoration: BoxDecoration(
-                      color: backgroundColor,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: subtextColor.withOpacity(0.2),
-                        width: 1,
-                      ),
-                    ),
-                    child: IconButton(
-                      onPressed: () {
-                        HapticFeedback.mediumImpact();
-                        _eliminarFavorito(productoId, index);
-                      },
-                      icon: const Icon(Icons.delete_outline_rounded),
-                      color: subtextColor,
-                      tooltip: 'Eliminar de favoritos',
-                      padding: const EdgeInsets.all(8),
-                      iconSize: 20,
-                    ),
+                  FavoritoWidgets.deleteButton(
+                    onPressed: () {
+                      HapticFeedback.mediumImpact();
+                      _eliminarFavorito(productoId, index);
+                    },
                   ),
-                  const SizedBox(height: 8),
+                  FavoritoDimensions.smallVerticalSpace,
                   
-                  // Botón agregar al carrito
-                  Container(
-                    decoration: BoxDecoration(
-                      gradient: disponible 
-                        ? LinearGradient(
-                            colors: [successColor, successColor.withOpacity(0.8)],
-                          )
-                        : LinearGradient(
-                            colors: [subtextColor.withOpacity(0.3), subtextColor.withOpacity(0.2)],
-                          ),
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: disponible ? [
-                        BoxShadow(
-                          color: successColor.withOpacity(0.2),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ] : null,
-                    ),
-                    child: IconButton(
-                      onPressed: disponible ? () {
-                        HapticFeedback.lightImpact();
-                        _agregarAlCarrito(favorito);
-                      } : null,
-                      icon: Icon(
-                        disponible 
-                          ? Icons.add_shopping_cart_outlined
-                          : Icons.remove_shopping_cart_outlined,
-                      ),
-                      color: disponible ? Colors.white : subtextColor,
-                      tooltip: disponible ? 'Agregar al carrito' : 'Producto agotado',
-                      padding: const EdgeInsets.all(8),
-                      iconSize: 20,
-                    ),
+                  FavoritoWidgets.cartButton(
+                    onPressed: disponible ? () {
+                      HapticFeedback.lightImpact();
+                      _agregarAlCarrito(favorito);
+                    } : null,
+                    disponible: disponible,
                   ),
                 ],
               ),

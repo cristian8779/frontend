@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/auth_service.dart';
+import 'package:crud/theme/registre/app_theme.dart';
+import 'package:crud/theme/registre/register_styles.dart';
+import 'package:crud/widgets/style_widgets.dart';
+import 'privacy_policy_screen.dart'; // Importar la pantalla de política de privacidad
 
 class RegisterStepScreen extends StatefulWidget {
   const RegisterStepScreen({super.key});
@@ -28,6 +32,10 @@ class _RegisterStepScreenState extends State<RegisterStepScreen>
   bool _obscureConfirm = true;
   bool _isLoading = false;
 
+  // Variables para términos y condiciones
+  bool _acceptedTerms = false;
+  bool _showTermsError = false;
+
   // Validaciones de contraseña mejoradas
   bool _validLength = false;
   bool _hasUpperOrDigit = false;
@@ -53,6 +61,31 @@ class _RegisterStepScreenState extends State<RegisterStepScreen>
   late Animation<double> _shakeAnimation;
   late Animation<double> _pulseAnimation;
   late Animation<double> _progressAnimation;
+
+  // Constantes de contenido actualizadas para incluir paso de términos
+  static const titles = [
+    'Tu correo electrónico',
+    'Tu nombre completo',
+    'Contraseña segura',
+    'Términos y condiciones',
+    'Confirmar registro'
+  ];
+
+  static const subtitles = [
+    'Necesitamos tu email para mantenerte conectado',
+    '¿Cómo te gusta que te llamen?',
+    'Crea una contraseña para proteger tu cuenta',
+    'Acepta nuestros términos para continuar',
+    'Revisa que todo esté perfecto antes de continuar'
+  ];
+
+  static const icons = [
+    Icons.email_rounded,
+    Icons.person_rounded,
+    Icons.lock_rounded,
+    Icons.description_rounded,
+    Icons.check_circle_rounded
+  ];
 
   @override
   void initState() {
@@ -148,22 +181,6 @@ class _RegisterStepScreenState extends State<RegisterStepScreen>
     _progressController.dispose();
   }
 
-  // Función helper para obtener tamaños responsivos
-  double _getResponsiveSize(BuildContext context, double baseSize) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    if (screenWidth > 600) return baseSize * 1.2; // Tablets
-    if (screenWidth < 360) return baseSize * 0.9; // Pantallas pequeñas
-    return baseSize;
-  }
-
-  // Función helper para obtener padding responsivo
-  EdgeInsets _getResponsivePadding(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    if (screenWidth > 600) return const EdgeInsets.all(32); // Tablets
-    if (screenWidth < 360) return const EdgeInsets.all(12); // Pantallas pequeñas
-    return const EdgeInsets.all(20); // Por defecto
-  }
-
   void _validatePasswordLive() {
     final pass = _passCtrl.text;
     setState(() {
@@ -224,43 +241,21 @@ class _RegisterStepScreenState extends State<RegisterStepScreen>
 
   bool get _isPasswordValid => _validLength && _hasUpperOrDigit && _hasSpecial;
 
-  double get _passwordStrength {
-    int score = 0;
-    if (_validLength) score++;
-    if (_hasUpperOrDigit) score += 2;
-    if (_hasSpecial) score++;
-    return score / 4.0;
-  }
-
-  Color get _strengthColor {
-    if (_passwordStrength < 0.3) return const Color(0xFFEF4444);
-    if (_passwordStrength < 0.6) return const Color(0xFFF59E0B);
-    if (_passwordStrength < 0.8) return const Color(0xFF10B981);
-    return const Color(0xFF059669);
-  }
-
-  String get _strengthText {
-    if (_passwordStrength < 0.3) return 'Muy débil';
-    if (_passwordStrength < 0.6) return 'Débil';
-    if (_passwordStrength < 0.8) return 'Buena';
-    return 'Muy fuerte';
-  }
-
   Future<bool> _onWillPop() async {
     if (!_hasUnsavedChanges) return true;
 
     return await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.largeRadius)),
             title: Row(
               children: [
                 Icon(
                   Icons.warning_amber_rounded,
-                  color: const Color(0xFFF59E0B),
-                  size: _getResponsiveSize(context, 28),
+                  color: AppTheme.warningColor,
+                  size: RegisterStyles.getResponsiveSize(context, 28),
                 ),
-                SizedBox(width: _getResponsiveSize(context, 12)),
+                SizedBox(width: RegisterStyles.getResponsiveSize(context, 12)),
                 const Flexible(child: Text('¿Cancelar registro?')),
               ],
             ),
@@ -275,7 +270,7 @@ class _RegisterStepScreenState extends State<RegisterStepScreen>
               ElevatedButton(
                 onPressed: () => Navigator.of(context).pop(true),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFEF4444),
+                  backgroundColor: AppTheme.errorColor,
                   foregroundColor: Colors.white,
                 ),
                 child: const Text('Salir'),
@@ -287,7 +282,8 @@ class _RegisterStepScreenState extends State<RegisterStepScreen>
   }
 
   void _nextStep() {
-    if (!_formKey.currentState!.validate()) {
+    // Validar el formulario actual
+    if (_currentPage != 3 && !_formKey.currentState!.validate()) {
       _shakeController.forward().then((_) => _shakeController.reset());
       _showSnackBar('Por favor, completa los campos correctamente', isError: true);
       HapticFeedback.heavyImpact();
@@ -316,7 +312,18 @@ class _RegisterStepScreenState extends State<RegisterStepScreen>
       }
     }
 
+    // Validar términos y condiciones en el paso 3
     if (_currentPage == 3) {
+      if (!_acceptedTerms) {
+        setState(() => _showTermsError = true);
+        _shakeController.forward().then((_) => _shakeController.reset());
+        _showSnackBar('Debes aceptar los términos y condiciones para continuar', isError: true);
+        HapticFeedback.heavyImpact();
+        return;
+      }
+    }
+
+    if (_currentPage == 4) {
       _submit();
       return;
     }
@@ -338,6 +345,7 @@ class _RegisterStepScreenState extends State<RegisterStepScreen>
         _passFocus.requestFocus();
         break;
       case 3:
+      case 4:
         FocusScope.of(context).unfocus();
         break;
     }
@@ -364,6 +372,29 @@ class _RegisterStepScreenState extends State<RegisterStepScreen>
       case 2:
         _passFocus.requestFocus();
         break;
+      case 3:
+        FocusScope.of(context).unfocus();
+        break;
+    }
+  }
+
+  // Función para mostrar la política de privacidad
+  Future<void> _showPrivacyPolicy() async {
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const PrivacyPolicyScreen(),
+      ),
+    );
+
+    if (result == true && mounted) {
+      setState(() {
+        _acceptedTerms = true;
+        _showTermsError = false;
+        _hasUnsavedChanges = true;
+      });
+      HapticFeedback.mediumImpact();
+      _showSnackBar('Términos y condiciones aceptados');
     }
   }
 
@@ -444,25 +475,23 @@ class _RegisterStepScreenState extends State<RegisterStepScreen>
             Icon(
               isError ? Icons.error_outline : Icons.check_circle_outline,
               color: Colors.white,
-              size: _getResponsiveSize(context, 20),
+              size: RegisterStyles.mediumIcon(context),
             ),
-            SizedBox(width: _getResponsiveSize(context, 12)),
+            SizedBox(width: RegisterStyles.getResponsiveSize(context, 12)),
             Expanded(
               child: Text(
                 message,
                 style: TextStyle(
-                  fontSize: _getResponsiveSize(context, 14),
+                  fontSize: RegisterStyles.getResponsiveSize(context, 14),
                   fontWeight: FontWeight.w500,
                 ),
               ),
             ),
           ],
         ),
-        backgroundColor: isError
-            ? const Color(0xFFEF4444)
-            : const Color(0xFF10B981),
+        backgroundColor: isError ? AppTheme.errorColor : AppTheme.secondaryColor,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.mediumRadius)),
         margin: EdgeInsets.only(
           left: 16,
           right: 16,
@@ -483,485 +512,20 @@ class _RegisterStepScreenState extends State<RegisterStepScreen>
     );
   }
 
-  Widget _buildSectionHeader(String title, IconData icon) {
-    return SlideTransition(
-      position: _slideAnimation,
-      child: Container(
-        margin: EdgeInsets.only(
-          top: _getResponsiveSize(context, 24),
-          bottom: _getResponsiveSize(context, 16),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: EdgeInsets.all(_getResponsiveSize(context, 8)),
-              decoration: BoxDecoration(
-                color: const Color(0xFF6366F1).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                icon,
-                color: const Color(0xFF6366F1),
-                size: _getResponsiveSize(context, 20),
-              ),
-            ),
-            SizedBox(width: _getResponsiveSize(context, 12)),
-            Expanded(
-              child: Text(
-                title,
-                style: TextStyle(
-                  fontSize: _getResponsiveSize(context, 18),
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xFF1F2937),
-                  letterSpacing: -0.5,
-                ),
-              ),
-            ),
-            SizedBox(width: _getResponsiveSize(context, 12)),
-            Expanded(
-              child: Container(
-                height: 1,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      const Color(0xFF6366F1).withOpacity(0.3),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTextField({
-    required String label,
-    required TextEditingController controller,
-    required FocusNode focusNode,
-    required String? Function(String?) validator,
-    IconData? icon,
-    bool isPassword = false,
-    bool obscureText = false,
-    VoidCallback? onToggleVisibility,
-    TextInputAction? textInputAction,
-    void Function(String)? onFieldSubmitted,
-    String? hint,
-    Widget? suffixIcon,
-  }) {
-    return Container(
-      margin: EdgeInsets.only(bottom: _getResponsiveSize(context, 20)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Flexible(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: _getResponsiveSize(context, 14),
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF374151),
-                  ),
-                ),
-              ),
-              Text(
-                ' *',
-                style: TextStyle(
-                  color: const Color(0xFFEF4444),
-                  fontWeight: FontWeight.w600,
-                  fontSize: _getResponsiveSize(context, 14),
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: _getResponsiveSize(context, 8)),
-          AnimatedBuilder(
-            animation: _shakeAnimation,
-            builder: (context, child) {
-              return Transform.translate(
-                offset: Offset(
-                  _shakeAnimation.value * 10 * 
-                  (0.5 - (DateTime.now().millisecondsSinceEpoch % 100) / 100),
-                  0,
-                ),
-                child: child,
-              );
-            },
-            child: TextFormField(
-              controller: controller,
-              focusNode: focusNode,
-              obscureText: obscureText,
-              validator: validator,
-              textInputAction: textInputAction,
-              onFieldSubmitted: onFieldSubmitted,
-              onChanged: (value) {
-                if (mounted) setState(() {});
-              },
-              style: TextStyle(fontSize: _getResponsiveSize(context, 16)),
-              decoration: InputDecoration(
-                hintText: hint,
-                hintStyle: TextStyle(fontSize: _getResponsiveSize(context, 14)),
-                prefixIcon: icon != null
-                    ? Padding(
-                        padding: EdgeInsets.only(
-                          left: _getResponsiveSize(context, 16),
-                          right: _getResponsiveSize(context, 12),
-                        ),
-                        child: Icon(
-                          icon,
-                          color: const Color(0xFF9CA3AF),
-                          size: _getResponsiveSize(context, 20),
-                        ),
-                      )
-                    : null,
-                suffixIcon: isPassword
-                    ? IconButton(
-                        icon: Icon(
-                          obscureText 
-                              ? Icons.visibility_off_rounded 
-                              : Icons.visibility_rounded,
-                          color: const Color(0xFF9CA3AF),
-                          size: _getResponsiveSize(context, 20),
-                        ),
-                        onPressed: onToggleVisibility,
-                      )
-                    : suffixIcon ?? (controller.text.isNotEmpty
-                        ? IconButton(
-                            icon: Icon(
-                              Icons.clear,
-                              size: _getResponsiveSize(context, 20),
-                            ),
-                            onPressed: () {
-                              controller.clear();
-                              setState(() => _hasUnsavedChanges = true);
-                            },
-                            color: const Color(0xFF9CA3AF),
-                          )
-                        : null),
-                filled: true,
-                fillColor: Colors.white,
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: _getResponsiveSize(context, 16),
-                  vertical: _getResponsiveSize(context, 16),
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFF6366F1), width: 2),
-                ),
-                errorBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFEF4444)),
-                ),
-                focusedErrorBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFEF4444), width: 2),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // FUNCIÓN MODIFICADA - Validación con chips compactos
-  Widget _buildPasswordValidation() {
-    if (_passCtrl.text.isEmpty) return const SizedBox.shrink();
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      margin: EdgeInsets.only(top: _getResponsiveSize(context, 12)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Barra de fortaleza compacta
-          Row(
-            children: [
-              Icon(
-                Icons.security_rounded,
-                size: _getResponsiveSize(context, 18),
-                color: _strengthColor,
-              ),
-              SizedBox(width: _getResponsiveSize(context, 8)),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          _strengthText,
-                          style: TextStyle(
-                            fontSize: _getResponsiveSize(context, 13),
-                            fontWeight: FontWeight.w600,
-                            color: _strengthColor,
-                          ),
-                        ),
-                        Text(
-                          '${(_passwordStrength * 100).toInt()}%',
-                          style: TextStyle(
-                            fontSize: _getResponsiveSize(context, 12),
-                            color: const Color(0xFF6B7280),
-                          ),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: _getResponsiveSize(context, 4)),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(2),
-                      child: LinearProgressIndicator(
-                        value: _passwordStrength,
-                        backgroundColor: const Color(0xFFE5E7EB),
-                        valueColor: AlwaysStoppedAnimation<Color>(_strengthColor),
-                        minHeight: _getResponsiveSize(context, 3),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          
-          SizedBox(height: _getResponsiveSize(context, 10)),
-          
-          // Chips de requisitos compactos
-          Wrap(
-            spacing: _getResponsiveSize(context, 6),
-            runSpacing: _getResponsiveSize(context, 6),
-            children: [
-              _buildCompactChip('8+ caracteres', _validLength),
-              _buildCompactChip('Mayús + número', _hasUpperOrDigit),
-              _buildCompactChip('Símbolo especial', _hasSpecial),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  // FUNCIÓN NUEVA - Chips compactos
-  Widget _buildCompactChip(String text, bool isValid) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      padding: EdgeInsets.symmetric(
-        horizontal: _getResponsiveSize(context, 8),
-        vertical: _getResponsiveSize(context, 4),
-      ),
-      decoration: BoxDecoration(
-        color: isValid 
-            ? const Color(0xFF10B981).withOpacity(0.1) 
-            : const Color(0xFF9CA3AF).withOpacity(0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isValid 
-              ? const Color(0xFF10B981).withOpacity(0.3) 
-              : const Color(0xFF9CA3AF).withOpacity(0.2),
-          width: 1,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 200),
-            child: Icon(
-              isValid ? Icons.check_circle : Icons.radio_button_unchecked,
-              key: ValueKey(isValid),
-              size: _getResponsiveSize(context, 14),
-              color: isValid 
-                  ? const Color(0xFF10B981) 
-                  : const Color(0xFF9CA3AF),
-            ),
-          ),
-          SizedBox(width: _getResponsiveSize(context, 4)),
-          Text(
-            text,
-            style: TextStyle(
-              fontSize: _getResponsiveSize(context, 12),
-              fontWeight: isValid ? FontWeight.w500 : FontWeight.normal,
-              color: isValid 
-                  ? const Color(0xFF059669) 
-                  : const Color(0xFF6B7280),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProgressIndicator() {
-    return Container(
-      margin: EdgeInsets.symmetric(vertical: _getResponsiveSize(context, 24)),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Paso ${_currentPage + 1} de 4',
-                style: TextStyle(
-                  fontSize: _getResponsiveSize(context, 14),
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF6B7280),
-                ),
-              ),
-              Text(
-                '${((_currentPage + 1) / 4 * 100).toInt()}%',
-                style: TextStyle(
-                  fontSize: _getResponsiveSize(context, 14),
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF6366F1),
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: _getResponsiveSize(context, 8)),
-          Row(
-            children: List.generate(4, (index) {
-              final isActive = index <= _currentPage;
-              final isCurrent = index == _currentPage;
-
-              return Expanded(
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 400),
-                  height: _getResponsiveSize(context, 6),
-                  margin: EdgeInsets.only(
-                    right: index < 3 ? _getResponsiveSize(context, 8) : 0
-                  ),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(3),
-                    color: isActive
-                        ? (isCurrent 
-                            ? const Color(0xFF6366F1) 
-                            : const Color(0xFF10B981))
-                        : const Color(0xFFE5E7EB),
-                    boxShadow: isActive && isCurrent
-                        ? [
-                            BoxShadow(
-                              color: const Color(0xFF6366F1).withOpacity(0.3),
-                              blurRadius: 4,
-                              offset: const Offset(0, 2),
-                            ),
-                          ]
-                        : null,
-                  ),
-                ),
-              );
-            }),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStepHeader() {
-    const titles = [
-      'Tu correo electrónico',
-      'Tu nombre completo',
-      'Contraseña segura',
-      'Confirmar registro'
-    ];
-
-    const subtitles = [
-      'Necesitamos tu email para mantenerte conectado',
-      '¿Cómo te gusta que te llamen?',
-      'Crea una contraseña para proteger tu cuenta',
-      'Revisa que todo esté perfecto antes de continuar'
-    ];
-
-    const icons = [
-      Icons.email_rounded,
-      Icons.person_rounded,
-      Icons.lock_rounded,
-      Icons.check_circle_rounded
-    ];
-
-    return Column(
-      children: [
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 400),
-          width: _getResponsiveSize(context, 80),
-          height: _getResponsiveSize(context, 80),
-          decoration: BoxDecoration(
-            color: const Color(0xFF6366F1).withOpacity(0.1),
-            borderRadius: BorderRadius.circular(_getResponsiveSize(context, 40)),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF6366F1).withOpacity(0.2),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Icon(
-            icons[_currentPage],
-            color: const Color(0xFF6366F1),
-            size: _getResponsiveSize(context, 40),
-          ),
-        ),
-        SizedBox(height: _getResponsiveSize(context, 20)),
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 400),
-          child: Text(
-            titles[_currentPage],
-            key: ValueKey(_currentPage),
-            style: TextStyle(
-              fontSize: _getResponsiveSize(context, 28),
-              fontWeight: FontWeight.w700,
-              color: const Color(0xFF1F2937),
-              letterSpacing: -0.5,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ),
-        SizedBox(height: _getResponsiveSize(context, 12)),
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 400),
-          child: Text(
-            subtitles[_currentPage],
-            key: ValueKey('subtitle_$_currentPage'),
-            style: TextStyle(
-              fontSize: _getResponsiveSize(context, 16),
-              color: const Color(0xFF6B7280),
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildConnectionStatus() {
     if (_emailError != null && _emailCheckRetries > 0) {
       return Container(
-        margin: EdgeInsets.only(top: _getResponsiveSize(context, 12)),
-        padding: EdgeInsets.all(_getResponsiveSize(context, 16)),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFEF3C7),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.3)),
-        ),
+        margin: EdgeInsets.only(top: RegisterStyles.getResponsiveSize(context, 12)),
+        padding: RegisterStyles.defaultPadding(context),
+        decoration: RegisterStyles.connectionStatusDecoration(),
         child: Row(
           children: [
             Icon(
               Icons.wifi_off_rounded,
-              size: _getResponsiveSize(context, 20),
-              color: const Color(0xFFF59E0B),
+              size: RegisterStyles.mediumIcon(context),
+              color: AppTheme.warningColor,
             ),
-            SizedBox(width: _getResponsiveSize(context, 12)),
+            SizedBox(width: RegisterStyles.getResponsiveSize(context, 12)),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -969,7 +533,7 @@ class _RegisterStepScreenState extends State<RegisterStepScreen>
                   Text(
                     'Conexión limitada',
                     style: TextStyle(
-                      fontSize: _getResponsiveSize(context, 14),
+                      fontSize: RegisterStyles.getResponsiveSize(context, 14),
                       fontWeight: FontWeight.w600,
                       color: const Color(0xFFD97706),
                     ),
@@ -977,7 +541,7 @@ class _RegisterStepScreenState extends State<RegisterStepScreen>
                   Text(
                     _emailError!,
                     style: TextStyle(
-                      fontSize: _getResponsiveSize(context, 12),
+                      fontSize: RegisterStyles.getResponsiveSize(context, 12),
                       color: const Color(0xFFA16207),
                     ),
                   ),
@@ -1019,8 +583,11 @@ class _RegisterStepScreenState extends State<RegisterStepScreen>
         return Column(
           key: const ValueKey(0),
           children: [
-            _buildSectionHeader('Información de contacto', Icons.email_outlined),
-            _buildTextField(
+            const StyledSectionHeader(
+              title: 'Información de contacto',
+              icon: Icons.email_outlined,
+            ),
+            StyledTextField(
               label: 'Correo electrónico',
               controller: _emailCtrl,
               focusNode: _emailFocus,
@@ -1030,21 +597,22 @@ class _RegisterStepScreenState extends State<RegisterStepScreen>
               hint: 'ejemplo@correo.com',
               suffixIcon: _checkingEmail
                   ? Padding(
-                      padding: EdgeInsets.all(_getResponsiveSize(context, 16)),
+                      padding: EdgeInsets.all(RegisterStyles.getResponsiveSize(context, 16)),
                       child: SizedBox(
-                        width: _getResponsiveSize(context, 20),
-                        height: _getResponsiveSize(context, 20),
+                        width: RegisterStyles.mediumIcon(context),
+                        height: RegisterStyles.mediumIcon(context),
                         child: const CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Color(0xFF6366F1),
+                          color: AppTheme.primaryColor,
                         ),
                       ),
                     )
                   : (_emailExiste == true
-                      ? const Icon(Icons.error_rounded, color: Color(0xFFEF4444))
+                      ? const Icon(Icons.error_rounded, color: AppTheme.errorColor)
                       : _emailExiste == false
-                          ? const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981))
+                          ? const Icon(Icons.check_circle_rounded, color: AppTheme.secondaryColor)
                           : null),
+              onChanged: () => setState(() => _hasUnsavedChanges = true),
               validator: (value) {
                 if (value?.isEmpty ?? true) return 'El correo es obligatorio';
                 final regex = RegExp(r"^[\w\.-]+@([\w-]+\.)+[\w-]{2,4}$");
@@ -1061,8 +629,11 @@ class _RegisterStepScreenState extends State<RegisterStepScreen>
         return Column(
           key: const ValueKey(1),
           children: [
-            _buildSectionHeader('Información personal', Icons.person_outlined),
-            _buildTextField(
+            const StyledSectionHeader(
+              title: 'Información personal',
+              icon: Icons.person_outlined,
+            ),
+            StyledTextField(
               label: 'Nombre completo',
               controller: _userCtrl,
               focusNode: _nameFocus,
@@ -1070,6 +641,7 @@ class _RegisterStepScreenState extends State<RegisterStepScreen>
               textInputAction: TextInputAction.next,
               onFieldSubmitted: (_) => _nextStep(),
               hint: 'Tu nombre y apellido',
+              onChanged: () => setState(() => _hasUnsavedChanges = true),
               validator: (value) {
                 if (value?.isEmpty ?? true) return 'El nombre es obligatorio';
                 if (value!.length < 2) return 'El nombre debe tener al menos 2 caracteres';
@@ -1085,8 +657,11 @@ class _RegisterStepScreenState extends State<RegisterStepScreen>
           key: const ValueKey(2),
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildSectionHeader('Seguridad de la cuenta', Icons.security_outlined),
-            _buildTextField(
+            const StyledSectionHeader(
+              title: 'Seguridad de la cuenta',
+              icon: Icons.security_outlined,
+            ),
+            StyledTextField(
               label: 'Contraseña',
               controller: _passCtrl,
               focusNode: _passFocus,
@@ -1097,15 +672,21 @@ class _RegisterStepScreenState extends State<RegisterStepScreen>
               textInputAction: TextInputAction.next,
               onFieldSubmitted: (_) => _confirmFocus.requestFocus(),
               hint: 'Crea una contraseña segura',
+              onChanged: () => setState(() {}),
               validator: (value) {
                 if (value?.isEmpty ?? true) return 'La contraseña es obligatoria';
                 if (!_isPasswordValid) return 'No cumple con los requisitos de seguridad';
                 return null;
               },
             ),
-            _buildPasswordValidation(),
-            SizedBox(height: _getResponsiveSize(context, 20)),
-            _buildTextField(
+            StyledPasswordValidation(
+              password: _passCtrl.text,
+              validLength: _validLength,
+              hasUpperOrDigit: _hasUpperOrDigit,
+              hasSpecial: _hasSpecial,
+            ),
+            SizedBox(height: RegisterStyles.getResponsiveSize(context, 20)),
+            StyledTextField(
               label: 'Confirmar contraseña',
               controller: _confirmCtrl,
               focusNode: _confirmFocus,
@@ -1116,6 +697,7 @@ class _RegisterStepScreenState extends State<RegisterStepScreen>
               textInputAction: TextInputAction.done,
               onFieldSubmitted: (_) => _nextStep(),
               hint: 'Repite tu contraseña',
+              onChanged: () => setState(() {}),
               validator: (value) {
                 if (value?.isEmpty ?? true) return 'Confirma tu contraseña';
                 if (value != _passCtrl.text) return 'Las contraseñas no coinciden';
@@ -1125,60 +707,312 @@ class _RegisterStepScreenState extends State<RegisterStepScreen>
           ],
         );
 
+      // NUEVO PASO: Términos y condiciones
       case 3:
         return Column(
           key: const ValueKey(3),
           children: [
-            _buildSectionHeader('Resumen del registro', Icons.summarize_outlined),
+            const StyledSectionHeader(
+              title: 'Términos y Condiciones',
+              icon: Icons.description_outlined,
+            ),
             Container(
-              padding: EdgeInsets.all(_getResponsiveSize(context, 24)),
+              padding: RegisterStyles.largePadding(context),
               decoration: BoxDecoration(
-                color: const Color(0xFF10B981).withOpacity(0.05),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFF10B981).withOpacity(0.2)),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    AppTheme.primaryColor.withOpacity(0.05),
+                    AppTheme.secondaryColor.withOpacity(0.02),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(AppTheme.largeRadius),
+                border: Border.all(
+                  color: _showTermsError 
+                      ? AppTheme.errorColor.withOpacity(0.3)
+                      : AppTheme.primaryColor.withOpacity(0.1),
+                  width: _showTermsError ? 2 : 1,
+                ),
               ),
               child: Column(
                 children: [
-                  Container(
-                    width: _getResponsiveSize(context, 64),
-                    height: _getResponsiveSize(context, 64),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF10B981).withOpacity(0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.check_circle_outline_rounded,
-                      size: _getResponsiveSize(context, 32),
-                      color: const Color(0xFF10B981),
-                    ),
+                  Icon(
+                    Icons.description_rounded,
+                    size: RegisterStyles.getResponsiveSize(context, 48),
+                    color: AppTheme.primaryColor,
                   ),
-                  SizedBox(height: _getResponsiveSize(context, 20)),
+                  SizedBox(height: RegisterStyles.getResponsiveSize(context, 20)),
                   Text(
-                    '¡Todo listo!',
+                    'Términos y Condiciones',
                     style: TextStyle(
-                      fontSize: _getResponsiveSize(context, 24),
+                      fontSize: RegisterStyles.getResponsiveSize(context, 22),
                       fontWeight: FontWeight.w700,
-                      color: const Color(0xFF1F2937),
-                    ),
-                  ),
-                  SizedBox(height: _getResponsiveSize(context, 8)),
-                  Text(
-                    'Revisa tu información antes de crear tu cuenta',
-                    style: TextStyle(
-                      color: const Color(0xFF6B7280),
-                      fontSize: _getResponsiveSize(context, 14),
+                      color: AppTheme.textPrimary,
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  SizedBox(height: _getResponsiveSize(context, 24)),
-                  _buildSummaryItem(Icons.email_rounded, 'Correo', _emailCtrl.text),
-                  _buildSummaryItem(Icons.person_rounded, 'Nombre', _userCtrl.text),
-                  _buildSummaryItem(
-                    Icons.lock_rounded, 
-                    'Contraseña', 
-                    '•' * _passCtrl.text.length
+                  SizedBox(height: RegisterStyles.getResponsiveSize(context, 12)),
+                  Text(
+                    'Para completar tu registro necesitamos que leas y aceptes nuestros términos y condiciones de uso.',
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: RegisterStyles.getResponsiveSize(context, 15),
+                      height: 1.5,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                  SizedBox(height: _getResponsiveSize(context, 20)),
+                  SizedBox(height: RegisterStyles.getResponsiveSize(context, 24)),
+                  
+                  // Botón para leer términos
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _showPrivacyPolicy,
+                      icon: Icon(
+                        Icons.article_outlined,
+                        size: RegisterStyles.mediumIcon(context),
+                      ),
+                      label: Text(
+                        'Leer Términos y Condiciones',
+                        style: TextStyle(
+                          fontSize: RegisterStyles.getResponsiveSize(context, 16),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.primaryColor,
+                        side: BorderSide(
+                          color: AppTheme.primaryColor,
+                          width: 1.5,
+                        ),
+                        padding: EdgeInsets.symmetric(
+                          vertical: RegisterStyles.getResponsiveSize(context, 16),
+                          horizontal: RegisterStyles.getResponsiveSize(context, 24),
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(AppTheme.mediumRadius),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  SizedBox(height: RegisterStyles.getResponsiveSize(context, 20)),
+                  
+                  // Checkbox de aceptación
+                  Container(
+                    padding: EdgeInsets.all(RegisterStyles.getResponsiveSize(context, 16)),
+                    decoration: BoxDecoration(
+                      color: _acceptedTerms 
+                          ? AppTheme.secondaryColor.withOpacity(0.1)
+                          : _showTermsError
+                              ? AppTheme.errorColor.withOpacity(0.1)
+                              : AppTheme.surfaceColor,
+                      borderRadius: BorderRadius.circular(AppTheme.mediumRadius),
+                      border: Border.all(
+                        color: _acceptedTerms
+                            ? AppTheme.secondaryColor
+                            : _showTermsError
+                                ? AppTheme.errorColor
+                                : AppTheme.borderColor,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Transform.scale(
+                          scale: 1.2,
+                          child: Checkbox(
+                            value: _acceptedTerms,
+                            onChanged: (value) {
+                              setState(() {
+                                _acceptedTerms = value ?? false;
+                                _showTermsError = false;
+                                _hasUnsavedChanges = true;
+                              });
+                              HapticFeedback.selectionClick();
+                            },
+                            activeColor: AppTheme.secondaryColor,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: RegisterStyles.getResponsiveSize(context, 12)),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _acceptedTerms = !_acceptedTerms;
+                                _showTermsError = false;
+                                _hasUnsavedChanges = true;
+                              });
+                              HapticFeedback.selectionClick();
+                            },
+                            child: RichText(
+                              text: TextSpan(
+                                style: TextStyle(
+                                  fontSize: RegisterStyles.getResponsiveSize(context, 14),
+                                  color: _showTermsError 
+                                      ? AppTheme.errorColor 
+                                      : AppTheme.textSecondary,
+                                  height: 1.4,
+                                ),
+                                children: [
+                                  const TextSpan(text: 'He leído y acepto los '),
+                                  TextSpan(
+                                    text: 'términos y condiciones',
+                                    style: TextStyle(
+                                      color: AppTheme.primaryColor,
+                                      fontWeight: FontWeight.w600,
+                                      decoration: TextDecoration.underline,
+                                    ),
+                                  ),
+                                  const TextSpan(text: ' y autorizo el tratamiento de mis datos personales.'),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  if (_showTermsError) ...[
+                    SizedBox(height: RegisterStyles.getResponsiveSize(context, 12)),
+                    Container(
+                      padding: EdgeInsets.all(RegisterStyles.getResponsiveSize(context, 12)),
+                      decoration: BoxDecoration(
+                        color: AppTheme.errorColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(AppTheme.smallRadius),
+                        border: Border.all(
+                          color: AppTheme.errorColor.withOpacity(0.3),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.error_outline,
+                            color: AppTheme.errorColor,
+                            size: RegisterStyles.getResponsiveSize(context, 18),
+                          ),
+                          SizedBox(width: RegisterStyles.getResponsiveSize(context, 8)),
+                          Expanded(
+                            child: Text(
+                              'Debes aceptar los términos y condiciones para continuar',
+                              style: TextStyle(
+                                fontSize: RegisterStyles.getResponsiveSize(context, 13),
+                                color: AppTheme.errorColor,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  
+                  if (_acceptedTerms) ...[
+                    SizedBox(height: RegisterStyles.getResponsiveSize(context, 12)),
+                    Container(
+                      padding: EdgeInsets.all(RegisterStyles.getResponsiveSize(context, 12)),
+                      decoration: BoxDecoration(
+                        color: AppTheme.secondaryColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(AppTheme.smallRadius),
+                        border: Border.all(
+                          color: AppTheme.secondaryColor.withOpacity(0.3),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.check_circle_outline,
+                            color: AppTheme.secondaryColor,
+                            size: RegisterStyles.getResponsiveSize(context, 18),
+                          ),
+                          SizedBox(width: RegisterStyles.getResponsiveSize(context, 8)),
+                          Expanded(
+                            child: Text(
+                              'Términos y condiciones aceptados',
+                              style: TextStyle(
+                                fontSize: RegisterStyles.getResponsiveSize(context, 13),
+                                color: AppTheme.secondaryColor,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        );
+
+      case 4:
+        return Column(
+          key: const ValueKey(4),
+          children: [
+            const StyledSectionHeader(
+              title: 'Resumen del registro',
+              icon: Icons.summarize_outlined,
+            ),
+            Container(
+              padding: RegisterStyles.largePadding(context),
+              decoration: RegisterStyles.summaryContainerDecoration(),
+              child: Column(
+                children: [
+                  Container(
+                    width: RegisterStyles.getResponsiveSize(context, 64),
+                    height: RegisterStyles.getResponsiveSize(context, 64),
+                    decoration: RegisterStyles.summaryIconContainerDecoration(context),
+                    child: Icon(
+                      Icons.check_circle_outline_rounded,
+                      size: RegisterStyles.getResponsiveSize(context, 32),
+                      color: AppTheme.secondaryColor,
+                    ),
+                  ),
+                  SizedBox(height: RegisterStyles.getResponsiveSize(context, 20)),
+                  Text(
+                    '¡Todo listo!',
+                    style: TextStyle(
+                      fontSize: RegisterStyles.getResponsiveSize(context, 24),
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                  SizedBox(height: RegisterStyles.getResponsiveSize(context, 8)),
+                  Text(
+                    'Revisa tu información antes de crear tu cuenta',
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: RegisterStyles.getResponsiveSize(context, 14),
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  SizedBox(height: RegisterStyles.getResponsiveSize(context, 24)),
+                  StyledSummaryItem(
+                    icon: Icons.email_rounded,
+                    label: 'Correo',
+                    value: _emailCtrl.text,
+                  ),
+                  StyledSummaryItem(
+                    icon: Icons.person_rounded,
+                    label: 'Nombre',
+                    value: _userCtrl.text,
+                  ),
+                  StyledSummaryItem(
+                    icon: Icons.lock_rounded,
+                    label: 'Contraseña',
+                    value: '•' * _passCtrl.text.length,
+                  ),
+                  StyledSummaryItem(
+                    icon: Icons.verified_user_rounded,
+                    label: 'Términos',
+                    value: _acceptedTerms ? 'Aceptados' : 'No aceptados',
+                  ),
+                  SizedBox(height: RegisterStyles.getResponsiveSize(context, 20)),
                   SizedBox(
                     width: double.infinity,
                     child: TextButton.icon(
@@ -1188,19 +1022,17 @@ class _RegisterStepScreenState extends State<RegisterStepScreen>
                       },
                       icon: Icon(
                         Icons.edit_rounded,
-                        size: _getResponsiveSize(context, 18),
+                        size: RegisterStyles.smallIcon(context),
                       ),
                       label: Text(
                         'Editar información',
-                        style: TextStyle(
-                          fontSize: _getResponsiveSize(context, 14),
-                        ),
+                        style: RegisterStyles.smallButtonTextStyle(context),
                       ),
                       style: TextButton.styleFrom(
-                        foregroundColor: const Color(0xFF6366F1),
+                        foregroundColor: AppTheme.primaryColor,
                         padding: EdgeInsets.symmetric(
-                          horizontal: _getResponsiveSize(context, 20),
-                          vertical: _getResponsiveSize(context, 12),
+                          horizontal: RegisterStyles.getResponsiveSize(context, 20),
+                          vertical: RegisterStyles.getResponsiveSize(context, 12),
                         ),
                       ),
                     ),
@@ -1216,80 +1048,26 @@ class _RegisterStepScreenState extends State<RegisterStepScreen>
     }
   }
 
-  Widget _buildSummaryItem(IconData icon, String label, String value) {
-    return Container(
-      margin: EdgeInsets.only(bottom: _getResponsiveSize(context, 12)),
-      padding: EdgeInsets.all(_getResponsiveSize(context, 16)),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: EdgeInsets.all(_getResponsiveSize(context, 8)),
-            decoration: BoxDecoration(
-              color: const Color(0xFF6366F1).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(
-              icon,
-              size: _getResponsiveSize(context, 20),
-              color: const Color(0xFF6366F1),
-            ),
-          ),
-          SizedBox(width: _getResponsiveSize(context, 16)),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: _getResponsiveSize(context, 12),
-                    color: const Color(0xFF6B7280),
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                SizedBox(height: _getResponsiveSize(context, 2)),
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: _getResponsiveSize(context, 16),
-                    color: const Color(0xFF1F2937),
-                    fontWeight: FontWeight.w600,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildActionButtons() {
-    final isLast = _currentPage == 3;
+    final isLast = _currentPage == 4;
     final screenWidth = MediaQuery.of(context).size.width;
 
     return Container(
-      padding: EdgeInsets.only(top: _getResponsiveSize(context, 32)),
+      padding: EdgeInsets.only(top: RegisterStyles.getResponsiveSize(context, 32)),
       child: screenWidth < 400
           ? Column(
               children: [
                 if (_currentPage > 0) ...[
                   SizedBox(
                     width: double.infinity,
-                    height: _getResponsiveSize(context, 48),
+                    height: RegisterStyles.getResponsiveSize(context, 48),
                     child: _buildBackButton(),
                   ),
-                  SizedBox(height: _getResponsiveSize(context, 12)),
+                  SizedBox(height: RegisterStyles.getResponsiveSize(context, 12)),
                 ],
                 SizedBox(
                   width: double.infinity,
-                  height: _getResponsiveSize(context, 56),
+                  height: RegisterStyles.getResponsiveSize(context, 56),
                   child: _buildNextButton(isLast),
                 ),
               ],
@@ -1309,25 +1087,10 @@ class _RegisterStepScreenState extends State<RegisterStepScreen>
       onPressed: _backStep,
       icon: Icon(
         Icons.arrow_back_rounded,
-        size: _getResponsiveSize(context, 20),
+        size: RegisterStyles.mediumIcon(context),
       ),
-      label: Text(
-        'Atrás',
-        style: TextStyle(
-          fontSize: _getResponsiveSize(context, 14),
-        ),
-      ),
-      style: TextButton.styleFrom(
-        foregroundColor: const Color(0xFF6B7280),
-        padding: EdgeInsets.symmetric(
-          horizontal: _getResponsiveSize(context, 20),
-          vertical: _getResponsiveSize(context, 12),
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: const BorderSide(color: Color(0xFFE5E7EB)),
-        ),
-      ),
+      label: Text('Atrás', style: RegisterStyles.smallButtonTextStyle(context)),
+      style: RegisterStyles.backButtonStyle(context),
     );
   }
 
@@ -1339,39 +1102,23 @@ class _RegisterStepScreenState extends State<RegisterStepScreen>
           scale: _isLoading ? _pulseAnimation.value : 1.0,
           child: ElevatedButton(
             onPressed: _isLoading ? null : _nextStep,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF6366F1),
-              foregroundColor: Colors.white,
-              disabledBackgroundColor: const Color(0xFF9CA3AF),
-              elevation: _isLoading ? 0 : 8,
-              shadowColor: const Color(0xFF6366F1).withOpacity(0.4),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              padding: EdgeInsets.symmetric(
-                horizontal: _getResponsiveSize(context, 32),
-                vertical: _getResponsiveSize(context, 16),
-              ),
-            ),
+            style: RegisterStyles.nextButtonStyle(context),
             child: _isLoading
                 ? Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       SizedBox(
-                        width: _getResponsiveSize(context, 20),
-                        height: _getResponsiveSize(context, 20),
+                        width: RegisterStyles.mediumIcon(context),
+                        height: RegisterStyles.mediumIcon(context),
                         child: const CircularProgressIndicator(
                           strokeWidth: 2.5,
                           valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                         ),
                       ),
-                      SizedBox(width: _getResponsiveSize(context, 16)),
+                      SizedBox(width: RegisterStyles.getResponsiveSize(context, 16)),
                       Text(
                         isLast ? 'Creando cuenta...' : 'Procesando...',
-                        style: TextStyle(
-                          fontSize: _getResponsiveSize(context, 16),
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: RegisterStyles.buttonTextStyle(context),
                       ),
                     ],
                   )
@@ -1380,15 +1127,12 @@ class _RegisterStepScreenState extends State<RegisterStepScreen>
                     children: [
                       Text(
                         isLast ? 'Crear cuenta' : 'Continuar',
-                        style: TextStyle(
-                          fontSize: _getResponsiveSize(context, 16),
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: RegisterStyles.buttonTextStyle(context),
                       ),
-                      SizedBox(width: _getResponsiveSize(context, 12)),
+                      SizedBox(width: RegisterStyles.getResponsiveSize(context, 12)),
                       Icon(
                         isLast ? Icons.check_rounded : Icons.arrow_forward_rounded,
-                        size: _getResponsiveSize(context, 20),
+                        size: RegisterStyles.mediumIcon(context),
                       ),
                     ],
                   ),
@@ -1400,159 +1144,171 @@ class _RegisterStepScreenState extends State<RegisterStepScreen>
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: _onWillPop,
+    return PopScope(
+      canPop: !_hasUnsavedChanges,
+      onPopInvoked: (didPop) async {
+        if (!didPop) {
+          final shouldPop = await _onWillPop();
+          if (shouldPop && mounted) {
+            Navigator.of(context).pop();
+          }
+        }
+      },
       child: FadeTransition(
         opacity: _fadeAnimation,
-        child: Scaffold(
-          backgroundColor: const Color(0xFFF8FAFC),
-          appBar: AppBar(
-            title: Text(
-              'Crear Cuenta',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: _getResponsiveSize(context, 20),
-                letterSpacing: -0.5,
+        child: Theme(
+          data: AppTheme.lightTheme,
+          child: Scaffold(
+            backgroundColor: AppTheme.backgroundColor,
+            appBar: AppBar(
+              title: Text(
+                'Crear Cuenta',
+                style: AppTheme.lightTheme.appBarTheme.titleTextStyle,
               ),
-            ),
-            centerTitle: true,
-            backgroundColor: Colors.white,
-            foregroundColor: const Color(0xFF1F2937),
-            elevation: 0,
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(1),
-              child: Container(
-                height: 1,
-                color: const Color(0xFFE5E7EB),
-              ),
-            ),
-            actions: [
-              if (_hasUnsavedChanges)
-                Container(
-                  margin: EdgeInsets.only(right: _getResponsiveSize(context, 8)),
-                  padding: EdgeInsets.symmetric(
-                    horizontal: _getResponsiveSize(context, 8),
-                    vertical: _getResponsiveSize(context, 4),
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF59E0B).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.circle,
-                        color: const Color(0xFFF59E0B),
-                        size: _getResponsiveSize(context, 8),
-                      ),
-                      SizedBox(width: _getResponsiveSize(context, 4)),
-                      Text(
-                        'Sin guardar',
-                        style: TextStyle(
-                          fontSize: _getResponsiveSize(context, 12),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
+              centerTitle: true,
+              backgroundColor: AppTheme.surfaceColor,
+              foregroundColor: AppTheme.textPrimary,
+              elevation: 0,
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(1),
+                child: Container(
+                  height: 1,
+                  color: AppTheme.borderColor,
                 ),
-              IconButton(
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      title: Row(
-                        children: [
-                          Icon(
-                            Icons.help_outline,
-                            color: const Color(0xFF6366F1),
-                            size: _getResponsiveSize(context, 24),
-                          ),
-                          SizedBox(width: _getResponsiveSize(context, 12)),
-                          const Flexible(child: Text('Ayuda')),
-                        ],
-                      ),
-                      content: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '• Todos los campos son obligatorios',
-                            style: TextStyle(fontSize: _getResponsiveSize(context, 14)),
-                          ),
-                          SizedBox(height: _getResponsiveSize(context, 8)),
-                          Text(
-                            '• Tu email debe ser válido y único',
-                            style: TextStyle(fontSize: _getResponsiveSize(context, 14)),
-                          ),
-                          SizedBox(height: _getResponsiveSize(context, 8)),
-                          Text(
-                            '• La contraseña debe cumplir todos los requisitos',
-                            style: TextStyle(fontSize: _getResponsiveSize(context, 14)),
-                          ),
-                          SizedBox(height: _getResponsiveSize(context, 8)),
-                          Text(
-                            '• Puedes navegar entre pasos para editar',
-                            style: TextStyle(fontSize: _getResponsiveSize(context, 14)),
-                          ),
-                        ],
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Entendido'),
+              ),
+              actions: [
+                if (_hasUnsavedChanges)
+                  Container(
+                    margin: EdgeInsets.only(right: RegisterStyles.getResponsiveSize(context, 8)),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: RegisterStyles.getResponsiveSize(context, 8),
+                      vertical: RegisterStyles.getResponsiveSize(context, 4),
+                    ),
+                    decoration: RegisterStyles.unsavedChangesDecoration(),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.circle,
+                          color: AppTheme.warningColor,
+                          size: RegisterStyles.getResponsiveSize(context, 8),
+                        ),
+                        SizedBox(width: RegisterStyles.getResponsiveSize(context, 4)),
+                        Text(
+                          'Sin guardar',
+                          style: RegisterStyles.unsavedChangesTextStyle(context),
                         ),
                       ],
                     ),
-                  );
-                },
-                icon: Icon(
-                  Icons.help_outline,
-                  size: _getResponsiveSize(context, 24),
-                ),
-              ),
-            ],
-          ),
-          body: SafeArea(
-            child: Column(
-              children: [
-                // Handle superior
-                Container(
-                  width: _getResponsiveSize(context, 40),
-                  height: _getResponsiveSize(context, 4),
-                  margin: EdgeInsets.symmetric(vertical: _getResponsiveSize(context, 12)),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE5E7EB),
-                    borderRadius: BorderRadius.circular(2),
                   ),
-                ),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: _getResponsivePadding(context),
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 600),
-                      child: Column(
-                        children: [
-                          _buildProgressIndicator(),
-                          SizedBox(height: _getResponsiveSize(context, 24)),
-                          _buildStepHeader(),
-                          SizedBox(height: _getResponsiveSize(context, 32)),
-                          _buildStepContent(),
-                          _buildActionButtons(),
-                          SizedBox(height: _getResponsiveSize(context, 32)),
-                        ],
-                      ),
-                    ),
+                IconButton(
+                  onPressed: () => _showHelpDialog(),
+                  icon: Icon(
+                    Icons.help_outline,
+                    size: RegisterStyles.getResponsiveSize(context, 24),
                   ),
                 ),
               ],
+            ),
+            body: SafeArea(
+              child: Column(
+                children: [
+                  // Handle superior
+                  Container(
+                    width: RegisterStyles.getResponsiveSize(context, 40),
+                    height: RegisterStyles.getResponsiveSize(context, 4),
+                    margin: EdgeInsets.symmetric(vertical: RegisterStyles.getResponsiveSize(context, 12)),
+                    decoration: RegisterStyles.handleDecoration(context),
+                  ),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: RegisterStyles.getResponsivePadding(context),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 600),
+                        child: Column(
+                          children: [
+                            StyledProgressIndicator(
+                              currentPage: _currentPage,
+                              totalPages: 5, // Actualizado a 5 pasos
+                            ),
+                            SizedBox(height: RegisterStyles.getResponsiveSize(context, 24)),
+                            StyledStepHeader(
+                              currentPage: _currentPage,
+                              titles: titles,
+                              subtitles: subtitles,
+                              icons: icons,
+                            ),
+                            SizedBox(height: RegisterStyles.getResponsiveSize(context, 32)),
+                            _buildStepContent(),
+                            _buildActionButtons(),
+                            SizedBox(height: RegisterStyles.getResponsiveSize(context, 32)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
       ),
     );
   }
+
+  void _showHelpDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.largeRadius)),
+        title: Row(
+          children: [
+            Icon(
+              Icons.help_outline,
+              color: AppTheme.primaryColor,
+              size: RegisterStyles.getResponsiveSize(context, 24),
+            ),
+            SizedBox(width: RegisterStyles.getResponsiveSize(context, 12)),
+            const Flexible(child: Text('Ayuda')),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '• Todos los campos son obligatorios',
+              style: TextStyle(fontSize: RegisterStyles.getResponsiveSize(context, 14)),
+            ),
+            SizedBox(height: RegisterStyles.getResponsiveSize(context, 8)),
+            Text(
+              '• Tu email debe ser válido y único',
+              style: TextStyle(fontSize: RegisterStyles.getResponsiveSize(context, 14)),
+            ),
+            SizedBox(height: RegisterStyles.getResponsiveSize(context, 8)),
+            Text(
+              '• La contraseña debe cumplir todos los requisitos',
+              style: TextStyle(fontSize: RegisterStyles.getResponsiveSize(context, 14)),
+            ),
+            SizedBox(height: RegisterStyles.getResponsiveSize(context, 8)),
+            Text(
+              '• Debes aceptar los términos y condiciones',
+              style: TextStyle(fontSize: RegisterStyles.getResponsiveSize(context, 14)),
+            ),
+            SizedBox(height: RegisterStyles.getResponsiveSize(context, 8)),
+            Text(
+              '• Puedes navegar entre pasos para editar',
+              style: TextStyle(fontSize: RegisterStyles.getResponsiveSize(context, 14)),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Entendido'),
+          ),
+        ],
+      ),
+    );
+  }
 }
-  

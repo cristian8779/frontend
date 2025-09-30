@@ -15,6 +15,10 @@ import 'providers/producto_admin_provider.dart';
 import 'providers/categoria_admin_provider.dart';
 import 'providers/anuncio_admin_provider.dart';
 import 'providers/variacion_admin_provider.dart';
+import 'providers/FavoritoProvider.dart';
+import 'providers/variacion_admin_provider.dart';
+
+
 
 // Widgets de búsqueda
 import 'widgets/buscador.dart';
@@ -41,7 +45,6 @@ import 'screens/admin/gestion_anuncios_screen.dart';
 import 'screens/admin/anuncios_screen.dart';
 import 'screens/admin/pantalla_rol.dart';
 import 'screens/admin/invitaciones.dart';
-import 'screens/admin/transferir_rol.dart';
 import 'screens/admin/confirmar_codigo_rol_screen.dart';
 
 
@@ -92,6 +95,11 @@ class AppProviders extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => CategoriasProvider()),
         ChangeNotifierProvider(create: (_) => AnunciosProvider()),
         ChangeNotifierProvider(create: (_) => VariacionProvider()),
+        ChangeNotifierProvider(create: (_) => FavoritoProvider()),
+        ChangeNotifierProvider(create: (_) => VariacionProvider()),
+
+
+
 
       ],
       child: const MyApp(),
@@ -142,7 +150,6 @@ class MyApp extends StatelessWidget {
             '/pantalla-rol': (_) => const PantallaRol(),
             '/invitaciones': (_) =>
                 const InvitacionRolScreen(rolActual: 'superAdmin'),
-           '/transferir': (_) => const TransferenciaSuperAdminScreen(),
            '/confirmar-codigo-rol': (_) => const ConfirmarCodigoRolScreen(),
 
             '/bienvenida': (_) => const BienvenidaUsuarioScreen(),

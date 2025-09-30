@@ -1,7 +1,7 @@
 // bienvenida_admin_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'styles/bienvenida_admin_styles.dart'; // Import de los estilos
+import 'styles/bienvenidad_admin/bienvenida_admin_styles.dart'; // Import de los estilos
 
 class BienvenidaAdminScreen extends StatefulWidget {
   final String rol;

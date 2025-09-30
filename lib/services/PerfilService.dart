@@ -120,8 +120,10 @@ class PerfilService {
   }
 
   // ==========================
-  // PERFIL
+  // PERFIL - Métodos corregidos según el controller
   // ==========================
+  
+  /// Crear perfil inicial - llamado desde el microservicio de autenticación
   Future<bool> crearPerfil(String nombre, String credenciales, {String? imagenPerfil}) async {
     _errorMessage = null;
     final rid = _newRid();
@@ -133,16 +135,14 @@ class PerfilService {
     }
 
     try {
-      final token = await _getToken(rid: rid);
-      _debugToken(token, rid: rid);
       final url = Uri.parse(baseUrl);
       _log("📤 POST $url", rid: rid);
-      _log("Payload: {nombre: '${nombre.trim()}', credenciales: '${credenciales.trim()}', imagenPerfil: '${imagenPerfil ?? ''}'}", rid: rid);
+      _log("Payload: {nombre: '${nombre.trim()}', credenciales: '$credenciales', imagenPerfil: '${imagenPerfil ?? ''}'}", rid: rid);
 
       final response = await http
-          .post(url, headers: _jsonHeaders(token: token), body: jsonEncode({
+          .post(url, headers: _jsonHeaders(), body: jsonEncode({
             'nombre': nombre.trim(),
-            'credenciales': credenciales.trim(),
+            'credenciales': credenciales,
             'imagenPerfil': imagenPerfil ?? ''
           }))
           .timeout(_timeoutShort);
@@ -156,9 +156,7 @@ class PerfilService {
       }
 
       final data = _tryJson(response.body, rid: rid);
-      _errorMessage = (response.statusCode == 401)
-          ? 'no_autorizado'
-          : (data != null ? (data['mensaje']?.toString() ?? 'Error al crear perfil.') : 'Error al crear perfil.');
+      _errorMessage = data != null ? (data['mensaje']?.toString() ?? 'Error al crear perfil.') : 'Error al crear perfil.';
       return false;
     } on TimeoutException {
       _errorMessage = 'timeout';
@@ -175,11 +173,13 @@ class PerfilService {
     }
   }
 
+  /// Obtener perfil del usuario autenticado (incluye credenciales del microservicio auth)
   Future<Map<String, dynamic>?> obtenerPerfil() async {
     _errorMessage = null;
     final rid = _newRid();
 
     if (!await _tieneConexion()) {
+
       _errorMessage = 'sin_conexion';
       _log('🌐 Sin conexión', rid: rid);
       return null;
@@ -187,6 +187,12 @@ class PerfilService {
 
     try {
       final token = await _getToken(rid: rid);
+      if (token == null) {
+        _errorMessage = 'no_autorizado';
+        _log('🔒 No hay token de autenticación', rid: rid);
+        return null;
+      }
+
       _debugToken(token, rid: rid);
       final url = Uri.parse(baseUrl);
       _log('📤 GET $url', rid: rid);
@@ -218,6 +224,13 @@ class PerfilService {
         return null;
       }
 
+      if (response.statusCode == 502) {
+        final data = _tryJson(response.body, rid: rid);
+        _errorMessage = data?['mensaje']?.toString() ?? 'Error del servidor de credenciales.';
+        _log('🌐 502 Error del servidor de credenciales', rid: rid);
+        return null;
+      }
+
       final data = _tryJson(response.body, rid: rid);
       _errorMessage = data?['mensaje']?.toString() ?? 'Error al obtener perfil.';
       _log('❌ Error al obtener perfil: $_errorMessage', rid: rid);
@@ -237,56 +250,78 @@ class PerfilService {
     }
   }
 
-  Future<bool> actualizarPerfil({String? nombre, String? direccion, String? telefono}) async {
-    _errorMessage = null;
-    final rid = _newRid();
+  /// El endpoint cambió de /datos a /
+ /// Actualizar datos básicos del perfil (nombre, teléfono, dirección)
+Future<bool> actualizarPerfil({String? nombre, Map<String, dynamic>? direccion, String? telefono}) async {
+  _errorMessage = null;
+  final rid = _newRid();
 
-    if (!await _tieneConexion()) {
-      _errorMessage = 'sin_conexion';
-      _log('🌐 Sin conexión', rid: rid);
-      return false;
-    }
-
-    try {
-      final token = await _getToken(rid: rid);
-      final url = Uri.parse('$baseUrl/datos');
-      _log('📤 PUT $url', rid: rid);
-      final payload = <String, String>{
-        if (nombre != null) 'nombre': nombre.trim(),
-        if (direccion != null) 'direccion': direccion.trim(),
-        if (telefono != null) 'telefono': telefono.trim(),
-      };
-      _log('Payload: $payload', rid: rid);
-
-      final response = await http
-          .put(url, headers: _jsonHeaders(token: token), body: jsonEncode(payload))
-          .timeout(_timeoutShort);
-
-      _log('📥 Status: ${response.statusCode}', rid: rid);
-      _logLarge('Body', response.body, rid: rid);
-
-      if (response.statusCode == 200) return true;
-
-      final data = _tryJson(response.body, rid: rid);
-      _errorMessage = (response.statusCode == 401)
-          ? 'no_autorizado'
-          : (data?['mensaje']?.toString() ?? 'Error al actualizar perfil.');
-      return false;
-    } on TimeoutException {
-      _errorMessage = 'timeout';
-      _log('⏳ Timeout actualizando perfil', rid: rid);
-      return false;
-    } on SocketException catch (e) {
-      _errorMessage = 'sin_conexion';
-      _log('🌐 Error de red actualizando perfil: $e', rid: rid);
-      return false;
-    } catch (e) {
-      _errorMessage = 'Error en actualizar perfil: $e';
-      _log('❌ Error en actualizar perfil: $e', rid: rid);
-      return false;
-    }
+  if (!await _tieneConexion()) {
+    _errorMessage = 'sin_conexion';
+    _log('🌐 Sin conexión', rid: rid);
+    return false;
   }
 
+  try {
+    final token = await _getToken(rid: rid);
+    if (token == null) {
+      _errorMessage = 'no_autorizado';
+      _log('🔒 No hay token de autenticación', rid: rid);
+      return false;
+    }
+
+    // 👉 Ahora sí coincide con el backend (/perfil/datos)
+    final url = Uri.parse('$baseUrl/datos');
+    _log('📤 PUT $url', rid: rid);
+    
+    final payload = <String, dynamic>{
+      if (nombre != null) 'nombre': nombre.trim(),
+      if (direccion != null) 'direccion': direccion,
+      if (telefono != null) 'telefono': telefono.trim(),
+    };
+    
+    if (payload.isEmpty) {
+      _errorMessage = 'No hay datos para actualizar';
+      _log('⚠️ Payload vacío', rid: rid);
+      return false;
+    }
+    
+    _log('Payload: $payload', rid: rid);
+
+    final response = await http
+        .put(url, headers: _jsonHeaders(token: token), body: jsonEncode(payload))
+        .timeout(_timeoutShort);
+
+    _log('📥 Status: ${response.statusCode}', rid: rid);
+    _logLarge('Body', response.body, rid: rid);
+
+    if (response.statusCode == 200) return true;
+
+    final data = _tryJson(response.body, rid: rid);
+    _errorMessage = (response.statusCode == 401)
+        ? 'no_autorizado'
+        : (response.statusCode == 404)
+          ? 'Perfil no encontrado'
+          : (data?['mensaje']?.toString() ?? 'Error al actualizar perfil.');
+    return false;
+  } on TimeoutException {
+    _errorMessage = 'timeout';
+    _log('⏳ Timeout actualizando perfil', rid: rid);
+    return false;
+  } on SocketException catch (e) {
+    _errorMessage = 'sin_conexion';
+    _log('🌐 Error de red actualizando perfil: $e', rid: rid);
+    return false;
+  } catch (e) {
+    _errorMessage = 'Error en actualizar perfil: $e';
+    _log('❌ Error en actualizar perfil: $e', rid: rid);
+    return false;
+  }
+}
+
+
+  /// Actualizar imagen de perfil usando multipart
+  /// El endpoint es /perfil/imagen con POST
   Future<bool> actualizarImagenPerfil(String filePath) async {
     _errorMessage = null;
     final rid = _newRid();
@@ -299,11 +334,18 @@ class PerfilService {
 
     try {
       final token = await _getToken(rid: rid);
+      if (token == null) {
+        _errorMessage = 'no_autorizado';
+        _log('🔒 No hay token de autenticación', rid: rid);
+        return false;
+      }
+
       final url = Uri.parse('$baseUrl/imagen');
       _log('📤 POST (multipart) $url — file: $filePath', rid: rid);
 
       final request = http.MultipartRequest('POST', url);
       request.headers['Authorization'] = 'Bearer $token';
+      // El controller espera el campo 'imagen' (no 'file')
       request.files.add(await http.MultipartFile.fromPath('imagen', filePath));
 
       final streamed = await request.send().timeout(_timeoutLong);
@@ -319,7 +361,11 @@ class PerfilService {
       final data = _tryJson(responseBody, rid: rid);
       _errorMessage = (streamed.statusCode == 401)
           ? 'no_autorizado'
-          : (data?['mensaje']?.toString() ?? 'Error al actualizar imagen.');
+          : (streamed.statusCode == 404)
+            ? 'Perfil no encontrado'
+            : (streamed.statusCode == 400)
+              ? (data?['mensaje']?.toString() ?? 'Imagen no válida')
+              : (data?['mensaje']?.toString() ?? 'Error al actualizar imagen.');
       return false;
     } on TimeoutException {
       _errorMessage = 'timeout';
@@ -336,6 +382,8 @@ class PerfilService {
     }
   }
 
+  /// Eliminar imagen de perfil
+  /// El endpoint es /perfil/imagen con DELETE
   Future<bool> eliminarImagenPerfil() async {
     _errorMessage = null;
     final rid = _newRid();
@@ -348,6 +396,12 @@ class PerfilService {
 
     try {
       final token = await _getToken(rid: rid);
+      if (token == null) {
+        _errorMessage = 'no_autorizado';
+        _log('🔒 No hay token de autenticación', rid: rid);
+        return false;
+      }
+
       final url = Uri.parse('$baseUrl/imagen');
       _log('📤 DELETE $url', rid: rid);
 
@@ -366,7 +420,9 @@ class PerfilService {
       final data = _tryJson(response.body, rid: rid);
       _errorMessage = (response.statusCode == 401)
           ? 'no_autorizado'
-          : (data?['mensaje']?.toString() ?? 'Error al eliminar imagen.');
+          : (response.statusCode == 404)
+            ? (data?['mensaje']?.toString() ?? 'No tienes imagen para eliminar')
+            : (data?['mensaje']?.toString() ?? 'Error al eliminar imagen.');
       return false;
     } on TimeoutException {
       _errorMessage = 'timeout';
@@ -384,7 +440,7 @@ class PerfilService {
   }
 
   // ==========================
-  // USUARIO
+  // USUARIO - Mantienen la misma estructura
   // ==========================
   Future<Map<String, dynamic>?> crearUsuario({
     required String nombre,

@@ -10,7 +10,7 @@ import 'categoria_detalle_screen.dart';
 import 'crear_producto_screen.dart';
 import 'package:crud/screens/admin/widgets/producto_card.dart';
 import '../../providers/categoria_admin_provider.dart';
-import '../../providers/producto_admin_provider.dart'; // Importar ProductoProvider
+import '../../providers/producto_admin_provider.dart';
 
 class CategoriaPreviewScreen extends StatefulWidget {
   final Categoria categoria;
@@ -39,7 +39,7 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
   void initState() {
     super.initState();
     _categoriaActual = widget.categoria;
-    _inicializarProductos();
+    
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 500),
@@ -49,6 +49,11 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
       curve: Curves.easeInOut,
     );
     _animationController.forward();
+
+    // ✅ CORREGIDO: Inicializar después del primer frame para evitar condiciones de carrera
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _inicializarProductos();
+    });
   }
 
   @override
@@ -58,19 +63,31 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
     super.dispose();
   }
 
-  // NUEVO: Usar ProductoProvider para cargar productos por categoría
+  // ✅ CORREGIDO: Refrescar ANTES de filtrar
   Future<void> _inicializarProductos() async {
     if (!mounted) return;
 
     final productoProvider = Provider.of<ProductoProvider>(context, listen: false);
     
-    // Asegurar que el provider esté inicializado
-    if (productoProvider.state == ProductoState.initial) {
-      await productoProvider.inicializar();
+    try {
+      // ✅ SIEMPRE refrescar para obtener datos más recientes del servidor
+      if (productoProvider.state == ProductoState.initial) {
+        debugPrint('🔄 Inicializando provider desde categoria preview');
+        await productoProvider.inicializar();
+      } else {
+        debugPrint('🔄 Refrescando productos desde categoria preview');
+        await productoProvider.refrescar();
+      }
+      
+      // ✅ DESPUÉS de tener los datos actualizados, aplicar el filtro
+      debugPrint('🔍 Filtrando por categoría: ${_categoriaActual.id}');
+      productoProvider.filtrarPorCategoria(_categoriaActual.id);
+      
+    } catch (e) {
+      debugPrint('❌ Error al inicializar productos: $e');
+      // Fallback: intentar filtrar con los datos existentes
+      productoProvider.filtrarPorCategoria(_categoriaActual.id);
     }
-    
-    // Filtrar por esta categoría específica
-    productoProvider.filtrarPorCategoria(_categoriaActual.id);
   }
 
   // Método para actualizar la información de la categoría
@@ -109,7 +126,7 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
     }
   }
 
-  // NUEVO: Usar ProductoProvider para refrescar
+  // ✅ MEJORADO: Refrescar con mejor manejo de estados
   Future<void> _refrescarProductos() async {
     if (_isRefreshing) return;
     
@@ -119,22 +136,28 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
 
     final productoProvider = Provider.of<ProductoProvider>(context, listen: false);
     
-    // Refrescar productos y aplicar filtro de categoría
-    await productoProvider.refrescar();
-    productoProvider.filtrarPorCategoria(_categoriaActual.id);
+    try {
+      // Refrescar productos desde el servidor
+      await productoProvider.refrescar();
+      
+      // Aplicar filtro después de refrescar
+      productoProvider.filtrarPorCategoria(_categoriaActual.id);
 
-    if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        0,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
-    }
-
-    if (mounted) {
-      setState(() {
-        _isRefreshing = false;
-      });
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    } catch (e) {
+      debugPrint('Error al refrescar productos: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRefreshing = false;
+        });
+      }
     }
   }
 
@@ -229,6 +252,8 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           HapticFeedback.selectionClick();
+          
+          // ✅ MEJORADO: Manejar el resultado de crear producto
           final productoCreado = await Navigator.push<bool>(
             context,
             MaterialPageRoute(
@@ -236,7 +261,9 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
             ),
           );
 
+          // ✅ Si se creó un producto, refrescar la lista
           if (productoCreado == true && mounted) {
+            debugPrint('✅ Producto creado, refrescando vista de categoría');
             await _refrescarProductos();
           }
         },
@@ -276,11 +303,16 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
           return _errorDisplay(theme, productoProvider.errorMessage);
         }
 
-        // Filtrar productos de esta categoría
-        final productosDeCategoria = productoProvider.productosFiltrados.where((producto) {
+        // ✅ CORREGIDO: Filtrar productos de esta categoría de manera más robusta
+        final productosDeCategoria = productoProvider.productos.where((producto) {
           final categoriaId = producto['categoria']?.toString();
-          return categoriaId == _categoriaActual.id;
+          final categoriaIdAlt = producto['categoriaId']?.toString(); // Algunos pueden usar este campo
+          
+          return categoriaId == _categoriaActual.id || categoriaIdAlt == _categoriaActual.id;
         }).toList();
+
+        debugPrint('📊 Productos en categoría ${_categoriaActual.nombre}: ${productosDeCategoria.length}');
+        debugPrint('📊 Total productos en provider: ${productoProvider.productos.length}');
 
         // Mostrar mensaje vacío si no hay productos
         if (productosDeCategoria.isEmpty && !productoProvider.isLoading) {
@@ -307,6 +339,7 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
 
             return ProductoCard(
               id: productoId,
+              producto: productoData, // ✅ Pasar el producto completo
               // Callback para refrescar al eliminar
               onProductoEliminado: () {
                 _refrescarProductos();

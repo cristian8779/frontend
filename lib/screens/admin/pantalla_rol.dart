@@ -2,8 +2,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pin_code_fields/pin_code_fields.dart';
-import '../../services/rol_service.dart'; // Ajusta la ruta según tu estructura
+import '../../services/rol_service.dart';
 import 'bienvenida_admin_screen.dart';
+import 'styles/pantalla_rol/app_color_scheme.dart';
+import 'styles/pantalla_rol/notification_widget.dart';
 
 class PantallaRol extends StatefulWidget {
   const PantallaRol({Key? key}) : super(key: key);
@@ -143,7 +145,8 @@ class _PantallaRolState extends State<PantallaRol> with TickerProviderStateMixin
   }
 
   void _mostrarMensaje(String mensaje, {bool error = false}) {
-    _showNotification(
+    NotificationHelper.show(
+      context,
       message: mensaje,
       type: error ? NotificationType.error : NotificationType.success,
       icon: error ? Icons.error_outline : Icons.check_circle_outline,
@@ -227,7 +230,8 @@ class _PantallaRolState extends State<PantallaRol> with TickerProviderStateMixin
     try {
       await _rolService.confirmarCodigoRol(codigo);
       
-      _showNotification(
+      NotificationHelper.show(
+        context,
         message: "✨ Invitación aceptada",
         subtitle: "Bienvenido a tu nuevo rol",
         type: NotificationType.success,
@@ -247,31 +251,6 @@ class _PantallaRolState extends State<PantallaRol> with TickerProviderStateMixin
       _shakeFields();
     }
     setState(() => _loading = false);
-  }
-
-  void _showNotification({
-    required String message,
-    String? subtitle,
-    required NotificationType type,
-    required IconData icon,
-  }) {
-    final overlay = Overlay.of(context);
-    late OverlayEntry overlayEntry;
-    
-    overlayEntry = OverlayEntry(
-      builder: (_) => _NotificationWidget(
-        message: message,
-        subtitle: subtitle,
-        type: type,
-        icon: icon,
-        onDismiss: () => overlayEntry.remove(),
-      ),
-    );
-
-    overlay.insert(overlayEntry);
-    Future.delayed(const Duration(milliseconds: 4000), () {
-      if (overlayEntry.mounted) overlayEntry.remove();
-    });
   }
 
   @override
@@ -294,7 +273,7 @@ class _PantallaRolState extends State<PantallaRol> with TickerProviderStateMixin
     final isDark = theme.brightness == Brightness.dark;
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     
-    final colorScheme = _AppColorScheme.of(context, isDark);
+    final colorScheme = AppColorScheme.of(context, isDark);
 
     if (_cargandoInvitacion) {
       return Scaffold(
@@ -358,7 +337,7 @@ class _PantallaRolState extends State<PantallaRol> with TickerProviderStateMixin
     );
   }
 
-  PreferredSizeWidget _buildAppBar(_AppColorScheme colorScheme) {
+  PreferredSizeWidget _buildAppBar(AppColorScheme colorScheme) {
     return AppBar(
       backgroundColor: Colors.transparent,
       elevation: 0,
@@ -390,7 +369,7 @@ class _PantallaRolState extends State<PantallaRol> with TickerProviderStateMixin
     );
   }
 
-  Widget _buildHeroIllustration(Size size, _AppColorScheme colorScheme) {
+  Widget _buildHeroIllustration(Size size, AppColorScheme colorScheme) {
     return Hero(
       tag: 'role_invitation_illustration',
       child: AnimatedContainer(
@@ -426,7 +405,7 @@ class _PantallaRolState extends State<PantallaRol> with TickerProviderStateMixin
     );
   }
 
-  Widget _buildMainCard(_AppColorScheme colorScheme) {
+  Widget _buildMainCard(AppColorScheme colorScheme) {
     return AnimatedBuilder(
       animation: _shakeAnimation,
       builder: (context, child) {
@@ -477,7 +456,7 @@ class _PantallaRolState extends State<PantallaRol> with TickerProviderStateMixin
     );
   }
 
-  Widget _buildTitle(_AppColorScheme colorScheme) {
+  Widget _buildTitle(AppColorScheme colorScheme) {
     return RichText(
       textAlign: TextAlign.center,
       text: TextSpan(
@@ -507,7 +486,7 @@ class _PantallaRolState extends State<PantallaRol> with TickerProviderStateMixin
     );
   }
 
-  Widget _buildRoleInfo(_AppColorScheme colorScheme) {
+  Widget _buildRoleInfo(AppColorScheme colorScheme) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -552,7 +531,7 @@ class _PantallaRolState extends State<PantallaRol> with TickerProviderStateMixin
     );
   }
 
-  Widget _buildTimerSection(_AppColorScheme colorScheme) {
+  Widget _buildTimerSection(AppColorScheme colorScheme) {
     if (_fechaExpiracion == null) return const SizedBox.shrink();
     
     String contadorTexto = _tiempoRestante.inSeconds > 0
@@ -615,7 +594,7 @@ class _PantallaRolState extends State<PantallaRol> with TickerProviderStateMixin
     );
   }
 
-  Widget _buildPinField(_AppColorScheme colorScheme) {
+  Widget _buildPinField(AppColorScheme colorScheme) {
     final screenWidth = MediaQuery.of(context).size.width;
     final availableWidth = screenWidth - 112;
     final fieldWidth = (availableWidth - 50) / 6;
@@ -703,7 +682,7 @@ class _PantallaRolState extends State<PantallaRol> with TickerProviderStateMixin
     );
   }
 
-  Widget _buildSubmitButton(_AppColorScheme colorScheme) {
+  Widget _buildSubmitButton(AppColorScheme colorScheme) {
     return ScaleTransition(
       scale: _buttonScale,
       child: SizedBox(
@@ -778,7 +757,7 @@ class _PantallaRolState extends State<PantallaRol> with TickerProviderStateMixin
     );
   }
 
-  Widget _buildBackButton(_AppColorScheme colorScheme) {
+  Widget _buildBackButton(AppColorScheme colorScheme) {
     return TextButton.icon(
       onPressed: () {
         HapticFeedback.lightImpact();
@@ -805,293 +784,6 @@ class _PantallaRolState extends State<PantallaRol> with TickerProviderStateMixin
         ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
-        ),
-      ),
-    );
-  }
-}
-
-// Sistema de colores reutilizado
-class _AppColorScheme {
-  final Color primary;
-  final Color onPrimary;
-  final Color surface;
-  final Color onSurface;
-  final Color onSurfaceVariant;
-  final Color surfaceVariant;
-  final Color background;
-  final Color onBackground;
-  final Color error;
-  final Color outline;
-  final bool isDark;
-
-  const _AppColorScheme({
-    required this.primary,
-    required this.onPrimary,
-    required this.surface,
-    required this.onSurface,
-    required this.onSurfaceVariant,
-    required this.surfaceVariant,
-    required this.background,
-    required this.onBackground,
-    required this.error,
-    required this.outline,
-    required this.isDark,
-  });
-
-  static _AppColorScheme of(BuildContext context, bool isDark) {
-    if (isDark) {
-      return const _AppColorScheme(
-        primary: Color(0xFFFF6B6B),
-        onPrimary: Colors.white,
-        surface: Color(0xFF1E1E1E),
-        onSurface: Colors.white,
-        onSurfaceVariant: Color(0xFFB0B0B0),
-        surfaceVariant: Color(0xFF2A2A2A),
-        background: Color(0xFF121212),
-        onBackground: Colors.white,
-        error: Color(0xFFFF5252),
-        outline: Color(0xFF404040),
-        isDark: true,
-      );
-    } else {
-      return const _AppColorScheme(
-        primary: Color(0xFFBE0C0C),
-        onPrimary: Colors.white,
-        surface: Colors.white,
-        onSurface: Color(0xFF1A1A1A),
-        onSurfaceVariant: Color(0xFF6B6B6B),
-        surfaceVariant: Color(0xFFF5F5F5),
-        background: Color(0xFFF8FAFC),
-        onBackground: Color(0xFF1A1A1A),
-        error: Color(0xFFD32F2F),
-        outline: Color(0xFFE0E0E0),
-        isDark: false,
-      );
-    }
-  }
-}
-
-enum NotificationType { success, error, warning, info }
-
-class _NotificationWidget extends StatefulWidget {
-  final String message;
-  final String? subtitle;
-  final NotificationType type;
-  final IconData icon;
-  final VoidCallback onDismiss;
-
-  const _NotificationWidget({
-    required this.message,
-    this.subtitle,
-    required this.type,
-    required this.icon,
-    required this.onDismiss,
-  });
-
-  @override
-  State<_NotificationWidget> createState() => _NotificationWidgetState();
-}
-
-class _NotificationWidgetState extends State<_NotificationWidget>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<Offset> _slideAnimation;
-  late Animation<double> _opacityAnimation;
-  late Animation<double> _scaleAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    );
-
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, -1.2),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOutBack,
-    ));
-
-    _opacityAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0.0, 0.7, curve: Curves.easeOut),
-    ));
-
-    _scaleAnimation = Tween<double>(
-      begin: 0.8,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOutBack,
-    ));
-
-    _controller.forward();
-  }
-
-  Color get backgroundColor {
-    switch (widget.type) {
-      case NotificationType.success:
-        return const Color(0xFF10B981);
-      case NotificationType.error:
-        return const Color(0xFFEF4444);
-      case NotificationType.warning:
-        return const Color(0xFFF59E0B);
-      case NotificationType.info:
-        return const Color(0xFF3B82F6);
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Positioned(
-      top: MediaQuery.of(context).padding.top + 16,
-      left: 20,
-      right: 20,
-      child: SlideTransition(
-        position: _slideAnimation,
-        child: FadeTransition(
-          opacity: _opacityAnimation,
-          child: ScaleTransition(
-            scale: _scaleAnimation,
-            child: Material(
-              color: Colors.transparent,
-              child: GestureDetector(
-                onTap: widget.onDismiss,
-                onPanUpdate: (details) {
-                  // Permitir deslizar para cerrar
-                  if (details.delta.dy < -2) {
-                    widget.onDismiss();
-                  }
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        backgroundColor,
-                        backgroundColor.withOpacity(0.9),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: backgroundColor.withOpacity(0.3),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
-                        spreadRadius: 0,
-                      ),
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 40,
-                        offset: const Offset(0, 16),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.25),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Icon(
-                              widget.icon,
-                              color: Colors.white,
-                              size: 22,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  widget.message,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0.1,
-                                  ),
-                                ),
-                                if (widget.subtitle != null) ...[
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    widget.subtitle!,
-                                    style: TextStyle(
-                                      color: Colors.white.withOpacity(0.9),
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w400,
-                                      letterSpacing: 0.1,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          GestureDetector(
-                            onTap: widget.onDismiss,
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Icon(
-                                Icons.close_rounded,
-                                color: Colors.white.withOpacity(0.9),
-                                size: 18,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      // Barra de progreso para mostrar tiempo restante
-                      const SizedBox(height: 12),
-                      Container(
-                        height: 3,
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.3),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                        child: FractionallySizedBox(
-                          alignment: Alignment.centerLeft,
-                          widthFactor: 0.0, // Se animará automáticamente
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
         ),
       ),
     );

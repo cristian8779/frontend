@@ -12,7 +12,7 @@ import '../../services/anuncio_service.dart';
 import 'gestion_anuncios_screen.dart';
 
 // Importación de estilos (usando el archivo barrel)
-import 'styles/styles_index.dart';
+import 'styles/anuncio/styles_index.dart';
 
 class AnunciosScreen extends StatefulWidget {
   const AnunciosScreen({super.key});

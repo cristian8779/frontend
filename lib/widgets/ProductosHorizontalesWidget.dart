@@ -36,7 +36,7 @@ class _ProductosHorizontalesWidgetState
         elevation: 3,
         color: Colors.white,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20), // Más redondeado
         ),
         child: Shimmer.fromColors(
           baseColor: Colors.grey[300]!,
@@ -51,7 +51,7 @@ class _ProductosHorizontalesWidgetState
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.vertical(
-                      top: Radius.circular(16),
+                      top: Radius.circular(20), // Más redondeado
                     ),
                   ),
                 ),
@@ -68,7 +68,7 @@ class _ProductosHorizontalesWidgetState
                       height: dimensiones['fontSize']! + 2,
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(6), // Más redondeado
                       ),
                     ),
                     SizedBox(height: dimensiones['spacing']! / 2),
@@ -78,7 +78,7 @@ class _ProductosHorizontalesWidgetState
                       height: dimensiones['titleSize']! + 1,
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(6), // Más redondeado
                       ),
                     ),
                     SizedBox(height: 4),
@@ -88,7 +88,7 @@ class _ProductosHorizontalesWidgetState
                       height: dimensiones['titleSize']! + 1,
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(6), // Más redondeado
                       ),
                     ),
                     SizedBox(height: dimensiones['spacing']! / 2),
@@ -98,7 +98,7 @@ class _ProductosHorizontalesWidgetState
                       height: dimensiones['titleSize']!,
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(6), // Más redondeado
                       ),
                     ),
                   ],
@@ -190,6 +190,11 @@ class _ProductosHorizontalesWidgetState
                   const SizedBox(height: 8),
                   ElevatedButton(
                     onPressed: () => productosProvider.cargarProductos(forceRefresh: true),
+                    style: ElevatedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15), // Botón más redondeado
+                      ),
+                    ),
                     child: const Text('Reintentar'),
                   ),
                 ],
@@ -232,7 +237,7 @@ class _ProductosHorizontalesWidgetState
                       elevation: 3,
                       color: Colors.white,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(20), // Más redondeado
                       ),
                       child: InkWell(
                         onTap: () {
@@ -247,7 +252,7 @@ class _ProductosHorizontalesWidgetState
                             ),
                           );
                         },
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(20), // Coincide con el Card
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -255,7 +260,7 @@ class _ProductosHorizontalesWidgetState
                             Expanded(
                               child: ClipRRect(
                                 borderRadius: const BorderRadius.vertical(
-                                  top: Radius.circular(12),
+                                  top: Radius.circular(20), // Más redondeado
                                 ),
                                 child: Stack(
                                   children: [
@@ -296,10 +301,10 @@ class _ProductosHorizontalesWidgetState
                                         top: 8,
                                         right: 8,
                                         child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                           decoration: BoxDecoration(
                                             color: Colors.red,
-                                            borderRadius: BorderRadius.circular(4),
+                                            borderRadius: BorderRadius.circular(12), // Badge más redondeado
                                           ),
                                           child: Text(
                                             '-${producto['descuento']}%',
@@ -345,25 +350,37 @@ class _ProductosHorizontalesWidgetState
                                   SizedBox(height: dimensiones['spacing']! / 2),
                                   // Envío gratis
                                   if (producto['envioGratis'] == true)
-                                    Row(
-                                      children: [
-                                        Icon(
-                                          Icons.local_shipping,
-                                          size: dimensiones['titleSize']! - 1,
-                                          color: Colors.green,
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.green.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(10), // Contenedor más redondeado
+                                        border: Border.all(
+                                          color: Colors.green.withOpacity(0.3),
+                                          width: 1,
                                         ),
-                                        const SizedBox(width: 4),
-                                        Expanded(
-                                          child: Text(
-                                            "Envío gratis",
-                                            style: TextStyle(
-                                              fontSize: dimensiones['titleSize']! - 1,
-                                              color: Colors.green,
-                                              fontWeight: FontWeight.w500,
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.local_shipping,
+                                            size: dimensiones['titleSize']! - 1,
+                                            color: Colors.green,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Flexible(
+                                            child: Text(
+                                              "Envío gratis",
+                                              style: TextStyle(
+                                                fontSize: dimensiones['titleSize']! - 1,
+                                                color: Colors.green,
+                                                fontWeight: FontWeight.w500,
+                                              ),
                                             ),
                                           ),
-                                        ),
-                                      ],
+                                        ],
+                                      ),
                                     ),
                                 ],
                               ),
@@ -389,7 +406,7 @@ class _ProductosHorizontalesWidgetState
                           Colors.black.withOpacity(0.5),
                         ],
                       ),
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(20), // Indicador más redondeado
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withOpacity(0.2),

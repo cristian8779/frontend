@@ -4,6 +4,10 @@ import 'package:shimmer/shimmer.dart';
 import '../../services/producto_service.dart';
 import '../../services/categoria_service.dart';
 import '../producto/producto_screen.dart';
+import '../../theme/categoria/categoria_colors.dart';
+import '../../theme/categoria/categoria_dimensions.dart';
+import '../../theme/categoria/categoria_text_styles.dart';
+import '../../theme/categoria/categoria_widgets_styles.dart';
 
 class CategoriaScreen extends StatefulWidget {
   final String categoriaId;
@@ -135,101 +139,56 @@ class _CategoriaScreenState extends State<CategoriaScreen> {
     await _cargarDatos();
   }
 
-  // Formatter mejorado para mostrar el signo peso primero
-  final NumberFormat _currencyFormatter = NumberFormat.currency(
-    locale: 'es_CO',
-    symbol: '\$',
-    decimalDigits: 0,
-    customPattern: '\u00A4#,##0', // Patrón personalizado para mostrar $ primero
-  );
-
+  // Función para formatear el precio con $ al inicio
   String _formatPrice(double price) {
     return '\$${NumberFormat('#,##0', 'es_CO').format(price)}';
-  }
-
-  // Función para obtener el número de columnas basado en el ancho de pantalla
-  int _getCrossAxisCount(double screenWidth) {
-    if (screenWidth >= 1200) return 4; // Desktop grande
-    if (screenWidth >= 800) return 3;  // Tablet horizontal
-    if (screenWidth >= 600) return 2;  // Tablet vertical
-    return 2; // Móvil
-  }
-
-  // Función para obtener el aspect ratio basado en el tamaño de pantalla
-  double _getChildAspectRatio(double screenWidth) {
-    if (screenWidth >= 1200) return 0.75; // Desktop
-    if (screenWidth >= 800) return 0.70;  // Tablet horizontal
-    if (screenWidth >= 600) return 0.68;  // Tablet vertical
-    return 0.65; // Móvil
-  }
-
-  // Función para obtener padding responsive
-  EdgeInsets _getResponsivePadding(double screenWidth) {
-    if (screenWidth >= 1200) return const EdgeInsets.all(24);
-    if (screenWidth >= 800) return const EdgeInsets.all(20);
-    if (screenWidth >= 600) return const EdgeInsets.all(18);
-    return const EdgeInsets.all(16);
-  }
-
-  // Función para obtener spacing responsive
-  double _getResponsiveSpacing(double screenWidth) {
-    if (screenWidth >= 1200) return 20;
-    if (screenWidth >= 800) return 18;
-    if (screenWidth >= 600) return 16;
-    return 14;
   }
 
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
+    final screenWidth = size.width;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F8F8),
+      backgroundColor: CategoriaColors.background,
       appBar: AppBar(
         title: FittedBox(
           fit: BoxFit.scaleDown,
           child: Text(
             categoriaNombre,
-            style: TextStyle(
-              color: Colors.black87,
-              fontWeight: FontWeight.w600,
-              fontSize: size.width < 600 ? 18 : 20,
-            ),
+            style: CategoriaTextStyles.getAppBarTitle(screenWidth),
           ),
         ),
-        backgroundColor: const Color(0xFFF8F8F8),
+        backgroundColor: CategoriaColors.background,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black87),
+        iconTheme: const IconThemeData(color: CategoriaColors.primaryText),
       ),
       body: RefreshIndicator(
         onRefresh: _refrescarLista,
         child: isLoading
-            ? _buildShimmerGrid()
+            ? _buildShimmerGrid(screenWidth)
             : error != null
-                ? _buildErrorState()
+                ? _buildErrorState(screenWidth)
                 : productos.isEmpty
-                    ? _buildEmptyState()
-                    : _buildProductGrid(),
+                    ? _buildEmptyState(screenWidth)
+                    : _buildProductGrid(screenWidth),
       ),
     );
   }
 
-  Widget _buildProductGrid() {
-    final size = MediaQuery.of(context).size;
-    final screenWidth = size.width;
-    
+  Widget _buildProductGrid(double screenWidth) {
     return CustomScrollView(
       controller: _scrollController,
       slivers: [
         // Grid de productos responsive
         SliverPadding(
-          padding: _getResponsivePadding(screenWidth),
+          padding: CategoriaDimensions.getResponsivePadding(screenWidth),
           sliver: SliverGrid(
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: _getCrossAxisCount(screenWidth),
-              mainAxisSpacing: _getResponsiveSpacing(screenWidth),
-              crossAxisSpacing: _getResponsiveSpacing(screenWidth),
-              childAspectRatio: _getChildAspectRatio(screenWidth),
+              crossAxisCount: CategoriaDimensions.getCrossAxisCount(screenWidth),
+              mainAxisSpacing: CategoriaDimensions.getResponsiveSpacing(screenWidth),
+              crossAxisSpacing: CategoriaDimensions.getResponsiveSpacing(screenWidth),
+              childAspectRatio: CategoriaDimensions.getChildAspectRatio(screenWidth),
             ),
             delegate: SliverChildBuilderDelegate(
               (context, index) {
@@ -265,7 +224,7 @@ class _CategoriaScreenState extends State<CategoriaScreen> {
         if (isLoadingMore)
           SliverToBoxAdapter(
             child: Padding(
-              padding: EdgeInsets.all(screenWidth < 600 ? 16 : 20),
+              padding: EdgeInsets.all(CategoriaDimensions.getLoadingIndicatorPadding(screenWidth)),
               child: const Center(
                 child: CircularProgressIndicator(),
               ),
@@ -275,25 +234,22 @@ class _CategoriaScreenState extends State<CategoriaScreen> {
         if (!tieneMasProductos && productos.isNotEmpty)
           SliverToBoxAdapter(
             child: Container(
-              margin: EdgeInsets.all(screenWidth < 600 ? 16 : 20),
-              padding: EdgeInsets.all(screenWidth < 600 ? 12 : 16),
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(8),
-              ),
+              margin: EdgeInsets.all(CategoriaDimensions.getEndMessagePadding(screenWidth)),
+              padding: EdgeInsets.all(CategoriaDimensions.getEndMessageInternalPadding(screenWidth)),
+              decoration: CategoriaWidgetStyles.getEndMessageDecoration(),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.check_circle, 
-                       color: Colors.grey[600], size: 16),
+                  Icon(
+                    Icons.check_circle, 
+                    color: CategoriaColors.iconGrey, 
+                    size: CategoriaWidgetStyles.getEndMessageIconSize(),
+                  ),
                   const SizedBox(width: 8),
                   Flexible(
                     child: Text(
                       'Has visto todos los productos',
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: screenWidth < 600 ? 14 : 16,
-                      ),
+                      style: CategoriaTextStyles.getEndMessage(screenWidth),
                     ),
                   ),
                 ],
@@ -302,36 +258,33 @@ class _CategoriaScreenState extends State<CategoriaScreen> {
           ),
         // Espaciado inferior
         SliverToBoxAdapter(
-          child: SizedBox(height: screenWidth < 600 ? 24 : 32),
+          child: SizedBox(height: CategoriaDimensions.getBottomSpacing(screenWidth)),
         ),
       ],
     );
   }
 
-  Widget _buildShimmerGrid() {
-    final size = MediaQuery.of(context).size;
-    final screenWidth = size.width;
-    
+  Widget _buildShimmerGrid(double screenWidth) {
     return CustomScrollView(
       slivers: [
         SliverPadding(
-          padding: _getResponsivePadding(screenWidth),
+          padding: CategoriaDimensions.getResponsivePadding(screenWidth),
           sliver: SliverGrid(
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: _getCrossAxisCount(screenWidth),
-              mainAxisSpacing: _getResponsiveSpacing(screenWidth),
-              crossAxisSpacing: _getResponsiveSpacing(screenWidth),
-              childAspectRatio: _getChildAspectRatio(screenWidth),
+              crossAxisCount: CategoriaDimensions.getCrossAxisCount(screenWidth),
+              mainAxisSpacing: CategoriaDimensions.getResponsiveSpacing(screenWidth),
+              crossAxisSpacing: CategoriaDimensions.getResponsiveSpacing(screenWidth),
+              childAspectRatio: CategoriaDimensions.getChildAspectRatio(screenWidth),
             ),
             delegate: SliverChildBuilderDelegate(
               (context, index) {
                 return Shimmer.fromColors(
-                  baseColor: Colors.grey[300]!,
-                  highlightColor: Colors.grey[100]!,
+                  baseColor: CategoriaColors.shimmerBase,
+                  highlightColor: CategoriaColors.shimmerHighlight,
                   child: Container(
                     decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
+                      color: CategoriaColors.cardBackground,
+                      borderRadius: BorderRadius.circular(CategoriaDimensions.cardRadius),
                     ),
                   ),
                 );
@@ -344,62 +297,41 @@ class _CategoriaScreenState extends State<CategoriaScreen> {
     );
   }
 
-  Widget _buildErrorState() {
-    final size = MediaQuery.of(context).size;
-    final isTablet = size.width >= 600;
+  Widget _buildErrorState(double screenWidth) {
+    final isTablet = CategoriaDimensions.isTablet(screenWidth);
     
     return Center(
       child: Padding(
-        padding: EdgeInsets.all(isTablet ? 32 : 24),
+        padding: EdgeInsets.all(CategoriaDimensions.getErrorStatePadding(screenWidth)),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
               padding: EdgeInsets.all(isTablet ? 24 : 20),
-              decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
+              decoration: CategoriaWidgetStyles.getErrorIconDecoration(isTablet),
               child: Icon(
                 Icons.error_outline,
-                size: isTablet ? 56 : 48,
-                color: Colors.redAccent,
+                size: CategoriaWidgetStyles.getErrorIconSize(isTablet),
+                color: CategoriaColors.errorColor,
               ),
             ),
-            SizedBox(height: isTablet ? 20 : 16),
+            SizedBox(height: CategoriaWidgetStyles.getStateIconSpacing(isTablet)),
             Text(
               'Error al cargar productos',
-              style: TextStyle(
-                fontSize: isTablet ? 20 : 18,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87,
-              ),
+              style: CategoriaTextStyles.getErrorTitle(isTablet),
             ),
-            SizedBox(height: isTablet ? 12 : 8),
+            SizedBox(height: CategoriaWidgetStyles.getStateDescriptionSpacing(isTablet)),
             Text(
               error ?? 'Ocurrió un error desconocido',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: isTablet ? 16 : 14,
-                color: Colors.grey[600],
-              ),
+              style: CategoriaTextStyles.getErrorDescription(isTablet),
             ),
-            SizedBox(height: isTablet ? 28 : 24),
+            SizedBox(height: CategoriaWidgetStyles.getStateButtonSpacing(isTablet)),
             ElevatedButton.icon(
               onPressed: _refrescarLista,
               icon: const Icon(Icons.refresh),
               label: const Text('Reintentar'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                foregroundColor: Colors.white,
-                padding: EdgeInsets.symmetric(
-                  horizontal: isTablet ? 28 : 24,
-                  vertical: isTablet ? 16 : 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
+              style: CategoriaWidgetStyles.getPrimaryButtonStyle(isTablet),
             ),
           ],
         ),
@@ -407,58 +339,41 @@ class _CategoriaScreenState extends State<CategoriaScreen> {
     );
   }
 
-  Widget _buildEmptyState() {
-    final size = MediaQuery.of(context).size;
-    final isTablet = size.width >= 600;
+  Widget _buildEmptyState(double screenWidth) {
+    final isTablet = CategoriaDimensions.isTablet(screenWidth);
     
     return Center(
       child: Padding(
-        padding: EdgeInsets.all(isTablet ? 32 : 24),
+        padding: EdgeInsets.all(CategoriaDimensions.getErrorStatePadding(screenWidth)),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
               padding: EdgeInsets.all(isTablet ? 24 : 20),
-              decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
+              decoration: CategoriaWidgetStyles.getEmptyStateIconDecoration(isTablet),
               child: Icon(
                 Icons.inventory_2_outlined,
-                size: isTablet ? 72 : 64,
-                color: Colors.blue[400],
+                size: CategoriaWidgetStyles.getEmptyStateIconSize(isTablet),
+                color: CategoriaColors.emptyStateIcon,
               ),
             ),
-            SizedBox(height: isTablet ? 20 : 16),
+            SizedBox(height: CategoriaWidgetStyles.getStateIconSpacing(isTablet)),
             Text(
               'No hay productos disponibles',
-              style: TextStyle(
-                fontSize: isTablet ? 20 : 18,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87,
-              ),
+              style: CategoriaTextStyles.getEmptyStateTitle(isTablet),
             ),
-            SizedBox(height: isTablet ? 12 : 8),
+            SizedBox(height: CategoriaWidgetStyles.getStateDescriptionSpacing(isTablet)),
             Text(
               'Esta categoría aún no tiene productos agregados',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: isTablet ? 16 : 14,
-                color: Colors.grey[600],
-              ),
+              style: CategoriaTextStyles.getEmptyStateDescription(isTablet),
             ),
-            SizedBox(height: isTablet ? 28 : 24),
+            SizedBox(height: CategoriaWidgetStyles.getStateButtonSpacing(isTablet)),
             TextButton.icon(
               onPressed: _refrescarLista,
               icon: const Icon(Icons.refresh),
               label: const Text('Actualizar'),
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.blue,
-                padding: EdgeInsets.symmetric(
-                  horizontal: isTablet ? 24 : 20,
-                  vertical: isTablet ? 12 : 8,
-                ),
-              ),
+              style: CategoriaWidgetStyles.getSecondaryButtonStyle(isTablet),
             ),
           ],
         ),
@@ -496,31 +411,17 @@ class _ProductoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isTablet = screenWidth >= 600;
-    final isDesktop = screenWidth >= 1200;
+    final isTablet = CategoriaDimensions.isTablet(screenWidth);
+    final isDesktop = CategoriaDimensions.isDesktop(screenWidth);
     
-    // Tamaños responsive
-    final cardPadding = isDesktop ? 16.0 : isTablet ? 14.0 : 12.0;
-    final titleFontSize = isDesktop ? 15.0 : isTablet ? 14.0 : 13.0;
-    final priceFontSize = isDesktop ? 18.0 : isTablet ? 17.0 : 16.0;
-    final stockFontSize = isDesktop ? 11.0 : isTablet ? 10.0 : 9.0;
-    final badgeFontSize = isDesktop ? 14.0 : isTablet ? 13.0 : 12.0;
+    // Obtener padding de la card
+    final cardPadding = CategoriaDimensions.getCardPadding(screenWidth);
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(CategoriaDimensions.cardRadius),
       child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
+        decoration: CategoriaWidgetStyles.getProductCardDecoration(),
         child: Stack(
           children: [
             Column(
@@ -534,7 +435,7 @@ class _ProductoCard extends StatelessWidget {
                     padding: EdgeInsets.all(cardPadding),
                     child: ClipRRect(
                       borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(12),
+                        top: Radius.circular(CategoriaDimensions.cardRadius),
                       ),
                       child: Image.network(
                         imagenUrl,
@@ -549,25 +450,19 @@ class _ProductoCard extends StatelessWidget {
                           );
                         },
                         errorBuilder: (context, error, stackTrace) => Container(
-                          decoration: BoxDecoration(
-                            color: Colors.grey[50],
-                            borderRadius: BorderRadius.circular(8),
-                          ),
+                          decoration: CategoriaWidgetStyles.getImagePlaceholderDecoration(),
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Icon(
                                 Icons.image_not_supported_outlined,
-                                size: isDesktop ? 48 : isTablet ? 44 : 40,
-                                color: Colors.grey[400],
+                                size: CategoriaWidgetStyles.getImagePlaceholderIconSize(screenWidth),
+                                color: CategoriaColors.iconPlaceholder,
                               ),
-                              SizedBox(height: isTablet ? 10 : 8),
+                              SizedBox(height: CategoriaWidgetStyles.getImagePlaceholderTextSpacing(isTablet)),
                               Text(
                                 'Sin imagen',
-                                style: TextStyle(
-                                  color: Colors.grey[500],
-                                  fontSize: isTablet ? 14 : 12,
-                                ),
+                                style: CategoriaTextStyles.getPlaceholderText(isTablet),
                               ),
                             ],
                           ),
@@ -589,12 +484,7 @@ class _ProductoCard extends StatelessWidget {
                           nombre,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.black87,
-                            fontSize: titleFontSize,
-                            fontWeight: FontWeight.w500,
-                            height: 1.3,
-                          ),
+                          style: CategoriaTextStyles.getProductTitle(screenWidth),
                         ),
                         SizedBox(height: isTablet ? 6 : 4),
                         Row(
@@ -604,32 +494,18 @@ class _ProductoCard extends StatelessWidget {
                             Expanded(
                               child: Text(
                                 _formatPrice(precio),
-                                style: TextStyle(
-                                  color: Colors.black87,
-                                  fontSize: priceFontSize,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                                style: CategoriaTextStyles.getProductPrice(screenWidth),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
                             // Indicador de stock
                             if (stock <= 5 && stock > 0)
                               Container(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: isTablet ? 8 : 6, 
-                                  vertical: isTablet ? 3 : 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.orange[100],
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
+                                padding: CategoriaWidgetStyles.getStockWarningPadding(isTablet),
+                                decoration: CategoriaWidgetStyles.getStockWarningDecoration(),
                                 child: Text(
                                   'Últimos $stock',
-                                  style: TextStyle(
-                                    color: Colors.orange[700],
-                                    fontSize: stockFontSize,
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                                  style: CategoriaTextStyles.getStockWarning(screenWidth),
                                 ),
                               ),
                           ],
@@ -644,18 +520,11 @@ class _ProductoCard extends StatelessWidget {
             if (stock == 0 || !disponible)
               Positioned.fill(
                 child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.7),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  decoration: CategoriaWidgetStyles.getOutOfStockOverlay(),
                   child: Center(
                     child: Text(
                       'AGOTADO',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: badgeFontSize,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: CategoriaTextStyles.getOutOfStockBadge(screenWidth),
                     ),
                   ),
                 ),

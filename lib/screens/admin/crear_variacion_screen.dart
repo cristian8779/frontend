@@ -2,11 +2,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
 import '../../utils/colores.dart';
 import '../../widgets/color_selector.dart';
 import '../../widgets/selector_talla_widget.dart';
 import '../../models/variacion.dart';
-import '../../services/variacion_service.dart';
+import '../../providers/variacion_admin_provider.dart';
+import 'styles/crear_variacion/crear_variacion_styles.dart';
 
 // Formatteador para precios en COP
 class CurrencyInputFormatter extends TextInputFormatter {
@@ -19,7 +21,6 @@ class CurrencyInputFormatter extends TextInputFormatter {
       return newValue;
     }
 
-    // Eliminar todos los caracteres que no sean números
     String numbersOnly = newValue.text.replaceAll(RegExp(r'[^\d]'), '');
     
     if (numbersOnly.isEmpty) {
@@ -29,13 +30,11 @@ class CurrencyInputFormatter extends TextInputFormatter {
       );
     }
 
-    // Convertir a número para validar
     final number = int.tryParse(numbersOnly);
     if (number == null) {
       return oldValue;
     }
 
-    // Formatear con separadores de miles
     String formatted = _formatWithThousands(numbersOnly);
     
     return TextEditingValue(
@@ -45,7 +44,6 @@ class CurrencyInputFormatter extends TextInputFormatter {
   }
 
   String _formatWithThousands(String number) {
-    // Agregar puntos cada tres dígitos desde la derecha
     String reversed = number.split('').reversed.join('');
     String formatted = '';
     
@@ -78,7 +76,6 @@ class CrearVariacionScreen extends StatefulWidget {
 }
 
 class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
-  final VariacionService _variacionService = VariacionService();
   final _formKey = GlobalKey<FormState>();
 
   // Modo de creación: individual o por lotes
@@ -107,8 +104,8 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
   Map<String, TextEditingController> _precioControllersPorVariacion = {};
 
   bool _isLoading = false;
-  String _currencySymbol = '\$'; // Símbolo para pesos colombianos (COP)
-  double _saveProgress = 0.0; // Progreso para el diálogo de guardado
+  String _currencySymbol = '\$';
+  double _saveProgress = 0.0;
 
   @override
   void initState() {
@@ -199,9 +196,9 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
             Icon(
               isError ? Icons.error_outline : Icons.check_circle_outline,
               color: Colors.white,
-              size: 20,
+              size: CrearVariacionStyles.infoIconSize,
             ),
-            const SizedBox(width: 8),
+            CrearVariacionStyles.smallHorizontalSpacing,
             Expanded(child: Text(mensaje)),
           ],
         ),
@@ -229,7 +226,6 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
       return 'El precio es requerido';
     }
     
-    // Usar parseCurrency para obtener el valor numérico
     final precio = parseCurrency(value);
     if (precio <= 0) {
       return 'Ingresa un precio válido';
@@ -277,7 +273,6 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
 
   bool _isFormValid() {
     if (_modoLotes) {
-      // En modo lotes, verificar que todos los colores tengan imagen
       for (var colorHex in _coloresSeleccionados) {
         if (!_imagenesPorColor.containsKey(colorHex)) {
           return false;
@@ -306,7 +301,7 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
   }
 
   void _validateForm() {
-    setState(() {}); // Actualizar UI para reflejar estado del botón de guardar
+    setState(() {});
   }
 
   List<Variacion> _generarVariacionesLote() {
@@ -323,7 +318,6 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
         }
 
         final stock = int.parse(stockText);
-        // Usar parseCurrency para obtener el valor numérico del precio
         final precioValue = parseCurrency(precioText);
         final precio = precioValue.toStringAsFixed(2);
         final esNumerico = RegExp(r'^\d+$').hasMatch(talla);
@@ -374,7 +368,6 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
       return;
     }
 
-    // Verificar que todos los colores tengan imagen
     final coloresSinImagen = _coloresSeleccionados.where((colorHex) => !_imagenesPorColor.containsKey(colorHex)).toList();
     if (coloresSinImagen.isNotEmpty) {
       final coloresNombres = coloresSinImagen.map((color) => _coloresNombres[color] ?? 'Sin nombre').join(', ');
@@ -397,7 +390,6 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
         return;
       }
 
-      // Mostrar diálogo de progreso
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -407,34 +399,37 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               LinearProgressIndicator(value: _saveProgress),
-              const SizedBox(height: 16),
-              Text('Guardando ${_saveProgress * variaciones.length ~/ 1}/${variaciones.length}...'),
+              CrearVariacionStyles.mediumSpacing,
+              Text('Guardando ${(_saveProgress * variaciones.length).toInt()}/${variaciones.length}...'),
             ],
           ),
         ),
       );
 
+      final provider = Provider.of<VariacionProvider>(context, listen: false);
       List<String> errores = [];
+      
       for (var i = 0; i < variaciones.length; i++) {
-        try {
-          await _variacionService.crearVariacionDesdeModelo(variaciones[i]);
-          setState(() => _saveProgress = (i + 1) / variaciones.length);
-        } catch (e) {
+        final exito = await provider.crearVariacion(variaciones[i]);
+        if (!exito) {
           errores.add(
-              'Error al guardar ${variaciones[i].colorNombre} - Talla ${variaciones[i].tallaLetra ?? variaciones[i].tallaNumero}: $e');
+            'Error al guardar ${variaciones[i].colorNombre} - Talla ${variaciones[i].tallaLetra ?? variaciones[i].tallaNumero}');
         }
+        setState(() => _saveProgress = (i + 1) / variaciones.length);
       }
 
-      Navigator.pop(context); // Cerrar diálogo de progreso
+      Navigator.pop(context);
 
       if (errores.isNotEmpty) {
         _mostrarMensaje('Algunas variaciones no se guardaron: ${errores.join(', ')}',
             isError: true);
       } else {
         _mostrarMensaje('${variaciones.length} variaciones creadas exitosamente');
+        Navigator.pop(context);
       }
       _resetForm();
     } catch (e) {
+      Navigator.pop(context);
       _mostrarMensaje('Error general al guardar variaciones: $e', isError: true);
     } finally {
       if (mounted) {
@@ -445,7 +440,6 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
 
   Future<void> _guardarVariacionIndividual() async {
     final stock = int.parse(_stockController.text.trim());
-    // Usar parseCurrency en lugar de double.parse
     final precioValue = parseCurrency(_precioController.text.trim());
     final precio = precioValue.toStringAsFixed(2);
 
@@ -465,8 +459,15 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await _variacionService.crearVariacionDesdeModelo(variacion);
-      _mostrarMensaje('Variación creada exitosamente');
+      final provider = Provider.of<VariacionProvider>(context, listen: false);
+      final exito = await provider.crearVariacion(variacion);
+      
+      if (exito) {
+        _mostrarMensaje('Variación creada exitosamente');
+        Navigator.pop(context);
+      } else {
+        _mostrarMensaje('Error al guardar variación: ${provider.error}', isError: true);
+      }
       _resetForm();
     } catch (e) {
       _mostrarMensaje('Error al guardar variación: $e', isError: true);
@@ -488,14 +489,14 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Se crearán ${variaciones.length} variaciones:'),
-                  const SizedBox(height: 12),
+                  CrearVariacionStyles.mediumSpacing,
                   Text('• ${_coloresSeleccionados.length} colores'),
                   Text('• ${_tallasSeleccionadas.length} tallas'),
-                  const SizedBox(height: 12),
+                  CrearVariacionStyles.mediumSpacing,
                   const Text('Detalles:'),
                   ...variaciones.map((v) => Text(
                         '• ${v.colorNombre} - Talla ${v.tallaLetra ?? v.tallaNumero}: ${v.stock} unidades, $_currencySymbol${_formatPriceForDisplay(v.precio)} COP',
-                        style: const TextStyle(fontSize: 12),
+                        style: CrearVariacionStyles.previewDetailStyle,
                       )),
                 ],
               ),
@@ -543,12 +544,9 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
 
   Widget _buildModeToggle() {
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade200,
-        borderRadius: BorderRadius.circular(12),
-      ),
+      margin: CrearVariacionStyles.modeToggleMargin,
+      padding: CrearVariacionStyles.modeTogglePadding,
+      decoration: CrearVariacionStyles.modeToggleDecoration,
       child: Row(
         children: [
           Expanded(
@@ -557,27 +555,12 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
               child: Semantics(
                 label: 'Seleccionar modo individual',
                 child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  decoration: BoxDecoration(
-                    color: !_modoLotes ? Colors.white : Colors.transparent,
-                    borderRadius: BorderRadius.circular(8),
-                    boxShadow: !_modoLotes
-                        ? [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 4,
-                              offset: const Offset(0, 2),
-                            ),
-                          ]
-                        : [],
-                  ),
+                  padding: CrearVariacionStyles.modeButtonPadding,
+                  decoration: !_modoLotes ? CrearVariacionStyles.modeActiveDecoration : null,
                   child: Text(
                     'Individual',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: !_modoLotes ? const Color(0xFF3A86FF) : Colors.grey.shade600,
-                    ),
+                    style: CrearVariacionStyles.modeTextStyle(!_modoLotes),
                   ),
                 ),
               ),
@@ -589,27 +572,12 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
               child: Semantics(
                 label: 'Seleccionar modo por lotes',
                 child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  decoration: BoxDecoration(
-                    color: _modoLotes ? Colors.white : Colors.transparent,
-                    borderRadius: BorderRadius.circular(8),
-                    boxShadow: _modoLotes
-                        ? [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 4,
-                              offset: const Offset(0, 2),
-                            ),
-                          ]
-                        : [],
-                  ),
+                  padding: CrearVariacionStyles.modeButtonPadding,
+                  decoration: _modoLotes ? CrearVariacionStyles.modeActiveDecoration : null,
                   child: Text(
                     'Por lotes',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: _modoLotes ? const Color(0xFF3A86FF) : Colors.grey.shade600,
-                    ),
+                    style: CrearVariacionStyles.modeTextStyle(_modoLotes),
                   ),
                 ),
               ),
@@ -622,21 +590,14 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
 
   Widget _buildSectionTitle(String title, {IconData? icon}) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: CrearVariacionStyles.sectionPadding,
       child: Row(
         children: [
           if (icon != null) ...[
-            Icon(icon, size: 20, color: const Color(0xFF3A86FF)),
-            const SizedBox(width: 8),
+            Icon(icon, size: CrearVariacionStyles.sectionIconSize, color: CrearVariacionStyles.primaryIconColor),
+            CrearVariacionStyles.smallHorizontalSpacing,
           ],
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF2D3748),
-            ),
-          ),
+          Text(title, style: CrearVariacionStyles.sectionTitleStyle),
         ],
       ),
     );
@@ -649,15 +610,13 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
     String? Function(String?)? validator,
     String? prefix,
     String? suffix,
-    bool isPrice = false, // Nuevo parámetro
+    bool isPrice = false,
   }) {
     List<TextInputFormatter> formatters = [];
     
     if (isPrice) {
-      // Usar el formateador de moneda para campos de precio
       formatters = [CurrencyInputFormatter()];
     } else if (inputType == TextInputType.number) {
-      // Para campos numéricos que no son precio (como stock)
       formatters = [FilteringTextInputFormatter.digitsOnly];
     }
 
@@ -666,33 +625,10 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
       keyboardType: inputType,
       validator: validator,
       inputFormatters: formatters,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixText: prefix,
-        suffixText: suffix,
-        filled: true,
-        fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFF3A86FF), width: 2),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.red.shade400),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.red.shade400, width: 2),
-        ),
+      decoration: CrearVariacionStyles.textFieldDecoration(
+        label: label,
+        prefix: prefix,
+        suffix: suffix,
       ),
     );
   }
@@ -707,7 +643,7 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
 
   Widget _buildImageSelectorIndividual() {
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8),
+      margin: CrearVariacionStyles.containerMargin,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -717,23 +653,9 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
             child: Semantics(
               label: 'Seleccionar imagen del producto',
               child: Container(
-                height: 200,
+                height: CrearVariacionStyles.imageContainerHeight,
                 width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: _imagenPrincipal != null ? const Color(0xFF3A86FF) : Colors.grey.shade300,
-                    width: _imagenPrincipal != null ? 2 : 1,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.08),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
+                decoration: CrearVariacionStyles.imageContainerDecoration(_imagenPrincipal != null),
                 child: _imagenPrincipal != null
                     ? Stack(
                         children: [
@@ -751,14 +673,11 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
                             right: 8,
                             child: Container(
                               padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.6),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
+                              decoration: CrearVariacionStyles.editBadgeDecoration,
                               child: const Icon(
                                 Icons.edit,
                                 color: Colors.white,
-                                size: 16,
+                                size: CrearVariacionStyles.editIconSize,
                               ),
                             ),
                           ),
@@ -769,32 +688,22 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
                         children: [
                           Container(
                             padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF3A86FF).withOpacity(0.1),
-                              shape: BoxShape.circle,
-                            ),
+                            decoration: CrearVariacionStyles.photoPlaceholderDecoration,
                             child: const Icon(
                               Icons.add_photo_alternate_outlined,
-                              size: 32,
-                              color: Color(0xFF3A86FF),
+                              size: CrearVariacionStyles.photoIconSize,
+                              color: CrearVariacionStyles.primaryBlue,
                             ),
                           ),
-                          const SizedBox(height: 12),
+                          CrearVariacionStyles.mediumSpacing,
                           const Text(
                             'Toca para seleccionar imagen',
-                            style: TextStyle(
-                              color: Color(0xFF718096),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
+                            style: CrearVariacionStyles.photoPlaceholderTextStyle,
                           ),
                           const SizedBox(height: 4),
                           Text(
                             'Máximo 5MB',
-                            style: TextStyle(
-                              color: Colors.grey.shade500,
-                              fontSize: 12,
-                            ),
+                            style: CrearVariacionStyles.photoSizeTextStyle,
                           ),
                         ],
                       ),
@@ -808,7 +717,7 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
 
   Widget _buildImageSelectorLotes() {
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8),
+      margin: CrearVariacionStyles.containerMargin,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -819,10 +728,10 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
               style: TextStyle(
                 fontWeight: FontWeight.w500,
                 fontSize: 14,
-                color: Color(0xFF2D3748),
+                color: CrearVariacionStyles.textDark,
               ),
             ),
-            const SizedBox(height: 12),
+            CrearVariacionStyles.mediumSpacing,
             GridView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
@@ -843,21 +752,7 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
                   child: Semantics(
                     label: 'Seleccionar imagen para color $colorName',
                     child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: tieneImagen ? const Color(0xFF3A86FF) : Colors.grey.shade300,
-                          width: tieneImagen ? 2 : 1,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.08),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
+                      decoration: CrearVariacionStyles.imageContainerDecoration(tieneImagen),
                       child: Column(
                         children: [
                           Expanded(
@@ -878,14 +773,11 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
                                         right: 8,
                                         child: Container(
                                           padding: const EdgeInsets.all(4),
-                                          decoration: BoxDecoration(
-                                            color: Colors.black.withOpacity(0.6),
-                                            borderRadius: BorderRadius.circular(12),
-                                          ),
+                                          decoration: CrearVariacionStyles.editBadgeDecoration,
                                           child: const Icon(
                                             Icons.edit,
                                             color: Colors.white,
-                                            size: 12,
+                                            size: CrearVariacionStyles.smallEditIconSize,
                                           ),
                                         ),
                                       ),
@@ -909,19 +801,19 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
                             child: Row(
                               children: [
                                 Container(
-                                  width: 16,
-                                  height: 16,
+                                  width: CrearVariacionStyles.smallColorCircleSize,
+                                  height: CrearVariacionStyles.smallColorCircleSize,
                                   decoration: BoxDecoration(
                                     color: Color(int.parse('0xFF${colorHex.substring(1)}')),
                                     shape: BoxShape.circle,
                                     border: Border.all(color: Colors.white, width: 2),
                                   ),
                                 ),
-                                const SizedBox(width: 8),
+                                CrearVariacionStyles.smallHorizontalSpacing,
                                 Expanded(
                                   child: Text(
                                     colorName,
-                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                                    style: CrearVariacionStyles.smallTextStyle,
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
@@ -938,26 +830,19 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
           ] else ...[
             Container(
               padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade300),
-              ),
+              decoration: CrearVariacionStyles.infoContainerDecoration,
               child: Row(
                 children: [
                   Icon(
                     Icons.info_outline,
-                    color: Colors.grey.shade600,
-                    size: 20,
+                    color: CrearVariacionStyles.infoIconColor,
+                    size: CrearVariacionStyles.infoIconSize,
                   ),
-                  const SizedBox(width: 12),
+                  CrearVariacionStyles.mediumHorizontalSpacing,
                   Expanded(
                     child: Text(
                       'Selecciona colores para poder agregar sus imágenes',
-                      style: TextStyle(
-                        color: Colors.grey.shade600,
-                        fontSize: 14,
-                      ),
+                      style: CrearVariacionStyles.infoTextStyle,
                     ),
                   ),
                 ],
@@ -976,22 +861,15 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
       return Container(
         margin: const EdgeInsets.only(top: 8),
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: const Color(0xFF3A86FF).withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFF3A86FF).withOpacity(0.3)),
-        ),
+        decoration: CrearVariacionStyles.previewContainerDecoration,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'Colores seleccionados (${_coloresSeleccionados.length}):',
-              style: const TextStyle(
-                fontWeight: FontWeight.w500,
-                color: Color(0xFF2D3748),
-              ),
+              style: CrearVariacionStyles.previewTitleStyle,
             ),
-            const SizedBox(height: 8),
+            CrearVariacionStyles.smallSpacing,
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -999,17 +877,13 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
                 final colorName = _coloresNombres[colorHex] ?? 'Sin nombre';
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
+                  decoration: CrearVariacionStyles.colorChipDecoration,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Container(
-                        width: 16,
-                        height: 16,
+                        width: CrearVariacionStyles.smallColorCircleSize,
+                        height: CrearVariacionStyles.smallColorCircleSize,
                         decoration: BoxDecoration(
                           color: Color(int.parse('0xFF${colorHex.substring(1)}')),
                           shape: BoxShape.circle,
@@ -1019,7 +893,7 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
                       const SizedBox(width: 6),
                       Text(
                         colorName,
-                        style: const TextStyle(fontSize: 12),
+                        style: CrearVariacionStyles.smallTextStyle,
                       ),
                     ],
                   ),
@@ -1035,43 +909,25 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
       return Container(
         margin: const EdgeInsets.only(top: 8),
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: const Color(0xFF3A86FF).withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFF3A86FF).withOpacity(0.3)),
-        ),
+        decoration: CrearVariacionStyles.previewContainerDecoration,
         child: Row(
           children: [
             Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                color: Color(int.parse('0xFF${_selectedColorHex!.substring(1)}')),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 2),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
+              width: CrearVariacionStyles.colorCircleSize,
+              height: CrearVariacionStyles.colorCircleSize,
+              decoration: CrearVariacionStyles.colorCircleDecoration(_selectedColorHex!),
             ),
-            const SizedBox(width: 12),
+            CrearVariacionStyles.mediumHorizontalSpacing,
             Expanded(
               child: Text(
                 'Color: ${_selectedColorName ?? 'Sin nombre'}',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w500,
-                  color: Color(0xFF2D3748),
-                ),
+                style: CrearVariacionStyles.colorNameStyle,
               ),
             ),
-            Icon(
+            const Icon(
               Icons.check_circle,
-              color: const Color(0xFF3A86FF),
-              size: 16,
+              color: CrearVariacionStyles.primaryBlue,
+              size: CrearVariacionStyles.checkIconSize,
             ),
           ],
         ),
@@ -1086,39 +942,25 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
       return Container(
         margin: const EdgeInsets.only(top: 8),
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: const Color(0xFF3A86FF).withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFF3A86FF).withOpacity(0.3)),
-        ),
+        decoration: CrearVariacionStyles.previewContainerDecoration,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'Tallas seleccionadas (${_tallasSeleccionadas.length}):',
-              style: const TextStyle(
-                fontWeight: FontWeight.w500,
-                color: Color(0xFF2D3748),
-              ),
+              style: CrearVariacionStyles.previewTitleStyle,
             ),
-            const SizedBox(height: 8),
+            CrearVariacionStyles.smallSpacing,
             Wrap(
               spacing: 6,
               runSpacing: 6,
               children: _tallasSeleccionadas.map((talla) {
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
+                  decoration: CrearVariacionStyles.colorChipDecoration,
                   child: Text(
                     talla,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
+                    style: CrearVariacionStyles.smallTextStyle,
                   ),
                 );
               }).toList(),
@@ -1131,26 +973,19 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
         return Container(
           margin: const EdgeInsets.only(top: 8),
           padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF3A86FF).withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFF3A86FF).withOpacity(0.3)),
-          ),
+          decoration: CrearVariacionStyles.previewContainerDecoration,
           child: Row(
             children: [
               Expanded(
                 child: Text(
                   'Talla: ${_tallaLetra ?? _tallaNumero ?? 'Sin talla'}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFF2D3748),
-                  ),
+                  style: CrearVariacionStyles.colorNameStyle,
                 ),
               ),
-              Icon(
+              const Icon(
                 Icons.check_circle,
-                color: const Color(0xFF3A86FF),
-                size: 16,
+                color: CrearVariacionStyles.primaryBlue,
+                size: CrearVariacionStyles.checkIconSize,
               ),
             ],
           ),
@@ -1170,37 +1005,26 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 16),
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.orange.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.orange.shade200),
-      ),
+      decoration: CrearVariacionStyles.resumenLotesDecoration,
       child: Row(
         children: [
           Icon(
             Icons.info_outline,
-            color: Colors.orange.shade600,
-            size: 20,
+            color: CrearVariacionStyles.orangeIconColor,
+            size: CrearVariacionStyles.infoIconSize,
           ),
-          const SizedBox(width: 12),
+          CrearVariacionStyles.mediumHorizontalSpacing,
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'Se crearán $totalVariaciones variaciones',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: Colors.orange.shade800,
-                    fontSize: 14,
-                  ),
+                  style: CrearVariacionStyles.resumenTitleStyle,
                 ),
                 Text(
                   '${_coloresSeleccionados.length} colores × ${_tallasSeleccionadas.length} tallas',
-                  style: TextStyle(
-                    color: Colors.orange.shade700,
-                    fontSize: 12,
-                  ),
+                  style: CrearVariacionStyles.resumenSubtitleStyle,
                 ),
               ],
             ),
@@ -1221,25 +1045,16 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
 
     return Container(
       width: double.infinity,
-      height: 56,
+      height: CrearVariacionStyles.buttonHeight,
       margin: const EdgeInsets.only(top: 8),
       child: ElevatedButton(
         onPressed: _isLoading || !_isFormValid() ? null : _guardarVariaciones,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF3A86FF),
-          foregroundColor: Colors.white,
-          disabledBackgroundColor: Colors.grey.shade300,
-          elevation: _isLoading ? 0 : 2,
-          shadowColor: const Color(0xFF3A86FF).withOpacity(0.3),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-        ),
+        style: CrearVariacionStyles.primaryButtonStyle(isEnabled: !_isLoading && _isFormValid()),
         child: _isLoading
             ? Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  SizedBox(
+                  const SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(
@@ -1247,10 +1062,10 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
                       valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  CrearVariacionStyles.mediumHorizontalSpacing,
                   const Text(
                     'Guardando...',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    style: CrearVariacionStyles.buttonTextStyle,
                   ),
                 ],
               )
@@ -1259,12 +1074,12 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
                 children: [
                   Icon(
                     _modoLotes ? Icons.save_alt_outlined : Icons.save_outlined,
-                    size: 20,
+                    size: CrearVariacionStyles.buttonIconSize,
                   ),
-                  const SizedBox(width: 8),
+                  CrearVariacionStyles.smallHorizontalSpacing,
                   Text(
                     buttonText,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    style: CrearVariacionStyles.buttonTextStyle,
                   ),
                 ],
               ),
@@ -1275,32 +1090,23 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
   Widget _buildClearButton() {
     return Container(
       width: double.infinity,
-      height: 56,
+      height: CrearVariacionStyles.buttonHeight,
       margin: const EdgeInsets.only(top: 8),
       child: OutlinedButton(
         onPressed: _isLoading ? null : _resetForm,
-        style: OutlinedButton.styleFrom(
-          side: BorderSide(color: Colors.grey.shade400),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-        ),
+        style: CrearVariacionStyles.outlinedButtonStyle,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
               Icons.clear,
-              size: 20,
-              color: Colors.grey.shade600,
+              size: CrearVariacionStyles.buttonIconSize,
+              color: CrearVariacionStyles.grayIconColor,
             ),
-            const SizedBox(width: 8),
+            CrearVariacionStyles.smallHorizontalSpacing,
             Text(
               'Limpiar formulario',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey.shade600,
-              ),
+              style: CrearVariacionStyles.clearButtonTextStyle,
             ),
           ],
         ),
@@ -1311,14 +1117,14 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF7FAFC),
+      backgroundColor: CrearVariacionStyles.backgroundLight,
       appBar: AppBar(
         title: const Text(
           'Crear Variaciones',
           style: TextStyle(fontWeight: FontWeight.w600),
         ),
         backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF2D3748),
+        foregroundColor: CrearVariacionStyles.textDark,
         centerTitle: true,
         elevation: 0,
         systemOverlayStyle: SystemUiOverlayStyle.dark,
@@ -1333,25 +1139,15 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
       body: Form(
         key: _formKey,
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+          padding: CrearVariacionStyles.screenPadding,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildModeToggle(),
               _buildSectionTitle('Color${_modoLotes ? 'es' : ''}', icon: Icons.palette_outlined),
               Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.08),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
+                padding: CrearVariacionStyles.cardPadding,
+                decoration: CrearVariacionStyles.whiteCardDecoration,
                 child: Column(
                   children: [
                     ColorSelector(
@@ -1381,21 +1177,11 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 24),
+              CrearVariacionStyles.largeSpacing,
               _buildSectionTitle('Talla${_modoLotes ? 's' : ''}', icon: Icons.straighten_outlined),
               Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.08),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
+                padding: CrearVariacionStyles.cardPadding,
+                decoration: CrearVariacionStyles.whiteCardDecoration,
                 child: Column(
                   children: [
                     SelectorTalla(
@@ -1432,21 +1218,11 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
                 ),
               ),
               _buildResumenLotes(),
-              const SizedBox(height: 24),
+              CrearVariacionStyles.largeSpacing,
               _buildSectionTitle('Inventario y Precio', icon: Icons.inventory_outlined),
               Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.08),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
+                padding: CrearVariacionStyles.cardPadding,
+                decoration: CrearVariacionStyles.whiteCardDecoration,
                 child: Column(
                   children: [
                     if (!_modoLotes) ...[
@@ -1457,7 +1233,7 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
                         validator: _validarStock,
                         suffix: 'unidades',
                       ),
-                      const SizedBox(height: 16),
+                      CrearVariacionStyles.mediumSpacing,
                       _buildTextField(
                         label: 'Precio',
                         controller: _precioController,
@@ -1479,14 +1255,14 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
                             title: Row(
                               children: [
                                 Container(
-                                  width: 24,
-                                  height: 24,
+                                  width: CrearVariacionStyles.colorCircleSize,
+                                  height: CrearVariacionStyles.colorCircleSize,
                                   decoration: BoxDecoration(
                                     color: Color(int.parse('0xFF${colorHex.substring(1)}')),
                                     shape: BoxShape.circle,
                                   ),
                                 ),
-                                const SizedBox(width: 8),
+                                CrearVariacionStyles.smallHorizontalSpacing,
                                 Text(
                                   colorName,
                                   style: const TextStyle(fontWeight: FontWeight.bold),
@@ -1512,7 +1288,7 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
                                         suffix: null,
                                       ),
                                     ),
-                                    const SizedBox(width: 16),
+                                    CrearVariacionStyles.mediumHorizontalSpacing,
                                     Expanded(
                                       child: _buildTextField(
                                         label: 'Precio',
@@ -1534,9 +1310,9 @@ class _CrearVariacionScreenState extends State<CrearVariacionScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 24),
+              CrearVariacionStyles.largeSpacing,
               _buildImageSelector(),
-              const SizedBox(height: 32),
+              CrearVariacionStyles.xlargeSpacing,
               _buildSaveButton(),
               _buildClearButton(),
               const SizedBox(height: 20),

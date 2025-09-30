@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../services/venta_service.dart'; // Importa tu servicio desde la ruta correcta
+import '../../services/venta_service.dart';
 
 class GestionVentasScreen extends StatefulWidget {
   const GestionVentasScreen({super.key});
@@ -15,25 +15,21 @@ class _GestionVentasScreenState extends State<GestionVentasScreen> {
 
   List<Map<String, dynamic>> _ventas = [];
   List<Map<String, dynamic>> _ventasFiltradas = [];
-  Map<String, String> _usuariosCache = {}; // Cache para nombres de usuarios
+  Map<String, String> _usuariosCache = {};
 
   bool _isLoading = false;
-  bool _isAdmin = true; // Cambiar según el rol del usuario
+  bool _isAdmin = true;
   String _filtroEstado = 'todos';
-  String? _usuarioSeleccionado;
   DateTimeRange? _rangoFechas;
 
   @override
   void initState() {
     super.initState();
-    print('🚀 [GestionVentas] Iniciando pantalla de gestión de ventas');
-    print('👤 [GestionVentas] Modo admin: $_isAdmin');
     _cargarVentas();
   }
 
   @override
   void dispose() {
-    print('🗑️ [GestionVentas] Disposing recursos');
     _searchController.dispose();
     _ventaService.dispose();
     super.dispose();
@@ -42,12 +38,8 @@ class _GestionVentasScreenState extends State<GestionVentasScreen> {
   // === MÉTODOS DE CARGA DE DATOS ===
 
   Future<void> _cargarVentas() async {
-    if (_isLoading) {
-      print('⏳ [GestionVentas] Ya se están cargando las ventas, ignorando llamada');
-      return;
-    }
+    if (_isLoading) return;
 
-    print('📥 [GestionVentas] Iniciando carga de ventas');
     setState(() {
       _isLoading = true;
     });
@@ -56,110 +48,55 @@ class _GestionVentasScreenState extends State<GestionVentasScreen> {
       List<Map<String, dynamic>> ventas;
 
       if (_isAdmin) {
-        print('🔍 [GestionVentas] Cargando TODAS las ventas (modo admin)');
         ventas = await _ventaService.obtenerTodasLasVentas();
-        print('📊 [GestionVentas] Obtenidas ${ventas.length} ventas totales');
       } else {
-        print('👤 [GestionVentas] Cargando ventas del usuario actual');
         ventas = await _ventaService.obtenerVentasUsuario();
-        print('📊 [GestionVentas] Obtenidas ${ventas.length} ventas del usuario');
       }
 
-      // Log de muestra de datos
-      if (ventas.isNotEmpty) {
-        print('📋 [GestionVentas] Muestra de primera venta:');
-        print('   - ID: ${ventas.first['_id'] ?? ventas.first['id']}');
-        print('   - Usuario ID: ${ventas.first['usuarioId']}');
-        print('   - Total: ${ventas.first['total']}');
-        print('   - Estado: ${ventas.first['estadoPago']}');
-        print('   - Fecha: ${ventas.first['fecha'] ?? ventas.first['fechaVenta']}');
-      }
-
-      // Cargar nombres de usuarios para las ventas
-      print('👥 [GestionVentas] Iniciando carga de nombres de usuarios');
       await _cargarNombresUsuarios(ventas);
-      print('✅ [GestionVentas] Nombres de usuarios cargados');
 
       setState(() {
         _ventas = ventas;
         _ventasFiltradas = ventas;
       });
 
-      print('🔄 [GestionVentas] Aplicando filtros iniciales');
       _aplicarFiltros();
-      print('✅ [GestionVentas] Carga de ventas completada exitosamente');
 
     } catch (e) {
-      print('❌ [GestionVentas] Error al cargar ventas: $e');
-      print('📍 [GestionVentas] Stack trace: ${StackTrace.current}');
       _mostrarError('Error al cargar ventas: $e');
     } finally {
       setState(() {
         _isLoading = false;
       });
-      print('🏁 [GestionVentas] Finalizando proceso de carga');
     }
   }
 
   Future<void> _cargarNombresUsuarios(List<Map<String, dynamic>> ventas) async {
-    print('👥 [GestionVentas] === INICIO CARGA NOMBRES USUARIOS ===');
-    
-    // Obtener lista única de usuarioIds
     final usuarioIds = ventas
         .map((venta) => venta['usuarioId']?.toString())
         .where((id) => id != null && id.isNotEmpty)
         .toSet();
-
-    print('🔍 [GestionVentas] Usuario IDs únicos encontrados: ${usuarioIds.length}');
-    print('📋 [GestionVentas] IDs: ${usuarioIds.join(', ')}');
-    
-    // Estado del caché antes
-    print('💾 [GestionVentas] Usuarios en caché antes: ${_usuariosCache.keys.length}');
-    print('📝 [GestionVentas] Caché actual: $_usuariosCache');
-
-    // Cargar nombres solo para usuarios que no están en caché
-    int cargados = 0;
-    int errores = 0;
     
     for (final usuarioId in usuarioIds) {
       if (!_usuariosCache.containsKey(usuarioId)) {
-        print('🔄 [GestionVentas] Cargando nombre para usuario: $usuarioId');
         try {
           final nombreUsuario = await _ventaService.obtenerNombreUsuario(usuarioId!);
           _usuariosCache[usuarioId] = nombreUsuario ?? 'Usuario desconocido';
-          print('✅ [GestionVentas] Nombre cargado para $usuarioId: ${_usuariosCache[usuarioId]}');
-          cargados++;
         } catch (e) {
-          print('❌ [GestionVentas] Error obteniendo nombre para usuario $usuarioId: $e');
           _usuariosCache[usuarioId!] = 'Usuario desconocido';
-          errores++;
         }
-      } else {
-        print('💾 [GestionVentas] Usuario $usuarioId ya está en caché: ${_usuariosCache[usuarioId]}');
       }
     }
-    
-    print('📊 [GestionVentas] Resumen carga nombres:');
-    print('   - Nombres cargados: $cargados');
-    print('   - Errores: $errores');
-    print('   - Total en caché: ${_usuariosCache.keys.length}');
-    print('👥 [GestionVentas] === FIN CARGA NOMBRES USUARIOS ===');
   }
 
   // === MÉTODOS DE FILTRADO ===
 
   void _aplicarFiltros() {
-    print('🔍 [GestionVentas] === APLICANDO FILTROS ===');
-    print('📊 [GestionVentas] Ventas totales antes del filtro: ${_ventas.length}');
-    
     List<Map<String, dynamic>> ventasFiltradas = List.from(_ventas);
 
     // Filtro por texto de búsqueda
     if (_searchController.text.isNotEmpty) {
       final busqueda = _searchController.text.toLowerCase();
-      print('🔤 [GestionVentas] Aplicando filtro de búsqueda: "$busqueda"');
-      
-      final ventasAntes = ventasFiltradas.length;
       ventasFiltradas = ventasFiltradas.where((venta) {
         final usuarioId = venta['usuarioId']?.toString() ?? '';
         final nombreUsuario = _obtenerNombreUsuario(venta).toLowerCase();
@@ -168,151 +105,98 @@ class _GestionVentasScreenState extends State<GestionVentasScreen> {
             .map((p) => (p['nombreProducto'] ?? '').toString().toLowerCase())
             .join(' ');
 
-        final coincideUsuario = usuarioId.toLowerCase().contains(busqueda);
-        final coincideNombre = nombreUsuario.contains(busqueda);
-        final coincideProducto = productosStr.contains(busqueda);
-        
-        final coincide = coincideUsuario || coincideNombre || coincideProducto;
-        
-        if (coincide) {
-          print('✅ [GestionVentas] Venta ${venta['_id'] ?? venta['id']} coincide con búsqueda');
-        }
-        
-        return coincide;
+        return usuarioId.toLowerCase().contains(busqueda) ||
+               nombreUsuario.contains(busqueda) ||
+               productosStr.contains(busqueda);
       }).toList();
-      
-      print('📊 [GestionVentas] Filtro búsqueda: ${ventasAntes} → ${ventasFiltradas.length}');
     }
 
     // Filtro por estado
     if (_filtroEstado != 'todos') {
-      print('📊 [GestionVentas] Aplicando filtro de estado: $_filtroEstado');
-      final ventasAntes = ventasFiltradas.length;
-      
       ventasFiltradas = ventasFiltradas.where((venta) {
         final estadoVenta = venta['estadoPago']?.toString().toLowerCase();
-        final coincide = estadoVenta == _filtroEstado;
-        
-        if (coincide) {
-          print('✅ [GestionVentas] Venta ${venta['_id'] ?? venta['id']} coincide con estado $_filtroEstado');
-        }
-        
-        return coincide;
+        return estadoVenta == _filtroEstado;
       }).toList();
-      
-      print('📊 [GestionVentas] Filtro estado: ${ventasAntes} → ${ventasFiltradas.length}');
     }
 
     // Filtro por rango de fechas
     if (_rangoFechas != null) {
-      print('📅 [GestionVentas] Aplicando filtro de fechas:');
-      print('   - Desde: ${DateFormat('dd/MM/yyyy').format(_rangoFechas!.start)}');
-      print('   - Hasta: ${DateFormat('dd/MM/yyyy').format(_rangoFechas!.end)}');
-      
-      final ventasAntes = ventasFiltradas.length;
-      
       ventasFiltradas = ventasFiltradas.where((venta) {
         final fechaStr = venta['fechaVenta']?.toString() ?? venta['fecha']?.toString();
         final fechaVenta = fechaStr != null ? DateTime.tryParse(fechaStr) : null;
         
-        if (fechaVenta == null) {
-          print('⚠️ [GestionVentas] Venta sin fecha válida: ${venta['_id'] ?? venta['id']}');
-          return false;
-        }
+        if (fechaVenta == null) return false;
 
-        final coincide = fechaVenta.isAfter(_rangoFechas!.start.subtract(const Duration(days: 1))) &&
-            fechaVenta.isBefore(_rangoFechas!.end.add(const Duration(days: 1)));
-            
-        if (coincide) {
-          print('✅ [GestionVentas] Venta ${venta['_id'] ?? venta['id']} dentro del rango de fechas');
-        }
-        
-        return coincide;
+        return fechaVenta.isAfter(_rangoFechas!.start.subtract(const Duration(days: 1))) &&
+               fechaVenta.isBefore(_rangoFechas!.end.add(const Duration(days: 1)));
       }).toList();
-      
-      print('📊 [GestionVentas] Filtro fechas: ${ventasAntes} → ${ventasFiltradas.length}');
     }
-
-    print('📊 [GestionVentas] RESULTADO FINAL: ${ventasFiltradas.length} ventas después de todos los filtros');
 
     setState(() {
       _ventasFiltradas = ventasFiltradas;
     });
-    
-    print('🔍 [GestionVentas] === FIN APLICACIÓN FILTROS ===');
   }
 
   Future<void> _seleccionarRangoFechas() async {
-    print('📅 [GestionVentas] Abriendo selector de rango de fechas');
-    
     final DateTimeRange? picked = await showDateRangePicker(
       context: context,
       firstDate: DateTime(2020),
       lastDate: DateTime.now(),
       initialDateRange: _rangoFechas,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+              primary: const Color(0xFF3483FA),
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
 
     if (picked != null) {
-      print('📅 [GestionVentas] Rango de fechas seleccionado:');
-      print('   - Desde: ${DateFormat('dd/MM/yyyy').format(picked.start)}');
-      print('   - Hasta: ${DateFormat('dd/MM/yyyy').format(picked.end)}');
-      
       setState(() {
         _rangoFechas = picked;
       });
       _aplicarFiltros();
-    } else {
-      print('📅 [GestionVentas] Selección de fechas cancelada');
     }
   }
 
   // === MÉTODOS DE GESTIÓN DE VENTAS ===
 
   Future<void> _actualizarEstadoVenta(String ventaId, String nuevoEstado) async {
-    print('🔄 [GestionVentas] Actualizando estado de venta:');
-    print('   - Venta ID: $ventaId');
-    print('   - Nuevo estado: $nuevoEstado');
-    
     try {
       await _ventaService.actualizarEstadoVenta(
         ventaId: ventaId,
         estadoPago: nuevoEstado,
       );
 
-      print('✅ [GestionVentas] Estado actualizado exitosamente');
-      _mostrarExito('Estado de venta actualizado exitosamente');
-      
-      print('🔄 [GestionVentas] Recargando ventas después de actualizar estado');
+      _mostrarExito('Estado actualizado correctamente');
       _cargarVentas();
     } catch (e) {
-      print('❌ [GestionVentas] Error al actualizar estado: $e');
-      print('📍 [GestionVentas] Stack trace: ${StackTrace.current}');
       _mostrarError('Error al actualizar estado: $e');
     }
   }
 
   Future<void> _eliminarVenta(String ventaId) async {
-    print('🗑️ [GestionVentas] Solicitando confirmación para eliminar venta: $ventaId');
-    
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: const Text('Confirmar eliminación'),
-        content: const Text('¿Estás seguro de que quieres eliminar esta venta?'),
+        content: const Text('¿Estás seguro de que quieres eliminar esta venta? Esta acción no se puede deshacer.'),
         actions: [
           TextButton(
-            onPressed: () {
-              print('❌ [GestionVentas] Eliminación cancelada por el usuario');
-              Navigator.pop(context, false);
-            },
+            onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancelar'),
           ),
-          TextButton(
-            onPressed: () {
-              print('✅ [GestionVentas] Eliminación confirmada por el usuario');
-              Navigator.pop(context, true);
-            },
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
             child: const Text('Eliminar'),
           ),
         ],
@@ -320,430 +204,1273 @@ class _GestionVentasScreenState extends State<GestionVentasScreen> {
     );
 
     if (confirmar == true) {
-      print('🗑️ [GestionVentas] Procediendo a eliminar venta: $ventaId');
       try {
         await _ventaService.eliminarVenta(ventaId);
-        print('✅ [GestionVentas] Venta eliminada exitosamente');
-        _mostrarExito('Venta eliminada exitosamente');
-        
-        print('🔄 [GestionVentas] Recargando ventas después de eliminar');
+        _mostrarExito('Venta eliminada correctamente');
         _cargarVentas();
       } catch (e) {
-        print('❌ [GestionVentas] Error al eliminar venta: $e');
-        print('📍 [GestionVentas] Stack trace: ${StackTrace.current}');
         _mostrarError('Error al eliminar venta: $e');
       }
-    } else {
-      print('🚫 [GestionVentas] Eliminación no confirmada');
     }
   }
 
   // === MÉTODOS DE UI ===
 
   String _obtenerNombreUsuario(Map<String, dynamic> venta) {
-    final ventaId = venta['_id'] ?? venta['id'] ?? 'sin-id';
-    print('👤 [GestionVentas] Obteniendo nombre usuario para venta: $ventaId');
-    
-    // PRIMERO: Verificar si el backend ya expandió el nombreUsuario
     if (venta['nombreUsuario'] != null && venta['nombreUsuario'].toString().trim().isNotEmpty) {
-      final nombre = venta['nombreUsuario'].toString().trim();
-      print('✅ [GestionVentas] Nombre obtenido del backend (expandido): $nombre');
-      return nombre;
+      return venta['nombreUsuario'].toString().trim();
     }
     
-    // SEGUNDO: Intentar obtener el nombre desde la venta directamente
     if (venta['usuario']?['nombre'] != null) {
-      final nombre = venta['usuario']['nombre'];
-      print('✅ [GestionVentas] Nombre obtenido de venta.usuario.nombre: $nombre');
-      return nombre;
+      return venta['usuario']['nombre'];
     }
     
-    // TERCERO: Si no está disponible, buscar en el caché usando el usuarioId
     final usuarioId = venta['usuarioId']?.toString();
     if (usuarioId != null && _usuariosCache.containsKey(usuarioId)) {
-      final nombre = _usuariosCache[usuarioId]!;
-      print('✅ [GestionVentas] Nombre obtenido del caché para $usuarioId: $nombre');
-      return nombre;
+      return _usuariosCache[usuarioId]!;
     }
     
-    // ÚLTIMO RECURSO: Crear nombre temporal basado en ID
     if (usuarioId != null) {
-      final nombreTemp = 'Usuario ${usuarioId.substring(usuarioId.length - 8)}';
-      print('⚠️ [GestionVentas] Usando nombre temporal para $usuarioId: $nombreTemp');
-      return nombreTemp;
+      return 'Usuario ${usuarioId.substring(usuarioId.length - 8)}';
     }
     
-    print('⚠️ [GestionVentas] No se pudo obtener nombre, usando valor por defecto');
     return 'Usuario desconocido';
   }
 
+  String _obtenerDireccionCompleta(Map<String, dynamic> venta) {
+    if (venta['direccionUsuario'] is Map) {
+      final dir = venta['direccionUsuario'] as Map;
+      final municipio = dir['municipio'] ?? '';
+      final departamento = dir['departamento'] ?? '';
+      if (municipio.isNotEmpty && departamento.isNotEmpty) {
+        return '$municipio, $departamento';
+      }
+    }
+    
+    if (venta['usuario']?['direccion'] is Map) {
+      final dir = venta['usuario']['direccion'] as Map;
+      final municipio = dir['municipio'] ?? '';
+      final departamento = dir['departamento'] ?? '';
+      if (municipio.isNotEmpty && departamento.isNotEmpty) {
+        return '$municipio, $departamento';
+      }
+    }
+    
+    final direccionStr = venta['direccionUsuario']?.toString() ?? '';
+    if (direccionStr.isNotEmpty && direccionStr != '{}') {
+      return direccionStr;
+    }
+    
+    return 'Dirección no disponible';
+  }
+
+  String _obtenerCodigoPostal(Map<String, dynamic> venta) {
+    if (venta['direccionUsuario'] is Map) {
+      final dir = venta['direccionUsuario'] as Map;
+      final codigoPostal = dir['codigoPostal']?.toString() ?? '';
+      if (codigoPostal.isNotEmpty) {
+        return codigoPostal;
+      }
+    }
+    
+    if (venta['usuario']?['direccion'] is Map) {
+      final dir = venta['usuario']['direccion'] as Map;
+      final codigoPostal = dir['codigoPostal']?.toString() ?? '';
+      if (codigoPostal.isNotEmpty) {
+        return codigoPostal;
+      }
+    }
+    
+    return '';
+  }
+
   void _mostrarError(String mensaje) {
-    print('❌ [GestionVentas] Mostrando error: $mensaje');
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(mensaje),
         backgroundColor: Colors.red,
-        duration: const Duration(seconds: 4),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );
   }
 
   void _mostrarExito(String mensaje) {
-    print('✅ [GestionVentas] Mostrando éxito: $mensaje');
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(mensaje),
         backgroundColor: Colors.green,
-        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    print('🎨 [GestionVentas] Construyendo UI - ${_ventasFiltradas.length} ventas a mostrar');
     return Scaffold(
+      backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
-        title: const Text('Gestión de Ventas'),
-        backgroundColor: Colors.blue,
+        elevation: 0,
+        backgroundColor: const Color(0xFF3483FA),
         foregroundColor: Colors.white,
+        title: const Text(
+          'Gestión de Ventas',
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () {
-              print('🔄 [GestionVentas] Botón refresh presionado');
-              _cargarVentas();
-            },
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: _cargarVentas,
           ),
         ],
       ),
-      body: _buildListaVentas(),
+      body: Column(
+        children: [
+          // Header con estadísticas
+          Container(
+            decoration: const BoxDecoration(
+              color: Color(0xFF3483FA),
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(20),
+                bottomRight: Radius.circular(20),
+              ),
+            ),
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            child: _buildEstadisticasHeader(),
+          ),
+          const SizedBox(height: 16),
+          // Barra de búsqueda y filtros
+          _buildBarraBusqueda(),
+          const SizedBox(height: 8),
+          // Lista de ventas
+          Expanded(child: _buildListaVentas()),
+        ],
+      ),
     );
   }
 
-  Widget _buildListaVentas() {
-    print('📋 [GestionVentas] Construyendo lista de ventas');
-    return Column(
+  Widget _buildEstadisticasHeader() {
+    final resumen = _ventaService.obtenerResumenVentas(_ventasFiltradas);
+    
+    return Row(
       children: [
-        // Barra de búsqueda y filtros
-        Container(
-          padding: const EdgeInsets.all(16.0),
-          color: Colors.grey[50],
-          child: Column(
-            children: [
-              // Campo de búsqueda
-              TextField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  hintText: 'Buscar por usuario o producto...',
-                  prefixIcon: const Icon(Icons.search),
-                  suffixIcon: _searchController.text.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear),
-                          onPressed: () {
-                            print('🧹 [GestionVentas] Limpiando búsqueda');
-                            _searchController.clear();
-                            _aplicarFiltros();
-                          },
-                        )
-                      : null,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                onChanged: (value) {
-                  print('🔤 [GestionVentas] Texto búsqueda cambiado: "$value"');
-                  _aplicarFiltros();
-                },
-              ),
-              const SizedBox(height: 12),
-              // Filtros
-              Row(
-                children: [
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      value: _filtroEstado,
-                      decoration: const InputDecoration(
-                        labelText: 'Estado',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: const [
-                        DropdownMenuItem(value: 'todos', child: Text('Todos')),
-                        DropdownMenuItem(value: 'pendiente', child: Text('Pendiente')),
-                        DropdownMenuItem(value: 'completado', child: Text('Completado')),
-                        DropdownMenuItem(value: 'cancelado', child: Text('Cancelado')),
-                        DropdownMenuItem(value: 'approved', child: Text('Aprobado')),
-                      ],
-                      onChanged: (value) {
-                        print('📊 [GestionVentas] Filtro estado cambiado: $value');
-                        setState(() {
-                          _filtroEstado = value ?? 'todos';
-                        });
-                        _aplicarFiltros();
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  ElevatedButton.icon(
-                    onPressed: _seleccionarRangoFechas,
-                    icon: const Icon(Icons.date_range),
-                    label: Text(_rangoFechas == null ? 'Fechas' : 'Rango seleccionado'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _rangoFechas != null ? Colors.blue : null,
-                      foregroundColor: _rangoFechas != null ? Colors.white : null,
-                    ),
-                  ),
-                ],
-              ),
-              if (_rangoFechas != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Desde: ${DateFormat('dd/MM/yyyy').format(_rangoFechas!.start)} - '
-                          'Hasta: ${DateFormat('dd/MM/yyyy').format(_rangoFechas!.end)}',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          print('🧹 [GestionVentas] Limpiando filtro de fechas');
-                          setState(() {
-                            _rangoFechas = null;
-                          });
-                          _aplicarFiltros();
-                        },
-                        child: const Text('Limpiar'),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
+        Expanded(
+          child: _buildEstadistica(
+            'Total Ventas',
+            '${resumen['totalVentas']}',
+            Icons.receipt_long_rounded,
           ),
         ),
-        // Lista de ventas
+        const SizedBox(width: 16),
         Expanded(
-          child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _ventasFiltradas.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.receipt_long, size: 64, color: Colors.grey),
-                          const SizedBox(height: 16),
-                          Text(
-                            _ventas.isEmpty 
-                                ? 'No hay ventas disponibles'
-                                : 'No se encontraron ventas con los filtros actuales',
-                          ),
-                        ],
-                      ),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: () {
-                        print('↻ [GestionVentas] Pull-to-refresh activado');
-                        return _cargarVentas();
-                      },
-                      child: ListView.builder(
-                        itemCount: _ventasFiltradas.length,
-                        itemBuilder: (context, index) {
-                          final venta = _ventasFiltradas[index];
-                          print('🃏 [GestionVentas] Construyendo card para venta ${index + 1}/${_ventasFiltradas.length}');
-                          return _buildVentaCard(venta);
-                        },
-                      ),
-                    ),
+          child: _buildEstadistica(
+            'Monto Total',
+            '\$${NumberFormat('#,##0', 'es_CO').format(resumen['montoTotal'])}',
+            Icons.attach_money_rounded,
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: _buildEstadistica(
+            'Aprobadas',
+            '${resumen['ventasAprobadas'] ?? resumen['ventasCompletadas'] ?? 0}',
+            Icons.check_circle_rounded,
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildVentaCard(Map<String, dynamic> venta) {
-    final ventaId = venta['_id'] ?? venta['id'] ?? 'sin-id';
-    print('🃏 [GestionVentas] === CONSTRUYENDO CARD VENTA ===');
-    print('🔍 [GestionVentas] Venta ID: $ventaId');
-    
-    final fechaStr = venta['fechaVenta']?.toString() ?? venta['fecha']?.toString();
-    final fechaVenta = fechaStr != null ? DateTime.tryParse(fechaStr) : null;
-    final total = (venta['total'] ?? 0).toDouble();
-    final estado = venta['estadoPago']?.toString() ?? 'pendiente';
-    final productos = (venta['productos'] as List?) ?? [];
-    
-    print('📊 [GestionVentas] Datos de la venta:');
-    print('   - Total: \$${total.toStringAsFixed(2)}');
-    print('   - Estado: $estado');
-    print('   - Productos: ${productos.length}');
-    print('   - Fecha: ${fechaVenta != null ? DateFormat('dd/MM/yyyy HH:mm').format(fechaVenta) : 'Sin fecha'}');
-
-    Color estadoColor;
-    IconData estadoIcon;
-
-    switch (estado.toLowerCase()) {
-      case 'completado':
-      case 'pagado':
-      case 'approved':
-        estadoColor = Colors.green;
-        estadoIcon = Icons.check_circle;
-        print('✅ [GestionVentas] Estado: Completado/Aprobado');
-        break;
-      case 'cancelado':
-        estadoColor = Colors.red;
-        estadoIcon = Icons.cancel;
-        print('❌ [GestionVentas] Estado: Cancelado');
-        break;
-      default:
-        estadoColor = Colors.orange;
-        estadoIcon = Icons.schedule;
-        print('⏳ [GestionVentas] Estado: Pendiente');
-    }
-
-    final nombreUsuario = _obtenerNombreUsuario(venta);
-    print('👤 [GestionVentas] Nombre usuario final: $nombreUsuario');
-
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      elevation: 2,
-      child: ExpansionTile(
-        leading: CircleAvatar(
-          backgroundColor: estadoColor.withOpacity(0.2),
-          child: Icon(estadoIcon, color: estadoColor),
-        ),
-        title: Row(
-          children: [
-            Expanded(
-              child: Text(
-                nombreUsuario,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-            Text(
-              '\$${total.toStringAsFixed(2)}',
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.green,
-              ),
-            ),
-          ],
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (fechaVenta != null)
-              Text(DateFormat('dd/MM/yyyy HH:mm').format(fechaVenta)),
-            const SizedBox(height: 4),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: estadoColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                estado.toUpperCase(),
-                style: TextStyle(
-                  color: estadoColor,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        ),
+  Widget _buildEstadistica(String titulo, String valor, IconData icono) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Productos:',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+          Icon(icono, color: Colors.white, size: 24),
+          const SizedBox(height: 4),
+          Text(
+            valor,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(
+            titulo,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBarraBusqueda() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        children: [
+          // Campo de búsqueda
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.1),
+                  spreadRadius: 1,
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
                 ),
-                const SizedBox(height: 8),
-                ...productos.map<Widget>((producto) {
-                  final nombreProducto = producto['nombreProducto'] ?? 'Producto';
-                  final talla = producto['talla'];
-                  final color = producto['color'];
-                  final cantidad = producto['cantidad'] ?? 0;
-                  final precio = (producto['precioUnitario'] ?? 0).toDouble();
-                  
-                  print('🛍️ [GestionVentas] Producto: $nombreProducto (${cantidad}x \$${precio.toStringAsFixed(2)})');
-                  
-                  String colorStr = '';
-                  if (color != null) {
-                    if (color is Map && color['nombre'] != null) {
-                      colorStr = '[${color['nombre']}]';
-                    } else if (color is String) {
-                      colorStr = '[$color]';
-                    }
-                  }
-                  
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '$nombreProducto '
-                            '${talla != null ? "($talla)" : ""} '
-                            '$colorStr',
-                          ),
-                        ),
-                        Text(
-                          '${cantidad}x \$${precio.toStringAsFixed(2)}',
-                          style: const TextStyle(fontWeight: FontWeight.w500),
-                        ),
-                      ],
-                    ),
-                  );
-                }),
-                if (_isAdmin && ventaId != 'sin-id') ...[
-                  const Divider(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      if (estado.toLowerCase() == 'pendiente') ...[
-                        ElevatedButton.icon(
-                          onPressed: () {
-                            print('✅ [GestionVentas] Botón completar presionado para venta: $ventaId');
-                            _actualizarEstadoVenta(ventaId, 'completado');
-                          },
-                          icon: const Icon(Icons.check, size: 16),
-                          label: const Text('Completar'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                          ),
-                        ),
-                        ElevatedButton.icon(
-                          onPressed: () {
-                            print('❌ [GestionVentas] Botón cancelar presionado para venta: $ventaId');
-                            _actualizarEstadoVenta(ventaId, 'cancelado');
-                          },
-                          icon: const Icon(Icons.cancel, size: 16),
-                          label: const Text('Cancelar'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.orange,
-                            foregroundColor: Colors.white,
-                          ),
-                        ),
-                      ],
-                      TextButton.icon(
+              ],
+            ),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Buscar por usuario, producto...',
+                hintStyle: TextStyle(color: Colors.grey[500]),
+                prefixIcon: Icon(Icons.search_rounded, color: Colors.grey[500]),
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: Icon(Icons.clear_rounded, color: Colors.grey[500]),
                         onPressed: () {
-                          print('🗑️ [GestionVentas] Botón eliminar presionado para venta: $ventaId');
-                          _eliminarVenta(ventaId);
+                          _searchController.clear();
+                          _aplicarFiltros();
                         },
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        label: const Text('Eliminar',
-                            style: TextStyle(color: Colors.red)),
+                      )
+                    : null,
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 16,
+                ),
+              ),
+              onChanged: (value) => _aplicarFiltros(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Filtros
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withOpacity(0.1),
+                        spreadRadius: 1,
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
                       ),
                     ],
                   ),
+                  child: DropdownButtonFormField<String>(
+                    value: _filtroEstado,
+                    decoration: const InputDecoration(
+                      labelText: 'Estado',
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'todos', child: Text('Todos los estados')),
+                      DropdownMenuItem(value: 'pending', child: Text('Pendiente')),
+                      DropdownMenuItem(value: 'approved', child: Text('Aprobado')),
+                      DropdownMenuItem(value: 'failed', child: Text('Fallido')),
+                    ],
+                    onChanged: (value) {
+                      setState(() {
+                        _filtroEstado = value ?? 'todos';
+                      });
+                      _aplicarFiltros();
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Container(
+                decoration: BoxDecoration(
+                  color: _rangoFechas != null 
+                      ? const Color(0xFF3483FA) 
+                      : Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.1),
+                      spreadRadius: 1,
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: TextButton.icon(
+                  onPressed: _seleccionarRangoFechas,
+                  icon: Icon(
+                    Icons.date_range_rounded,
+                    color: _rangoFechas != null ? Colors.white : const Color(0xFF3483FA),
+                  ),
+                  label: Text(
+                    _rangoFechas == null ? 'Fechas' : 'Rango',
+                    style: TextStyle(
+                      color: _rangoFechas != null ? Colors.white : const Color(0xFF3483FA),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (_rangoFechas != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Desde: ${DateFormat('dd/MM/yyyy').format(_rangoFechas!.start)} - '
+                      'Hasta: ${DateFormat('dd/MM/yyyy').format(_rangoFechas!.end)}',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _rangoFechas = null;
+                      });
+                      _aplicarFiltros();
+                    },
+                    child: const Text(
+                      'Limpiar',
+                      style: TextStyle(color: Color(0xFF3483FA)),
+                    ),
+                  ),
                 ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildListaVentas() {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3483FA)),
+        ),
+      );
+    }
+
+    if (_ventasFiltradas.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.receipt_long_outlined,
+              size: 80,
+              color: Colors.grey[400],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _ventas.isEmpty 
+                  ? 'No hay ventas disponibles'
+                  : 'No se encontraron ventas',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            if (_ventas.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Intenta ajustar los filtros',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[500],
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _cargarVentas,
+      color: const Color(0xFF3483FA),
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: _ventasFiltradas.length,
+        itemBuilder: (context, index) {
+          return _buildVentaCard(_ventasFiltradas[index]);
+        },
+      ),
+    );
+  }
+
+  Widget _buildVentaCard(Map<String, dynamic> venta) {
+    final ventaId = venta['_id'] ?? venta['id'] ?? 'sin-id';
+    final fechaStr = venta['fechaVenta']?.toString() ?? venta['fecha']?.toString();
+    final fechaVenta = fechaStr != null ? DateTime.tryParse(fechaStr) : null;
+    final total = (venta['total'] ?? 0).toDouble();
+    final estado = venta['estadoPago']?.toString() ?? 'pending';
+    final productos = (venta['productos'] as List?) ?? [];
+    final nombreUsuario = _obtenerNombreUsuario(venta);
+    final direccion = _obtenerDireccionCompleta(venta);
+    final codigoPostal = _obtenerCodigoPostal(venta);
+    final telefono = venta['telefonoUsuario']?.toString() ?? 
+                     venta['usuario']?['telefono']?.toString() ?? '';
+
+    // Configuración de estado
+    Color estadoColor;
+    IconData estadoIcon;
+    String estadoTexto;
+
+    switch (estado.toLowerCase()) {
+      case 'approved':
+        estadoColor = const Color(0xFF00A650);
+        estadoIcon = Icons.check_circle_rounded;
+        estadoTexto = 'APROBADO';
+        break;
+      case 'failed':
+        estadoColor = Colors.red;
+        estadoIcon = Icons.cancel_rounded;
+        estadoTexto = 'FALLIDO';
+        break;
+      case 'pending':
+      default:
+        estadoColor = const Color(0xFFFF8C00);
+        estadoIcon = Icons.schedule_rounded;
+        estadoTexto = 'PENDIENTE';
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(
+          dividerColor: Colors.transparent,
+        ),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          childrenPadding: const EdgeInsets.only(
+            left: 16,
+            right: 16,
+            bottom: 16,
+          ),
+          leading: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: estadoColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(estadoIcon, color: estadoColor, size: 26),
+          ),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Nombre del usuario
+              Row(
+                children: [
+                  Icon(
+                    Icons.person_rounded,
+                    size: 18,
+                    color: Colors.grey[600],
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      nombreUsuario,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              // Información de contacto
+              if (telefono.isNotEmpty) ...[
+                Row(
+                  children: [
+                    Icon(
+                      Icons.phone_rounded,
+                      size: 16,
+                      color: Colors.grey[500],
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      telefono,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[700],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
               ],
+              // Dirección
+              if (direccion != 'Dirección no disponible') ...[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.location_on_rounded,
+                      size: 16,
+                      color: Colors.grey[500],
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        direccion,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[700],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+              ],
+              // Código postal
+              if (codigoPostal.isNotEmpty) ...[
+                Row(
+                  children: [
+                    Icon(
+                      Icons.markunread_mailbox_rounded,
+                      size: 16,
+                      color: Colors.grey[500],
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      'C.P. $codigoPostal',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[700],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+              ],
+              // Fecha
+              Row(
+                children: [
+                  Icon(
+                    Icons.access_time_rounded,
+                    size: 16,
+                    color: Colors.grey[500],
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    fechaVenta != null
+                        ? DateFormat('dd/MM/yyyy - HH:mm').format(fechaVenta)
+                        : 'Fecha no disponible',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          trailing: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '\$${NumberFormat('#,##0', 'es_CO').format(total)}',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF00A650),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: estadoColor,
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: Text(
+                  estadoTexto,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          children: [
+            const Divider(height: 1),
+            const SizedBox(height: 16),
+            // Resumen de productos con botón
+            _buildResumenProductos(productos, venta),
+            // Acciones de administrador
+            if (_isAdmin && ventaId != 'sin-id') ...[
+              const SizedBox(height: 16),
+              _buildAccionesAdmin(ventaId, estado),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResumenProductos(List<dynamic> productos, Map<String, dynamic> venta) {
+    final totalProductos = productos.length;
+   final totalItems = productos.fold<int>(
+  0,
+  (sum, producto) => sum + ((producto['cantidad'] ?? 0) as num).toInt(),
+);
+
+    
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.inventory_2_rounded,
+                size: 24,
+                color: Colors.grey[700],
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$totalProductos producto${totalProductos != 1 ? 's' : ''} diferentes',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$totalItems artículo${totalItems != 1 ? 's' : ''} en total',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => DetalleProductosScreen(
+                        productos: productos,
+                        nombreUsuario: _obtenerNombreUsuario(venta),
+                        total: (venta['total'] ?? 0).toDouble(),
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.visibility_rounded, size: 18),
+                label: const Text('Ver productos'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF3483FA),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAccionesAdmin(String ventaId, String estado) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          if (estado.toLowerCase() == 'pending') ...[
+            // Botón Aprobar
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF00A650),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF00A650).withOpacity(0.3),
+                    spreadRadius: 1,
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: IconButton(
+                onPressed: () => _actualizarEstadoVenta(ventaId, 'approved'),
+                icon: const Icon(Icons.check_rounded),
+                color: Colors.white,
+                iconSize: 24,
+                tooltip: 'Aprobar venta',
+              ),
+            ),
+            // Botón Rechazar
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.red,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.red.withOpacity(0.3),
+                    spreadRadius: 1,
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: IconButton(
+                onPressed: () => _actualizarEstadoVenta(ventaId, 'failed'),
+                icon: const Icon(Icons.close_rounded),
+                color: Colors.white,
+                iconSize: 24,
+                tooltip: 'Rechazar venta',
+              ),
+            ),
+          ],
+          // Botón Eliminar
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.orange,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.orange.withOpacity(0.3),
+                  spreadRadius: 1,
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: IconButton(
+              onPressed: () => _eliminarVenta(ventaId),
+              icon: const Icon(Icons.delete_rounded),
+              color: Colors.white,
+              iconSize: 24,
+              tooltip: 'Eliminar venta',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ==============================
+// PANTALLA DETALLE PRODUCTOS
+// ==============================
+
+class DetalleProductosScreen extends StatelessWidget {
+  final List<dynamic> productos;
+  final String nombreUsuario;
+  final double total;
+
+  const DetalleProductosScreen({
+    super.key,
+    required this.productos,
+    required this.nombreUsuario,
+    required this.total,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F5F5),
+      appBar: AppBar(
+        elevation: 0,
+        backgroundColor: const Color(0xFF3483FA),
+        foregroundColor: Colors.white,
+        title: Text(
+          'Productos - $nombreUsuario',
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
+      body: Column(
+        children: [
+          // Header con resumen
+          Container(
+            decoration: const BoxDecoration(
+              color: Color(0xFF3483FA),
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(20),
+                bottomRight: Radius.circular(20),
+              ),
+            ),
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            child: _buildHeaderResumen(),
+          ),
+          const SizedBox(height: 16),
+          // Lista de productos
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: productos.length,
+              itemBuilder: (context, index) {
+                return _buildProductoCard(productos[index], context);
+              },
+            ),
+          ),
+          // Footer con total
+          _buildFooterTotal(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeaderResumen() {
+    final totalItems = productos.fold<int>(
+  0,
+  (sum, producto) => sum + ((producto['cantidad'] ?? 0) as num).toInt(),
+);
+
+    
+    return Row(
+      children: [
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              children: [
+                Icon(Icons.inventory_2_rounded, color: Colors.white, size: 28),
+                const SizedBox(height: 8),
+                Text(
+                  '${productos.length}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  'Productos',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              children: [
+                Icon(Icons.shopping_cart_rounded, color: Colors.white, size: 28),
+                const SizedBox(height: 8),
+                Text(
+                  '$totalItems',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  'Artículos',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProductoCard(Map<String, dynamic> producto, BuildContext context) {
+    final nombreProducto = producto['nombreProducto'] ?? 'Producto';
+    final talla = producto['talla'];
+    final color = producto['color'];
+    final cantidad = producto['cantidad'] ?? 0;
+    final precio = (producto['precioUnitario'] ?? producto['precio'] ?? 0).toDouble();
+    final subtotal = precio * cantidad;
+    
+    String colorNombre = '';
+    if (color != null) {
+      if (color is Map && color['nombre'] != null) {
+        colorNombre = color['nombre'];
+      } else if (color is String) {
+        colorNombre = color;
+      }
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 2,
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // Imagen del producto
+          Container(
+            height: 200,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(16),
+              ),
+            ),
+            child: producto['imagen'] != null
+                ? ClipRRect(
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      topRight: Radius.circular(16),
+                    ),
+                    child: Image.network(
+                      producto['imagen'],
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          decoration: BoxDecoration(
+                            color: Colors.grey[200],
+                            borderRadius: const BorderRadius.only(
+                              topLeft: Radius.circular(16),
+                              topRight: Radius.circular(16),
+                            ),
+                          ),
+                          child: Center(
+                            child: Icon(
+                              Icons.image_not_supported_rounded,
+                              color: Colors.grey[400],
+                              size: 50,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  )
+                : Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey[200],
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(16),
+                        topRight: Radius.circular(16),
+                      ),
+                    ),
+                    child: Center(
+                      child: Icon(
+                        Icons.inventory_2_rounded,
+                        color: Colors.grey[400],
+                        size: 50,
+                      ),
+                    ),
+                  ),
+          ),
+          // Información del producto
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Nombre del producto
+                Text(
+                  nombreProducto,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Características del producto
+                Row(
+                  children: [
+                    if (talla != null) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.blue[50],
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.blue[200]!),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.straighten_rounded, 
+                                 size: 16, color: Colors.blue[700]),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Talla: $talla',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.blue[700],
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    if (colorNombre.isNotEmpty) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.purple[50],
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.purple[200]!),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.palette_rounded, 
+                                 size: 16, color: Colors.purple[700]),
+                            const SizedBox(width: 4),
+                            Text(
+                              colorNombre,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.purple[700],
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 16),
+                // Cantidad y precios
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[50],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey[200]!),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.shopping_cart_outlined, 
+                               size: 20, color: Colors.grey[600]),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Cantidad:',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[600],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const Spacer(),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.green[50],
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              '$cantidad',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.green[700],
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Icon(Icons.attach_money_rounded, 
+                               size: 20, color: Colors.grey[600]),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Precio unitario:',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[600],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            '${NumberFormat("#,##0", "es_CO").format(precio)}',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              color: Color(0xFF3483FA),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 24),
+                      Row(
+                        children: [
+                          Icon(Icons.calculate_rounded, 
+                               size: 20, color: Colors.grey[700]),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Subtotal:',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.grey[700],
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            '${NumberFormat("#,##0", "es_CO").format(subtotal)}',
+
+                            style: const TextStyle(
+                              fontSize: 20,
+                              color: Color(0xFF00A650),
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFooterTotal() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.2),
+            spreadRadius: 2,
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Row(
+        children: [
+          Icon(Icons.receipt_long_rounded, 
+               size: 28, color: Colors.grey[700]),
+          const SizedBox(width: 12),
+          Text(
+            'TOTAL GENERAL:',
+            style: TextStyle(
+              fontSize: 18,
+              color: Colors.grey[700],
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const Spacer(),
+          Text(
+            '${NumberFormat("#,##0", "es_CO").format(total)}',
+            style: const TextStyle(
+              fontSize: 24,
+              color: Color(0xFF00A650),
+              fontWeight: FontWeight.w900,
             ),
           ),
         ],

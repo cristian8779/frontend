@@ -453,9 +453,7 @@ class ConfiguracionConstants {
   static const String inviteUsersTitle = 'Invitar usuarios';
   static const String inviteUsersSubtitle = 'Enviar invitaciones a nuevos miembros';
   
-  // Nueva opción de transferencia
-  static const String transferRoleTitle = 'Transferir rol SuperAdmin';
-  static const String transferRoleSubtitle = 'Transferir privilegios de SuperAdmin a otro usuario';
+ 
   
   static const String logoutTitle = 'Cerrar sesión';
   static const String logoutSubtitle = 'Salir de tu cuenta actual';
@@ -464,10 +462,7 @@ class ConfiguracionConstants {
   static const String logoutDialogTitle = '¿Cerrar sesión?';
   static const String logoutDialogContent = 'Tu sesión actual será cerrada y deberás iniciar sesión nuevamente para acceder al sistema.';
   
-  // Dialog de transferencia
-  static const String transferDialogTitle = 'Transferir SuperAdmin';
-  static const String transferDialogContent = 'Esta acción transferirá todos tus privilegios de SuperAdmin a otro usuario. Una vez confirmada, perderás el acceso completo al sistema.\n\n¿Estás completamente seguro de continuar?';
-  static const String transferButtonText = 'Continuar con Transferencia';
+ 
   
   static const String cancelButtonText = 'Cancelar';
   static const String logoutButtonText = 'Cerrar sesión';
@@ -476,14 +471,12 @@ class ConfiguracionConstants {
   static const String versionText = 'Versión 1.0.0';
   static const String buildText = 'Build 2024.08';
   
-  // Badge
-  static const String newBadgeText = 'Nuevo';
+  
   
   // Routes
   static const String forgotPasswordRoute = '/forgot';
   static const String viewAdminsRoute = '/ver-admins';
   static const String invitationsRoute = '/invitaciones';
-  static const String transferRoleRoute = '/transferir'; 
   static const String welcomeRoute = '/bienvenida-usuario';
   
   // Roles

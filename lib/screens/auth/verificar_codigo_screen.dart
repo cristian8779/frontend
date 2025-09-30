@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pin_code_fields/pin_code_fields.dart';
 import '../../services/password_service.dart';
+import '../../theme/verificar_codigo/app_colors.dart';
+import '../../theme/verificar_codigo/verificar_codigo_styles.dart';
+import '../../theme/verificar_codigo/notification_widget.dart';
 
 class VerificarCodigoScreen extends StatefulWidget {
   final String email;
@@ -20,7 +23,7 @@ class _VerificarCodigoScreenState extends State<VerificarCodigoScreen>
   bool _canResend = true;
   int _resendCountdown = 0;
   String? _errorMessage;
-  int _attemptsRemaining = 3;
+  int _attemptsRemaining = VerificarCodigoStyles.maxAttempts;
   
   // Controladores de animación
   late AnimationController _fadeController;
@@ -45,23 +48,23 @@ class _VerificarCodigoScreenState extends State<VerificarCodigoScreen>
 
   void _setupAnimations() {
     _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 800),
+      duration: VerificarCodigoStyles.fadeAnimationDuration,
       vsync: this,
     );
     _slideController = AnimationController(
-      duration: const Duration(milliseconds: 600),
+      duration: VerificarCodigoStyles.slideAnimationDuration,
       vsync: this,
     );
     _buttonController = AnimationController(
-      duration: const Duration(milliseconds: 100),
+      duration: VerificarCodigoStyles.buttonAnimationDuration,
       vsync: this,
     );
     _shakeController = AnimationController(
-      duration: const Duration(milliseconds: 600),
+      duration: VerificarCodigoStyles.shakeAnimationDuration,
       vsync: this,
     );
     _pulseController = AnimationController(
-      duration: const Duration(milliseconds: 1000),
+      duration: VerificarCodigoStyles.pulseAnimationDuration,
       vsync: this,
     );
 
@@ -106,10 +109,10 @@ class _VerificarCodigoScreenState extends State<VerificarCodigoScreen>
     ));
 
     // Iniciar animaciones con delay
-    Future.delayed(const Duration(milliseconds: 100), () {
+    Future.delayed(VerificarCodigoStyles.fadeAnimationDelay, () {
       if (mounted) _fadeController.forward();
     });
-    Future.delayed(const Duration(milliseconds: 200), () {
+    Future.delayed(VerificarCodigoStyles.slideAnimationDelay, () {
       if (mounted) _slideController.forward();
     });
 
@@ -120,11 +123,11 @@ class _VerificarCodigoScreenState extends State<VerificarCodigoScreen>
   void _startInitialCountdown() {
     setState(() {
       _canResend = false;
-      _resendCountdown = 60;
+      _resendCountdown = VerificarCodigoStyles.resendCountdownSeconds;
     });
 
-    final timer = Stream.periodic(const Duration(seconds: 1), (i) => 60 - i - 1)
-        .take(60)
+    final timer = Stream.periodic(const Duration(seconds: 1), (i) => VerificarCodigoStyles.resendCountdownSeconds - i - 1)
+        .take(VerificarCodigoStyles.resendCountdownSeconds)
         .listen((count) {
       if (mounted) {
         setState(() {
@@ -136,7 +139,7 @@ class _VerificarCodigoScreenState extends State<VerificarCodigoScreen>
       }
     });
 
-    Future.delayed(const Duration(seconds: 60), () {
+    Future.delayed(const Duration(seconds: VerificarCodigoStyles.resendCountdownSeconds), () {
       timer.cancel();
     });
   }
@@ -176,9 +179,9 @@ class _VerificarCodigoScreenState extends State<VerificarCodigoScreen>
   Future<void> _verificarCodigo() async {
     final codigo = _codigoController.text.trim();
 
-    if (codigo.isEmpty || codigo.length != 6) {
+    if (codigo.isEmpty || codigo.length != VerificarCodigoStyles.pinLength) {
       setState(() {
-        _errorMessage = "Ingresa el código completo de 6 dígitos";
+        _errorMessage = "Ingresa el código completo de ${VerificarCodigoStyles.pinLength} dígitos";
       });
       _shakeFields();
       return;
@@ -231,11 +234,11 @@ class _VerificarCodigoScreenState extends State<VerificarCodigoScreen>
           // Limpiar código y deshabilitar temporalmente
           _codigoController.clear();
           setState(() {
-            _attemptsRemaining = 3;
+            _attemptsRemaining = VerificarCodigoStyles.maxAttempts;
           });
         } else {
           setState(() {
-            _errorMessage = "Código incorrecto. ${_attemptsRemaining} intentos restantes";
+            _errorMessage = "Código incorrecto. $_attemptsRemaining intentos restantes";
           });
           
           _showNotification(
@@ -277,7 +280,7 @@ class _VerificarCodigoScreenState extends State<VerificarCodigoScreen>
     late OverlayEntry overlayEntry;
     
     overlayEntry = OverlayEntry(
-      builder: (_) => _NotificationWidget(
+      builder: (_) => NotificationWidget(
         message: message,
         subtitle: subtitle,
         type: type,
@@ -287,7 +290,7 @@ class _VerificarCodigoScreenState extends State<VerificarCodigoScreen>
     );
 
     overlay.insert(overlayEntry);
-    Future.delayed(const Duration(milliseconds: 4000), () {
+    Future.delayed(const Duration(milliseconds: VerificarCodigoStyles.notificationDurationMs), () {
       if (overlayEntry.mounted) overlayEntry.remove();
     });
   }
@@ -310,7 +313,7 @@ class _VerificarCodigoScreenState extends State<VerificarCodigoScreen>
     final isDark = theme.brightness == Brightness.dark;
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     
-    final colorScheme = _AppColorScheme.of(context, isDark);
+    final colorScheme = AppColorScheme.of(context, isDark);
 
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
@@ -319,11 +322,11 @@ class _VerificarCodigoScreenState extends State<VerificarCodigoScreen>
         appBar: _buildAppBar(colorScheme),
         body: SafeArea(
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            padding: EdgeInsets.only(bottom: bottomInset > 0 ? 20 : 0),
+            duration: VerificarCodigoStyles.containerAnimationDuration,
+            padding: EdgeInsets.only(bottom: bottomInset > 0 ? VerificarCodigoStyles.spacingL : 0),
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.symmetric(horizontal: VerificarCodigoStyles.spacingXL),
               child: FadeTransition(
                 opacity: _fadeAnimation,
                 child: SlideTransition(
@@ -331,13 +334,13 @@ class _VerificarCodigoScreenState extends State<VerificarCodigoScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      const SizedBox(height: 20),
+                      const SizedBox(height: VerificarCodigoStyles.spacingL),
                       _buildHeroIllustration(size, colorScheme),
-                      const SizedBox(height: 40),
+                      const SizedBox(height: VerificarCodigoStyles.spacingXXXL),
                       _buildMainCard(colorScheme),
-                      const SizedBox(height: 32),
+                      const SizedBox(height: VerificarCodigoStyles.spacingXXL),
                       _buildBackButton(colorScheme),
-                      const SizedBox(height: 40),
+                      const SizedBox(height: VerificarCodigoStyles.spacingXXXL),
                     ],
                   ),
                 ),
@@ -349,7 +352,7 @@ class _VerificarCodigoScreenState extends State<VerificarCodigoScreen>
     );
   }
 
-  PreferredSizeWidget _buildAppBar(_AppColorScheme colorScheme) {
+  PreferredSizeWidget _buildAppBar(AppColorScheme colorScheme) {
     return AppBar(
       backgroundColor: Colors.transparent,
       elevation: 0,
@@ -357,7 +360,7 @@ class _VerificarCodigoScreenState extends State<VerificarCodigoScreen>
         icon: Icon(
           Icons.arrow_back_ios_new_rounded,
           color: colorScheme.onBackground,
-          size: 22,
+          size: VerificarCodigoStyles.appBarIconSize,
         ),
         onPressed: () {
           HapticFeedback.lightImpact();
@@ -367,11 +370,7 @@ class _VerificarCodigoScreenState extends State<VerificarCodigoScreen>
       ),
       title: Text(
         "Verificación",
-        style: TextStyle(
-          color: colorScheme.onBackground,
-          fontWeight: FontWeight.w600,
-          fontSize: 18,
-        ),
+        style: VerificarCodigoStyles.appBarTitleStyle(colorScheme),
       ),
       centerTitle: true,
       systemOverlayStyle: SystemUiOverlayStyle(
@@ -381,35 +380,18 @@ class _VerificarCodigoScreenState extends State<VerificarCodigoScreen>
     );
   }
 
-  Widget _buildHeroIllustration(Size size, _AppColorScheme colorScheme) {
+  Widget _buildHeroIllustration(Size size, AppColorScheme colorScheme) {
     return Hero(
       tag: 'verification_illustration',
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 500),
-        width: size.width * 0.5,
-        height: size.width * 0.5,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              colorScheme.primary.withOpacity(0.15),
-              colorScheme.primary.withOpacity(0.05),
-            ],
-          ),
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: colorScheme.primary.withOpacity(0.1),
-              blurRadius: 30,
-              spreadRadius: 5,
-            ),
-          ],
-        ),
+        width: size.width * VerificarCodigoStyles.heroIllustrationSize,
+        height: size.width * VerificarCodigoStyles.heroIllustrationSize,
+        decoration: VerificarCodigoStyles.heroIllustrationDecoration(colorScheme),
         child: Center(
           child: Icon(
             Icons.verified_user_rounded,
-            size: size.width * 0.2,
+            size: size.width * VerificarCodigoStyles.heroIconSize,
             color: colorScheme.primary,
           ),
         ),
@@ -417,7 +399,7 @@ class _VerificarCodigoScreenState extends State<VerificarCodigoScreen>
     );
   }
 
-  Widget _buildMainCard(_AppColorScheme colorScheme) {
+  Widget _buildMainCard(AppColorScheme colorScheme) {
     return AnimatedBuilder(
       animation: _shakeAnimation,
       builder: (context, child) {
@@ -426,43 +408,23 @@ class _VerificarCodigoScreenState extends State<VerificarCodigoScreen>
           offset: Offset(shake, 0),
           child: Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              color: colorScheme.surface,
-              borderRadius: BorderRadius.circular(28),
-              border: Border.all(
-                color: colorScheme.outline.withOpacity(0.1),
-                width: 1,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(colorScheme.isDark ? 0.3 : 0.08),
-                  blurRadius: 25,
-                  offset: const Offset(0, 10),
-                ),
-                if (!colorScheme.isDark)
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
-                    blurRadius: 50,
-                    offset: const Offset(0, 20),
-                  ),
-              ],
-            ),
+            padding: const EdgeInsets.all(VerificarCodigoStyles.mainCardPadding),
+            decoration: VerificarCodigoStyles.mainCardDecoration(colorScheme),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 _buildTitle(colorScheme),
-                const SizedBox(height: 12),
+                const SizedBox(height: VerificarCodigoStyles.spacingS),
                 _buildSubtitle(colorScheme),
-                const SizedBox(height: 36),
+                const SizedBox(height: VerificarCodigoStyles.spacingXXXL - 4),
                 _buildPinField(colorScheme),
                 if (_errorMessage != null) ...[
-                  const SizedBox(height: 16),
+                  const SizedBox(height: VerificarCodigoStyles.spacingM),
                   _buildErrorMessage(colorScheme),
                 ],
-                const SizedBox(height: 36),
+                const SizedBox(height: VerificarCodigoStyles.spacingXXXL - 4),
                 _buildSubmitButton(colorScheme),
-                const SizedBox(height: 24),
+                const SizedBox(height: VerificarCodigoStyles.spacingXL),
                 _buildResendSection(colorScheme),
               ],
             ),
@@ -472,73 +434,52 @@ class _VerificarCodigoScreenState extends State<VerificarCodigoScreen>
     );
   }
 
-  Widget _buildTitle(_AppColorScheme colorScheme) {
+  Widget _buildTitle(AppColorScheme colorScheme) {
     return RichText(
       textAlign: TextAlign.center,
       text: TextSpan(
         children: [
           TextSpan(
             text: "Ingresa el ",
-            style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w700,
-              color: colorScheme.onSurface,
-              height: 1.2,
-              letterSpacing: -0.5,
-            ),
+            style: VerificarCodigoStyles.titleTextStyle(colorScheme),
           ),
           TextSpan(
             text: "código",
-            style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w700,
-              color: colorScheme.primary,
-              height: 1.2,
-              letterSpacing: -0.5,
-            ),
+            style: VerificarCodigoStyles.titleAccentTextStyle(colorScheme),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSubtitle(_AppColorScheme colorScheme) {
+  Widget _buildSubtitle(AppColorScheme colorScheme) {
     return RichText(
       textAlign: TextAlign.center,
       text: TextSpan(
         children: [
           TextSpan(
-            text: "Enviamos un código de 6 dígitos a\n",
-            style: TextStyle(
-              fontSize: 16,
-              color: colorScheme.onSurfaceVariant,
-              height: 1.4,
-            ),
+            text: "Enviamos un código de ${VerificarCodigoStyles.pinLength} dígitos a\n",
+            style: VerificarCodigoStyles.subtitleTextStyle(colorScheme),
           ),
           TextSpan(
             text: widget.email,
-            style: TextStyle(
-              fontSize: 16,
-              color: colorScheme.primary,
-              fontWeight: FontWeight.w600,
-              height: 1.4,
-            ),
+            style: VerificarCodigoStyles.emailTextStyle(colorScheme),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildPinField(_AppColorScheme colorScheme) {
+  Widget _buildPinField(AppColorScheme colorScheme) {
     // Calcular tamaños responsivos para evitar overflow
     final screenWidth = MediaQuery.of(context).size.width;
     final availableWidth = screenWidth - 112; // 24*2 padding + 32*2 card padding
-    final fieldWidth = (availableWidth - 50) / 6; // 50 para espacios entre campos
-    final fieldHeight = fieldWidth * 1.2;
+    final fieldWidth = (availableWidth - VerificarCodigoStyles.fieldsSpacing) / VerificarCodigoStyles.pinLength;
+    final fieldHeight = fieldWidth * VerificarCodigoStyles.fieldAspectRatio;
     
     // Asegurar tamaños mínimos y máximos
-    final finalFieldWidth = fieldWidth.clamp(40.0, 60.0);
-    final finalFieldHeight = fieldHeight.clamp(50.0, 70.0);
+    final finalFieldWidth = fieldWidth.clamp(VerificarCodigoStyles.minFieldWidth, VerificarCodigoStyles.maxFieldWidth);
+    final finalFieldHeight = fieldHeight.clamp(VerificarCodigoStyles.minFieldHeight, VerificarCodigoStyles.maxFieldHeight);
     
     return AnimatedBuilder(
       animation: _pulseAnimation,
@@ -551,33 +492,15 @@ class _VerificarCodigoScreenState extends State<VerificarCodigoScreen>
             ),
             child: PinCodeTextField(
               appContext: context,
-              length: 6,
+              length: VerificarCodigoStyles.pinLength,
               controller: _codigoController,
               animationType: AnimationType.scale,
               autoFocus: true,
               keyboardType: TextInputType.number,
               enableActiveFill: true,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              textStyle: TextStyle(
-                fontSize: finalFieldWidth > 45 ? 20 : 16,
-                fontWeight: FontWeight.w700,
-                color: colorScheme.onSurface,
-              ),
-              pinTheme: PinTheme(
-                shape: PinCodeFieldShape.box,
-                borderRadius: BorderRadius.circular(16),
-                fieldHeight: finalFieldHeight,
-                fieldWidth: finalFieldWidth,
-                borderWidth: 2,
-                activeColor: colorScheme.primary,
-                inactiveColor: colorScheme.outline.withOpacity(0.3),
-                selectedColor: colorScheme.primary,
-                selectedFillColor: colorScheme.primary.withOpacity(0.08),
-                inactiveFillColor: colorScheme.surfaceVariant,
-                activeFillColor: colorScheme.primary.withOpacity(0.12),
-                disabledColor: colorScheme.outline.withOpacity(0.2),
-                errorBorderColor: colorScheme.error,
-              ),
+              textStyle: VerificarCodigoStyles.pinFieldTextStyle(colorScheme, finalFieldWidth),
+              pinTheme: VerificarCodigoStyles.pinTheme(colorScheme, finalFieldWidth, finalFieldHeight),
               onChanged: (value) {
                 if (_errorMessage != null) {
                   setState(() {
@@ -586,9 +509,9 @@ class _VerificarCodigoScreenState extends State<VerificarCodigoScreen>
                 }
                 
                 // Auto-verificar cuando se complete el código
-                if (value.length == 6) {
+                if (value.length == VerificarCodigoStyles.pinLength) {
                   Future.delayed(const Duration(milliseconds: 500), () {
-                    if (_codigoController.text.length == 6) {
+                    if (_codigoController.text.length == VerificarCodigoStyles.pinLength) {
                       _verificarCodigo();
                     }
                   });
@@ -598,7 +521,7 @@ class _VerificarCodigoScreenState extends State<VerificarCodigoScreen>
                 HapticFeedback.lightImpact();
               },
               validator: (value) {
-                if (value == null || value.length != 6) {
+                if (value == null || value.length != VerificarCodigoStyles.pinLength) {
                   return "Código incompleto";
                 }
                 return null;
@@ -610,34 +533,23 @@ class _VerificarCodigoScreenState extends State<VerificarCodigoScreen>
     );
   }
 
-  Widget _buildErrorMessage(_AppColorScheme colorScheme) {
+  Widget _buildErrorMessage(AppColorScheme colorScheme) {
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: colorScheme.error.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: colorScheme.error.withOpacity(0.3),
-          width: 1,
-        ),
-      ),
+      duration: VerificarCodigoStyles.containerAnimationDuration,
+      padding: const EdgeInsets.all(VerificarCodigoStyles.spacingM),
+      decoration: VerificarCodigoStyles.errorMessageDecoration(colorScheme),
       child: Row(
         children: [
           Icon(
             Icons.error_outline_rounded,
-            size: 20,
+            size: VerificarCodigoStyles.errorIconSize,
             color: colorScheme.error,
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: VerificarCodigoStyles.spacingS),
           Expanded(
             child: Text(
               _errorMessage!,
-              style: TextStyle(
-                fontSize: 14,
-                color: colorScheme.error,
-                fontWeight: FontWeight.w500,
-              ),
+              style: VerificarCodigoStyles.errorMessageTextStyle(colorScheme),
             ),
           ),
         ],
@@ -645,35 +557,25 @@ class _VerificarCodigoScreenState extends State<VerificarCodigoScreen>
     );
   }
 
-  Widget _buildSubmitButton(_AppColorScheme colorScheme) {
+  Widget _buildSubmitButton(AppColorScheme colorScheme) {
     return ScaleTransition(
       scale: _buttonScale,
       child: SizedBox(
         width: double.infinity,
-        height: 58,
+        height: VerificarCodigoStyles.buttonHeight,
         child: ElevatedButton(
           onPressed: _isLoading ? null : _verificarCodigo,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: _isLoading 
-                ? colorScheme.primary.withOpacity(0.7)
-                : colorScheme.primary,
-            foregroundColor: Colors.white,
-            elevation: _isLoading ? 0 : 12,
-            shadowColor: colorScheme.primary.withOpacity(0.4),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-          ),
+          style: VerificarCodigoStyles.elevatedButtonStyle(colorScheme, _isLoading),
           child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 400),
+            duration: VerificarCodigoStyles.switcherAnimationDuration,
             child: _isLoading
                 ? Row(
                     key: const ValueKey('loading'),
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       SizedBox(
-                        width: 18,
-                        height: 18,
+                        width: VerificarCodigoStyles.loadingIndicatorSize,
+                        height: VerificarCodigoStyles.loadingIndicatorSize,
                         child: CircularProgressIndicator(
                           strokeWidth: 2.5,
                           valueColor: AlwaysStoppedAnimation<Color>(
@@ -681,14 +583,10 @@ class _VerificarCodigoScreenState extends State<VerificarCodigoScreen>
                           ),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: VerificarCodigoStyles.spacingS),
                       Text(
                         "Verificando...",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white.withOpacity(0.9),
-                        ),
+                        style: VerificarCodigoStyles.loadingTextStyle(),
                       ),
                     ],
                   )
@@ -698,17 +596,13 @@ class _VerificarCodigoScreenState extends State<VerificarCodigoScreen>
                     children: [
                       const Icon(
                         Icons.verified_rounded,
-                        size: 20,
+                        size: VerificarCodigoStyles.buttonIconSize,
                         color: Colors.white,
                       ),
-                      const SizedBox(width: 10),
-                      const Text(
+                      const SizedBox(width: VerificarCodigoStyles.spacingXS + 2),
+                      Text(
                         "Verificar código",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.1,
-                        ),
+                        style: VerificarCodigoStyles.buttonTextStyle(),
                       ),
                     ],
                   ),
@@ -718,47 +612,35 @@ class _VerificarCodigoScreenState extends State<VerificarCodigoScreen>
     );
   }
 
-  Widget _buildResendSection(_AppColorScheme colorScheme) {
+  Widget _buildResendSection(AppColorScheme colorScheme) {
     return Column(
       children: [
         Text(
           "¿No recibiste el código?",
-          style: TextStyle(
-            fontSize: 14,
-            color: colorScheme.onSurfaceVariant,
-            fontWeight: FontWeight.w500,
-          ),
+          style: VerificarCodigoStyles.resendQuestionStyle(colorScheme),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: VerificarCodigoStyles.spacingS),
         if (_canResend)
           GestureDetector(
             onTap: _resendCode,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              decoration: BoxDecoration(
-                color: colorScheme.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(25),
-                border: Border.all(
-                  color: colorScheme.primary.withOpacity(0.3),
-                  width: 1,
-                ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: VerificarCodigoStyles.spacingL, 
+                vertical: VerificarCodigoStyles.spacingS
               ),
+              decoration: VerificarCodigoStyles.resendButtonDecoration(colorScheme),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
                     Icons.refresh_rounded,
-                    size: 18,
+                    size: VerificarCodigoStyles.resendIconSize,
                     color: colorScheme.primary,
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: VerificarCodigoStyles.spacingXS),
                   Text(
                     "Reenviar código",
-                    style: TextStyle(
-                      fontSize: 15,
-                      color: colorScheme.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: VerificarCodigoStyles.resendButtonTextStyle(colorScheme),
                   ),
                 ],
               ),
@@ -766,27 +648,23 @@ class _VerificarCodigoScreenState extends State<VerificarCodigoScreen>
           )
         else
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceVariant,
-              borderRadius: BorderRadius.circular(25),
+            padding: const EdgeInsets.symmetric(
+              horizontal: VerificarCodigoStyles.spacingL, 
+              vertical: VerificarCodigoStyles.spacingS
             ),
+            decoration: VerificarCodigoStyles.countdownContainerDecoration(colorScheme),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
                   Icons.access_time_rounded,
-                  size: 16,
+                  size: VerificarCodigoStyles.countdownIconSize,
                   color: colorScheme.onSurfaceVariant,
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: VerificarCodigoStyles.spacingXS),
                 Text(
                   "Reenviar en ${_resendCountdown}s",
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: VerificarCodigoStyles.countdownTextStyle(colorScheme),
                 ),
               ],
             ),
@@ -795,7 +673,7 @@ class _VerificarCodigoScreenState extends State<VerificarCodigoScreen>
     );
   }
 
-  Widget _buildBackButton(_AppColorScheme colorScheme) {
+  Widget _buildBackButton(AppColorScheme colorScheme) {
     return TextButton.icon(
       onPressed: () {
         HapticFeedback.lightImpact();
@@ -804,313 +682,13 @@ class _VerificarCodigoScreenState extends State<VerificarCodigoScreen>
       icon: Icon(
         Icons.arrow_back_rounded,
         color: colorScheme.onSurfaceVariant,
-        size: 18,
+        size: VerificarCodigoStyles.backIconSize,
       ),
       label: Text(
         "Volver atrás",
-        style: TextStyle(
-          color: colorScheme.onSurfaceVariant,
-          fontWeight: FontWeight.w500,
-          fontSize: 15,
-          letterSpacing: 0.1,
-        ),
+        style: VerificarCodigoStyles.backButtonTextStyle(colorScheme),
       ),
-      style: TextButton.styleFrom(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 20,
-          vertical: 14,
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-      ),
-    );
-  }
-}
-
-// Reutilizamos el sistema de colores de la pantalla anterior
-class _AppColorScheme {
-  final Color primary;
-  final Color onPrimary;
-  final Color surface;
-  final Color onSurface;
-  final Color onSurfaceVariant;
-  final Color surfaceVariant;
-  final Color background;
-  final Color onBackground;
-  final Color error;
-  final Color outline;
-  final bool isDark;
-
-  const _AppColorScheme({
-    required this.primary,
-    required this.onPrimary,
-    required this.surface,
-    required this.onSurface,
-    required this.onSurfaceVariant,
-    required this.surfaceVariant,
-    required this.background,
-    required this.onBackground,
-    required this.error,
-    required this.outline,
-    required this.isDark,
-  });
-
-  static _AppColorScheme of(BuildContext context, bool isDark) {
-    if (isDark) {
-      return const _AppColorScheme(
-        primary: Color(0xFFFF6B6B),
-        onPrimary: Colors.white,
-        surface: Color(0xFF1E1E1E),
-        onSurface: Colors.white,
-        onSurfaceVariant: Color(0xFFB0B0B0),
-        surfaceVariant: Color(0xFF2A2A2A),
-        background: Color(0xFF121212),
-        onBackground: Colors.white,
-        error: Color(0xFFFF5252),
-        outline: Color(0xFF404040),
-        isDark: true,
-      );
-    } else {
-      return const _AppColorScheme(
-        primary: Color(0xFFBE0C0C),
-        onPrimary: Colors.white,
-        surface: Colors.white,
-        onSurface: Color(0xFF1A1A1A),
-        onSurfaceVariant: Color(0xFF6B6B6B),
-        surfaceVariant: Color(0xFFF5F5F5),
-        background: Color(0xFFF8FAFC),
-        onBackground: Color(0xFF1A1A1A),
-        error: Color(0xFFD32F2F),
-        outline: Color(0xFFE0E0E0),
-        isDark: false,
-      );
-    }
-  }
-}
-
-enum NotificationType { success, error, warning, info }
-
-class _NotificationWidget extends StatefulWidget {
-  final String message;
-  final String? subtitle;
-  final NotificationType type;
-  final IconData icon;
-  final VoidCallback onDismiss;
-
-  const _NotificationWidget({
-    required this.message,
-    this.subtitle,
-    required this.type,
-    required this.icon,
-    required this.onDismiss,
-  });
-
-  @override
-  State<_NotificationWidget> createState() => _NotificationWidgetState();
-}
-
-class _NotificationWidgetState extends State<_NotificationWidget>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<Offset> _slideAnimation;
-  late Animation<double> _opacityAnimation;
-  late Animation<double> _scaleAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    );
-
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, -1.2),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOutBack,
-    ));
-
-    _opacityAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0.0, 0.7, curve: Curves.easeOut),
-    ));
-
-    _scaleAnimation = Tween<double>(
-      begin: 0.8,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOutBack,
-    ));
-
-    _controller.forward();
-  }
-
-  Color get backgroundColor {
-    switch (widget.type) {
-      case NotificationType.success:
-        return const Color(0xFF10B981);
-      case NotificationType.error:
-        return const Color(0xFFEF4444);
-      case NotificationType.warning:
-        return const Color(0xFFF59E0B);
-      case NotificationType.info:
-        return const Color(0xFF3B82F6);
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Positioned(
-      top: MediaQuery.of(context).padding.top + 16,
-      left: 20,
-      right: 20,
-      child: SlideTransition(
-        position: _slideAnimation,
-        child: FadeTransition(
-          opacity: _opacityAnimation,
-          child: ScaleTransition(
-            scale: _scaleAnimation,
-            child: Material(
-              color: Colors.transparent,
-              child: GestureDetector(
-                onTap: widget.onDismiss,
-                onPanUpdate: (details) {
-                  // Permitir deslizar para cerrar
-                  if (details.delta.dy < -2) {
-                    widget.onDismiss();
-                  }
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        backgroundColor,
-                        backgroundColor.withOpacity(0.9),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: backgroundColor.withOpacity(0.3),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
-                        spreadRadius: 0,
-                      ),
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 40,
-                        offset: const Offset(0, 16),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.25),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Icon(
-                              widget.icon,
-                              color: Colors.white,
-                              size: 22,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  widget.message,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0.1,
-                                  ),
-                                ),
-                                if (widget.subtitle != null) ...[
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    widget.subtitle!,
-                                    style: TextStyle(
-                                      color: Colors.white.withOpacity(0.9),
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w400,
-                                      letterSpacing: 0.1,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          GestureDetector(
-                            onTap: widget.onDismiss,
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Icon(
-                                Icons.close_rounded,
-                                color: Colors.white.withOpacity(0.9),
-                                size: 18,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      // Barra de progreso para mostrar tiempo restante
-                      const SizedBox(height: 12),
-                      Container(
-                        height: 3,
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.3),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                        child: FractionallySizedBox(
-                          alignment: Alignment.centerLeft,
-                          widthFactor: 0.0, // Se animará automáticamente
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
+      style: VerificarCodigoStyles.textButtonStyle(),
     );
   }
 }

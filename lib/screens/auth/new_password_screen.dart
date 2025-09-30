@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../services/password_service.dart';
+import '../../theme/new_password/new_password_colors.dart';
+import '../../theme/new_password/new_password_dimensions.dart';
+import '../../theme/new_password/new_password_styles.dart';
+import '../../theme/new_password/new_password_animations.dart';
 
 class NewPasswordScreen extends StatefulWidget {
   final String token;
@@ -25,6 +29,7 @@ class _NewPasswordScreenState extends State<NewPasswordScreen>
   bool _obscurePass = true;
   bool _obscureConfirm = true;
   bool _isLoading = false;
+  bool _showRequirements = false;
 
   bool _validLength = false;
   bool _hasUpper = false;
@@ -32,57 +37,28 @@ class _NewPasswordScreenState extends State<NewPasswordScreen>
   bool _hasDigit = false;
   bool _hasSpecial = false;
 
-  AnimationController? _animationController;
-  Animation<double>? _fadeAnimation;
+  late NewPasswordAnimationManager _animationManager;
 
   @override
   void initState() {
     super.initState();
     _passwordCtrl.addListener(_validatePassword);
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-    if (_animationController != null) {
-      _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-        CurvedAnimation(parent: _animationController!, curve: Curves.easeInOut),
-      );
-      _animationController!.forward();
-    }
+    _animationManager = NewPasswordAnimationManager(vsync: this);
+    _animationManager.startMainAnimation();
   }
 
   @override
   void dispose() {
-    _animationController?.dispose();
+    _animationManager.dispose();
     _passwordCtrl.dispose();
     _confirmCtrl.dispose();
     super.dispose();
   }
 
-  // Función para obtener tamaños responsivos
-  double _getResponsiveSize(BuildContext context, double baseSize) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    if (screenWidth < 360) {
-      return baseSize * 0.8;
-    } else if (screenWidth > 500) {
-      return baseSize * 1.2;
-    }
-    return baseSize;
-  }
-
-  // Función para obtener padding responsivo
-  EdgeInsets _getResponsivePadding(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    if (screenWidth < 360) {
-      return const EdgeInsets.all(16);
-    } else if (screenWidth > 500) {
-      return const EdgeInsets.all(32);
-    }
-    return const EdgeInsets.all(24);
-  }
-
   void _validatePassword() {
     final pass = _passwordCtrl.text;
+    final shouldShowRequirements = pass.isNotEmpty;
+    
     setState(() {
       _validLength = pass.length >= 8;
       _hasUpper = pass.contains(RegExp(r'[A-Z]'));
@@ -90,12 +66,22 @@ class _NewPasswordScreenState extends State<NewPasswordScreen>
       _hasDigit = pass.contains(RegExp(r'\d'));
       _hasSpecial = pass.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'));
     });
+
+    // Controlar la animación de los requisitos
+    if (shouldShowRequirements && !_showRequirements) {
+      setState(() => _showRequirements = true);
+      _animationManager.startRequirementsAnimation();
+    } else if (!shouldShowRequirements && _showRequirements) {
+      _animationManager.reverseRequirementsAnimation();
+      Future.delayed(NewPasswordAnimations.slowDuration, () {
+        if (mounted) setState(() => _showRequirements = false);
+      });
+    }
   }
 
   bool get _isPasswordValid =>
       _validLength && _hasUpper && _hasLower && _hasDigit && _hasSpecial;
 
-  // Getter para validar mayúscula O número
   bool get _hasUpperOrDigit => _hasUpper && _hasLower && _hasDigit;
 
   double get _passwordStrength {
@@ -109,10 +95,10 @@ class _NewPasswordScreenState extends State<NewPasswordScreen>
   }
 
   Color get _strengthColor {
-    if (_passwordStrength < 0.4) return Colors.red;
-    if (_passwordStrength < 0.6) return Colors.orange;
-    if (_passwordStrength < 0.8) return Colors.yellow[700]!;
-    return Colors.green;
+    if (_passwordStrength < 0.4) return NewPasswordColors.strengthWeak;
+    if (_passwordStrength < 0.6) return NewPasswordColors.strengthFair;
+    if (_passwordStrength < 0.8) return NewPasswordColors.strengthGood;
+    return NewPasswordColors.strengthStrong;
   }
 
   String get _strengthText {
@@ -165,62 +151,79 @@ class _NewPasswordScreenState extends State<NewPasswordScreen>
 
   void _mostrarMensaje(String msg, bool isSuccess) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
+      NewPasswordStyles.getSnackBar(context, msg, isSuccess),
+    );
+  }
+
+  Widget _buildCompactChip(String text, bool isValid, int index) {
+    return NewPasswordAnimations.createScaleAnimation(
+      index: index,
+      child: NewPasswordAnimations.createAnimatedContainer(
+        duration: NewPasswordAnimations.fastDuration,
+        decoration: NewPasswordStyles.getChipDecoration(context, isValid),
+        padding: EdgeInsets.symmetric(
+          horizontal: NewPasswordDimensions.getResponsiveSize(context, 10),
+          vertical: NewPasswordDimensions.getResponsiveSize(context, 6),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              isSuccess ? Icons.check_circle : Icons.error,
-              color: Colors.white,
-              size: _getResponsiveSize(context, 20),
+            NewPasswordAnimations.createIconSwitcher(
+              child: Icon(
+                isValid ? Icons.check_circle : Icons.radio_button_unchecked,
+                key: ValueKey(isValid),
+                color: isValid ? NewPasswordColors.requirementValid : NewPasswordColors.requirementInvalid,
+                size: NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.iconMedium),
+              ),
             ),
-            SizedBox(width: _getResponsiveSize(context, 12)),
-            Expanded(
-              child: Text(
-                msg, 
-                style: TextStyle(fontSize: _getResponsiveSize(context, 14))
-              )
+            SizedBox(width: NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.spaceMedium)),
+            Text(
+              text,
+              style: NewPasswordStyles.getChipTextStyle(context, isValid),
             ),
           ],
         ),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: isSuccess ? Colors.green[600] : Colors.red[600],
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        margin: EdgeInsets.all(_getResponsiveSize(context, 16)),
-        duration: Duration(seconds: isSuccess ? 3 : 4),
       ),
     );
   }
 
-  // Widget para chips compactos de requisitos
-  Widget _buildCompactChip(String text, bool isValid) {
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: _getResponsiveSize(context, 8),
-        vertical: _getResponsiveSize(context, 4),
-      ),
-      decoration: BoxDecoration(
-        color: isValid ? Colors.green[50] : Colors.grey[100],
-        borderRadius: BorderRadius.circular(_getResponsiveSize(context, 12)),
-        border: Border.all(
-          color: isValid ? Colors.green[300]! : Colors.grey[300]!,
-          width: 1,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+  Widget _buildPasswordStrengthIndicator() {
+    return NewPasswordAnimations.createAnimatedContainer(
+      duration: NewPasswordAnimations.mediumDuration,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            isValid ? Icons.check_circle : Icons.radio_button_unchecked,
-            color: isValid ? Colors.green[600] : Colors.grey[400],
-            size: _getResponsiveSize(context, 14),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Seguridad de la contraseña',
+                style: NewPasswordStyles.getPasswordStrengthLabelStyle(context),
+              ),
+              NewPasswordAnimations.createIconSwitcher(
+                child: Text(
+                  _strengthText,
+                  key: ValueKey(_strengthText),
+                  style: NewPasswordStyles.getPasswordStrengthValueStyle(context, _strengthColor),
+                ),
+              ),
+            ],
           ),
-          SizedBox(width: _getResponsiveSize(context, 6)),
-          Text(
-            text,
-            style: TextStyle(
-              fontSize: _getResponsiveSize(context, 12),
-              fontWeight: FontWeight.w500,
-              color: isValid ? Colors.green[700] : Colors.grey[600],
+          SizedBox(height: NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.spaceMedium)),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(
+              NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.radiusMedium)
+            ),
+            child: NewPasswordAnimations.createProgressAnimation(
+              value: _passwordStrength,
+              builder: (context, value, child) {
+                return LinearProgressIndicator(
+                  value: value,
+                  backgroundColor: NewPasswordColors.surfaceTint,
+                  valueColor: AlwaysStoppedAnimation<Color>(_strengthColor),
+                  minHeight: NewPasswordDimensions.getResponsiveSize(context, 8),
+                );
+              },
             ),
           ),
         ],
@@ -228,42 +231,81 @@ class _NewPasswordScreenState extends State<NewPasswordScreen>
     );
   }
 
-  Widget _buildPasswordStrengthIndicator() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'Seguridad de la contraseña',
-              style: TextStyle(
-                fontSize: _getResponsiveSize(context, 14),
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[700],
+  Widget _buildRequirementsSection() {
+    if (!_showRequirements) return const SizedBox.shrink();
+
+    return AnimatedBuilder(
+      animation: Listenable.merge([
+        _animationManager.requirementsFadeAnimation,
+        _animationManager.requirementsSlideAnimation
+      ]),
+      builder: (context, child) {
+        return Transform.translate(
+          offset: Offset(0, _animationManager.requirementsSlideAnimation.value),
+          child: Opacity(
+            opacity: _animationManager.requirementsFadeAnimation.value,
+            child: Container(
+              padding: EdgeInsets.all(
+                NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.spaceXXLarge)
+              ),
+              margin: EdgeInsets.only(
+                bottom: NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.spaceXLarge)
+              ),
+              decoration: NewPasswordStyles.getRequirementsCardDecoration(context),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: EdgeInsets.all(
+                          NewPasswordDimensions.getResponsiveSize(context, 6)
+                        ),
+                        decoration: NewPasswordStyles.getIconContainerDecoration(
+                          context, 
+                          NewPasswordColors.primaryWithOpacity(0.1)
+                        ),
+                        child: Icon(
+                          Icons.security,
+                          size: NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.iconLarge),
+                          color: NewPasswordColors.iconPrimary,
+                        ),
+                      ),
+                      SizedBox(width: NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.spaceLarge)),
+                      Text(
+                        'Requisitos de seguridad',
+                        style: NewPasswordStyles.getSectionTitleStyle(context),
+                      ),
+                      const Spacer(),
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.spaceMedium),
+                          vertical: NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.spaceXSmall),
+                        ),
+                        decoration: NewPasswordStyles.getChipCountDecoration(context, _isPasswordValid),
+                        child: Text(
+                          '${[_validLength, _hasUpperOrDigit, _hasSpecial].where((e) => e).length}/3',
+                          style: NewPasswordStyles.getChipCountStyle(context, _isPasswordValid),
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.spaceXLarge)),
+                  Wrap(
+                    spacing: NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.spaceMedium),
+                    runSpacing: NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.spaceMedium),
+                    children: [
+                      _buildCompactChip('8+ caracteres', _validLength, 0),
+                      _buildCompactChip('Mayús + minús + número', _hasUpperOrDigit, 1),
+                      _buildCompactChip('Símbolo especial', _hasSpecial, 2),
+                    ],
+                  ),
+                ],
               ),
             ),
-            Text(
-              _strengthText,
-              style: TextStyle(
-                fontSize: _getResponsiveSize(context, 14),
-                fontWeight: FontWeight.w600,
-                color: _strengthColor,
-              ),
-            ),
-          ],
-        ),
-        SizedBox(height: _getResponsiveSize(context, 8)),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(_getResponsiveSize(context, 10)),
-          child: LinearProgressIndicator(
-            value: _passwordStrength,
-            backgroundColor: Colors.grey[300],
-            valueColor: AlwaysStoppedAnimation<Color>(_strengthColor),
-            minHeight: _getResponsiveSize(context, 6),
           ),
-        ),
-      ],
+        );
+      },
     );
   }
 
@@ -278,40 +320,13 @@ class _NewPasswordScreenState extends State<NewPasswordScreen>
       controller: controller,
       obscureText: obscureText,
       validator: validator,
-      style: TextStyle(fontSize: _getResponsiveSize(context, 16)),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(
-          color: Colors.grey[600],
-          fontSize: _getResponsiveSize(context, 14),
-        ),
-        filled: true,
-        fillColor: Colors.white,
-        contentPadding: EdgeInsets.symmetric(
-          horizontal: _getResponsiveSize(context, 16),
-          vertical: _getResponsiveSize(context, 16),
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(_getResponsiveSize(context, 12)),
-          borderSide: BorderSide(color: Colors.grey[300]!),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(_getResponsiveSize(context, 12)),
-          borderSide: BorderSide(color: Colors.grey[300]!),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(_getResponsiveSize(context, 12)),
-          borderSide: const BorderSide(color: Color(0xFFBE0C0C), width: 2),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(_getResponsiveSize(context, 12)),
-          borderSide: const BorderSide(color: Colors.red, width: 2),
-        ),
+      style: NewPasswordStyles.getBodyStyle(context),
+      decoration: NewPasswordStyles.getTextFieldDecoration(context, label).copyWith(
         suffixIcon: IconButton(
           icon: Icon(
             obscureText ? Icons.visibility_off : Icons.visibility,
-            color: Colors.grey[600],
-            size: _getResponsiveSize(context, 20),
+            color: NewPasswordColors.iconSecondary,
+            size: NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.iconXLarge),
           ),
           onPressed: onToggleVisibility,
         ),
@@ -321,178 +336,89 @@ class _NewPasswordScreenState extends State<NewPasswordScreen>
 
   @override
   Widget build(BuildContext context) {
-    const primaryColor = Color(0xFFBE0C0C);
-    const bgColor = Color(0xFFF8F9FA);
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isTablet = screenWidth > 600;
-
     return Scaffold(
-      backgroundColor: bgColor,
+      backgroundColor: NewPasswordColors.background,
       appBar: AppBar(
         title: Text(
           'Nueva Contraseña',
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: _getResponsiveSize(context, 18),
-          ),
+          style: NewPasswordStyles.getAppBarTitleStyle(context),
         ),
-        backgroundColor: Colors.white,
-        foregroundColor: primaryColor,
-        elevation: 0,
-        shadowColor: Colors.black12,
+        backgroundColor: NewPasswordColors.surface,
+        foregroundColor: NewPasswordColors.primary,
+        elevation: NewPasswordDimensions.elevationNone,
+        shadowColor: NewPasswordColors.shadowDark,
         scrolledUnderElevation: 1,
       ),
       body: AnimatedBuilder(
-        animation: _fadeAnimation ?? const AlwaysStoppedAnimation(1.0),
+        animation: _animationManager.fadeAnimation,
         builder: (context, child) {
           return Opacity(
-            opacity: _fadeAnimation?.value ?? 1.0,
+            opacity: _animationManager.fadeAnimation.value,
             child: Form(
               key: _formKey,
               child: SingleChildScrollView(
-                padding: _getResponsivePadding(context),
+                padding: NewPasswordDimensions.getResponsivePadding(context),
                 physics: const BouncingScrollPhysics(),
                 child: Center(
                   child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: isTablet ? 600 : double.infinity,
-                    ),
+                    constraints: NewPasswordDimensions.getContentConstraints(context),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // Header
                         Container(
-                          padding: EdgeInsets.all(_getResponsiveSize(context, 20)),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(_getResponsiveSize(context, 16)),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.05),
-                                blurRadius: 10,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
+                          padding: EdgeInsets.all(
+                            NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.spaceXXLarge)
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          decoration: NewPasswordStyles.getCardDecoration(context),
+                          child: Row(
                             children: [
-                              Row(
-                                children: [
-                                  Container(
-                                    padding: EdgeInsets.all(_getResponsiveSize(context, 12)),
-                                    decoration: BoxDecoration(
-                                      color: primaryColor.withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(_getResponsiveSize(context, 12)),
+                              Container(
+                                padding: EdgeInsets.all(
+                                  NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.spaceLarge)
+                                ),
+                                decoration: NewPasswordStyles.getIconContainerDecoration(
+                                  context,
+                                  NewPasswordColors.primaryWithOpacity(0.1),
+                                ),
+                                child: Icon(
+                                  Icons.lock_reset,
+                                  color: NewPasswordColors.primary,
+                                  size: NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.iconXXLarge),
+                                ),
+                              ),
+                              SizedBox(width: NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.spaceXLarge)),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Crear nueva contraseña',
+                                      style: NewPasswordStyles.getHeadingStyle(context),
                                     ),
-                                    child: Icon(
-                                      Icons.lock_reset,
-                                      color: primaryColor,
-                                      size: _getResponsiveSize(context, 24),
+                                    SizedBox(height: NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.spaceXSmall)),
+                                    Text(
+                                      'Tu contraseña debe ser segura y fácil de recordar',
+                                      style: NewPasswordStyles.getSubheadingStyle(context),
                                     ),
-                                  ),
-                                  SizedBox(width: _getResponsiveSize(context, 16)),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Crear nueva contraseña',
-                                          style: TextStyle(
-                                            fontSize: _getResponsiveSize(context, 20),
-                                            fontWeight: FontWeight.w700,
-                                            color: Colors.black87,
-                                          ),
-                                        ),
-                                        SizedBox(height: _getResponsiveSize(context, 4)),
-                                        Text(
-                                          'Tu contraseña debe cumplir con los siguientes requisitos',
-                                          style: TextStyle(
-                                            fontSize: _getResponsiveSize(context, 14),
-                                            color: Colors.black54,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ],
                           ),
                         ),
 
-                        SizedBox(height: _getResponsiveSize(context, 24)),
+                        SizedBox(height: NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.spaceXXXLarge)),
 
-                        // Chips de requisitos compactos - Solo cuando hay texto
-                        if (_passwordCtrl.text.isNotEmpty) ...[
-                          Container(
-                            padding: EdgeInsets.all(_getResponsiveSize(context, 16)),
-                            margin: EdgeInsets.only(bottom: _getResponsiveSize(context, 16)),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(_getResponsiveSize(context, 12)),
-                              border: Border.all(color: Colors.grey[200]!, width: 1),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.security,
-                                      size: _getResponsiveSize(context, 16),
-                                      color: Colors.grey[600],
-                                    ),
-                                    SizedBox(width: _getResponsiveSize(context, 8)),
-                                    Text(
-                                      'Requisitos',
-                                      style: TextStyle(
-                                        fontSize: _getResponsiveSize(context, 14),
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.grey[700],
-                                      ),
-                                    ),
-                                    const Spacer(),
-                                    Text(
-                                      '${[_validLength, _hasUpperOrDigit, _hasSpecial].where((e) => e).length}/3',
-                                      style: TextStyle(
-                                        fontSize: _getResponsiveSize(context, 12),
-                                        fontWeight: FontWeight.w500,
-                                        color: _isPasswordValid ? Colors.green[600] : Colors.grey[500],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                SizedBox(height: _getResponsiveSize(context, 12)),
-                                // Chips de requisitos compactos
-                                Wrap(
-                                  spacing: _getResponsiveSize(context, 6),
-                                  runSpacing: _getResponsiveSize(context, 6),
-                                  children: [
-                                    _buildCompactChip('8+ caracteres', _validLength),
-                                    _buildCompactChip('Mayús + número', _hasUpperOrDigit),
-                                    _buildCompactChip('Símbolo especial', _hasSpecial),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+                        // Sección de requisitos animada
+                        _buildRequirementsSection(),
 
                         // Password Input
                         Container(
-                          padding: EdgeInsets.all(_getResponsiveSize(context, 20)),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(_getResponsiveSize(context, 16)),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.05),
-                                blurRadius: 10,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
+                          padding: EdgeInsets.all(
+                            NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.spaceXXLarge)
                           ),
+                          decoration: NewPasswordStyles.getCardDecoration(context),
                           child: Column(
                             children: [
                               _buildTextField(
@@ -506,10 +432,10 @@ class _NewPasswordScreenState extends State<NewPasswordScreen>
                                   return null;
                                 },
                               ),
-                              SizedBox(height: _getResponsiveSize(context, 16)),
+                              SizedBox(height: NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.spaceXLarge)),
                               if (_passwordCtrl.text.isNotEmpty) ...[
                                 _buildPasswordStrengthIndicator(),
-                                SizedBox(height: _getResponsiveSize(context, 16)),
+                                SizedBox(height: NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.spaceXLarge)),
                               ],
                               _buildTextField(
                                 controller: _confirmCtrl,
@@ -526,27 +452,19 @@ class _NewPasswordScreenState extends State<NewPasswordScreen>
                           ),
                         ),
 
-                        SizedBox(height: _getResponsiveSize(context, 32)),
+                        SizedBox(height: NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.spaceGiant)),
 
                         // Action Buttons
                         SizedBox(
                           width: double.infinity,
-                          height: _getResponsiveSize(context, 54),
+                          height: NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.buttonHeight),
                           child: ElevatedButton(
                             onPressed: _isLoading ? null : _guardarPassword,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: primaryColor,
-                              disabledBackgroundColor: Colors.grey[300],
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(_getResponsiveSize(context, 16)),
-                              ),
-                              elevation: 0,
-                              shadowColor: primaryColor.withOpacity(0.3),
-                            ),
+                            style: NewPasswordStyles.getPrimaryButtonStyle(context),
                             child: _isLoading
                                 ? SizedBox(
-                                    width: _getResponsiveSize(context, 24),
-                                    height: _getResponsiveSize(context, 24),
+                                    width: NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.iconXXLarge),
+                                    height: NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.iconXXLarge),
                                     child: const CircularProgressIndicator(
                                       strokeWidth: 2.5,
                                       valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
@@ -554,37 +472,31 @@ class _NewPasswordScreenState extends State<NewPasswordScreen>
                                   )
                                 : Text(
                                     "GUARDAR CONTRASEÑA",
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: _getResponsiveSize(context, 16),
-                                      letterSpacing: 0.5,
-                                      color: Colors.white,
-                                    ),
+                                    style: NewPasswordStyles.getButtonTextStyle(context),
                                   ),
                           ),
                         ),
 
-                        SizedBox(height: _getResponsiveSize(context, 16)),
+                        SizedBox(height: NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.spaceXLarge)),
 
                         Center(
                           child: TextButton.icon(
                             onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
-                            icon: Icon(Icons.arrow_back, size: _getResponsiveSize(context, 18)),
+                            icon: Icon(
+                              Icons.arrow_back, 
+                              size: NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.iconLarge)
+                            ),
                             label: Text(
                               "Volver al inicio de sesión",
-                              style: TextStyle(fontSize: _getResponsiveSize(context, 14)),
-                            ),
-                            style: TextButton.styleFrom(
-                              foregroundColor: Colors.grey[600],
-                              padding: EdgeInsets.symmetric(
-                                horizontal: _getResponsiveSize(context, 16),
-                                vertical: _getResponsiveSize(context, 8),
+                              style: TextStyle(
+                                fontSize: NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.fontMedium)
                               ),
                             ),
+                            style: NewPasswordStyles.getSecondaryButtonStyle(context),
                           ),
                         ),
 
-                        SizedBox(height: _getResponsiveSize(context, 20)),
+                        SizedBox(height: NewPasswordDimensions.getResponsiveSize(context, NewPasswordDimensions.spaceXXLarge)),
                       ],
                     ),
                   ),

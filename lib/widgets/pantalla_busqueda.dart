@@ -52,9 +52,24 @@ class _PantallaBusquedaState extends State<PantallaBusqueda> with TickerProvider
 
   @override
   void dispose() {
+    // ✅ SOLUCIÓN: Desenfoca cualquier campo de texto antes de cerrar la pantalla
+    _unfocusSearchField();
     _controller.dispose();
     _animationController.dispose();
     super.dispose();
+  }
+
+  // ✅ NUEVA FUNCIÓN: Desenfocar el campo de búsqueda
+  void _unfocusSearchField() {
+    if (FocusScope.of(context).hasFocus) {
+      FocusScope.of(context).unfocus();
+    }
+  }
+
+  // ✅ FUNCIÓN MEJORADA: Manejar el botón de regreso
+  void _handleBackPress() {
+    _unfocusSearchField(); // Desenfoca antes de cerrar
+    Navigator.of(context).pop();
   }
 
   // Función para determinar si estamos en tablet
@@ -174,6 +189,8 @@ class _PantallaBusquedaState extends State<PantallaBusqueda> with TickerProvider
       _controller.clear();
     });
     _animationController.reset();
+    // ✅ Opcional: también desenfocar al limpiar la búsqueda
+    _unfocusSearchField();
   }
 
   String _formatearPrecio(dynamic precio) {
@@ -187,6 +204,9 @@ class _PantallaBusquedaState extends State<PantallaBusqueda> with TickerProvider
   }
 
   void _navegarACategoria(Map<String, dynamic> categoria) {
+    // ✅ Desenfoca antes de navegar
+    _unfocusSearchField();
+    
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => ProductosPorCategoriaScreen(
@@ -203,69 +223,81 @@ class _PantallaBusquedaState extends State<PantallaBusqueda> with TickerProvider
     final isTablet = _isTablet(context);
     final padding = _getResponsivePadding(context);
 
-    return Scaffold(
-      backgroundColor: _backgroundColor,
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.transparent,
-        automaticallyImplyLeading: true,
-        leading: Container(
-          margin: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade100,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: IconButton(
-            icon: Icon(
-              Icons.arrow_back_ios_rounded,
-              color: Colors.grey.shade600,
-              size: 20,
-            ),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-        ),
-        title: BuscadorProductos(
-          busqueda: _busqueda,
-          controller: _controller,
-          onBusquedaChanged: (value) => _buscarProductos(value),
-          onClear: _limpiarBusqueda,
-        ),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(
-            height: 1,
+    // ✅ SOLUCIÓN: Usar WillPopScope para manejar el botón de regreso del sistema
+    return WillPopScope(
+      onWillPop: () async {
+        _unfocusSearchField();
+        return true; // Permite que se cierre la pantalla
+      },
+      child: Scaffold(
+        backgroundColor: _backgroundColor,
+        appBar: AppBar(
+          elevation: 0,
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          automaticallyImplyLeading: true,
+          leading: Container(
+            margin: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Colors.grey.shade200,
-                  Colors.transparent,
-                  Colors.grey.shade200,
-                ],
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: IconButton(
+              icon: Icon(
+                Icons.arrow_back_ios_rounded,
+                color: Colors.grey.shade600,
+                size: 20,
+              ),
+              // ✅ SOLUCIÓN: Usar la nueva función para manejar el regreso
+              onPressed: _handleBackPress,
+            ),
+          ),
+          title: BuscadorProductos(
+            busqueda: _busqueda,
+            controller: _controller,
+            onBusquedaChanged: (value) => _buscarProductos(value),
+            onClear: _limpiarBusqueda,
+          ),
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(1),
+            child: Container(
+              height: 1,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.grey.shade200,
+                    Colors.transparent,
+                    Colors.grey.shade200,
+                  ],
+                ),
               ),
             ),
           ),
         ),
-      ),
-      body: Column(
-        children: [
-          // Mostrar header solo si hay resultados o búsqueda
-          if (tieneResultados || _busqueda.isNotEmpty)
-            _buildHeaderStats(context),
+        // ✅ SOLUCIÓN: Agregar GestureDetector para desenfocar al tocar fuera del campo
+        body: GestureDetector(
+          onTap: _unfocusSearchField,
+          child: Column(
+            children: [
+              // Mostrar header solo si hay resultados o búsqueda
+              if (tieneResultados || _busqueda.isNotEmpty)
+                _buildHeaderStats(context),
 
-          Expanded(
-            child: _cargando
-                ? _buildLoadingState(context)
-                : tieneResultados
-                    ? _buildResultsList(context)
-                    : _buildEmptyState(context),
+              Expanded(
+                child: _cargando
+                    ? _buildLoadingState(context)
+                    : tieneResultados
+                        ? _buildResultsList(context)
+                        : _buildEmptyState(context),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
-  // ------------------- Widgets Responsivos -------------------
+  // ------------------- Widgets Responsivos (sin cambios) -------------------
 
   Widget _buildHeaderStats(BuildContext context) {
     final padding = _getResponsivePadding(context);
@@ -579,6 +611,9 @@ class _PantallaBusquedaState extends State<PantallaBusqueda> with TickerProvider
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: () {
+            // ✅ Desenfoca antes de navegar al producto
+            _unfocusSearchField();
+            
             final productId = producto['_id'];
             if (productId != null && productId.toString().isNotEmpty) {
               Navigator.of(context).push(

@@ -1,7 +1,7 @@
 // top_icons.dart
 import 'package:flutter/material.dart';
 import '../../../utils/show_settings_modal.dart';
-import '../styles/top_icons_styles.dart'; // Import de los estilos
+import '../styles/top_icons/top_icons_styles.dart'; // Import de los estilos
 
 class TopIcons extends StatelessWidget {
   final String rol;

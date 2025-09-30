@@ -24,7 +24,7 @@ class ProductoCard extends StatefulWidget {
   const ProductoCard({
     super.key,
     required this.id,
-    this.producto, // NUEVO: producto opcional
+    this.producto,
     @deprecated this.nombre,
     @deprecated this.imagenUrl,
     @deprecated this.precio,
@@ -43,13 +43,6 @@ class _ProductoCardState extends State<ProductoCard>
   late Animation<double> _scaleAnimation;
   bool _isPressed = false;
 
-  // Formatter para pesos colombianos
-  final NumberFormat _currencyFormatter = NumberFormat.currency(
-    locale: 'es_CO',
-    symbol: '\$',
-    decimalDigits: 0,
-  );
-
   @override
   void initState() {
     super.initState();
@@ -65,7 +58,6 @@ class _ProductoCardState extends State<ProductoCard>
       curve: Curves.easeInOut,
     ));
 
-    // Debug info
     debugPrint('ProductoCard iniciado - ID: ${widget.id}, tiene producto: ${widget.producto != null}');
   }
 
@@ -75,25 +67,60 @@ class _ProductoCardState extends State<ProductoCard>
     super.dispose();
   }
 
-  String _formatPrice(double price) {
-    return _currencyFormatter.format(price);
+  String get _validId {
+    if (widget.id.isNotEmpty) {
+      return widget.id;
+    }
+    
+    if (widget.producto != null) {
+      final id = widget.producto!['_id']?.toString() ?? 
+                widget.producto!['id']?.toString() ?? '';
+      if (id.isNotEmpty) {
+        return id;
+      }
+    }
+    
+    return 'unknown_${widget.hashCode}';
   }
 
-  // MEJORADO: Método para encontrar el producto con múltiples fuentes
+  String _formatPrice(double price) {
+    if (price == price.roundToDouble()) {
+      return NumberFormat.currency(
+        locale: 'en_US',
+        symbol: '\$',
+        decimalDigits: 0,
+      ).format(price);
+    } else {
+      return NumberFormat.currency(
+        locale: 'en_US',
+        symbol: '\$',
+        decimalDigits: 2,
+      ).format(price);
+    }
+  }
+
   Map<String, dynamic>? _findProductoInProvider(ProductoProvider provider) {
-    // 1. Si se pasó el producto directamente, usarlo (más eficiente)
-    if (widget.producto != null) {
-      debugPrint('Usando producto pasado directamente: ${widget.producto!['nombre']}');
+    final idToSearch = _validId;
+    
+    if (idToSearch.isEmpty || idToSearch.startsWith('unknown_')) {
+      debugPrint('ID invalido para busqueda: $idToSearch');
       return widget.producto;
     }
 
-    // 2. Buscar en productos del provider
+    if (widget.producto != null) {
+      final productoId = widget.producto!['_id']?.toString() ?? 
+                        widget.producto!['id']?.toString() ?? '';
+      if (productoId == idToSearch || productoId.isNotEmpty) {
+        debugPrint('Usando producto pasado directamente: ${widget.producto!['nombre']}');
+        return widget.producto;
+      }
+    }
+
     Map<String, dynamic>? producto;
     
     try {
-      // Buscar por _id en productos principales
       producto = provider.productos.firstWhere(
-        (p) => p['_id']?.toString() == widget.id || p['id']?.toString() == widget.id,
+        (p) => p['_id']?.toString() == idToSearch || p['id']?.toString() == idToSearch,
       );
       debugPrint('Producto encontrado en provider.productos: ${producto['nombre']}');
       return producto;
@@ -102,9 +129,8 @@ class _ProductoCardState extends State<ProductoCard>
     }
 
     try {
-      // Buscar por _id en productos filtrados
       producto = provider.productosFiltrados.firstWhere(
-        (p) => p['_id']?.toString() == widget.id || p['id']?.toString() == widget.id,
+        (p) => p['_id']?.toString() == idToSearch || p['id']?.toString() == idToSearch,
       );
       debugPrint('Producto encontrado en provider.productosFiltrados: ${producto['nombre']}');
       return producto;
@@ -112,88 +138,86 @@ class _ProductoCardState extends State<ProductoCard>
       // No encontrado en productos filtrados
     }
 
-    debugPrint('❌ Producto NO encontrado en provider - ID: ${widget.id}');
+    debugPrint('Producto NO encontrado - ID: $idToSearch');
     debugPrint('   - Productos en provider: ${provider.productos.length}');
-    debugPrint('   - Productos filtrados: ${provider.productosFiltrados.length}');
-    debugPrint('   - IDs en provider: ${provider.productos.map((p) => p['_id']).take(5).toList()}');
+    debugPrint('   - IDs disponibles: ${provider.productos.map((p) => p['_id']).take(3).toList()}...');
     
-    return null;
+    return widget.producto;
+  }
+
+  Widget _buildErrorCard(String mensaje) {
+    return Container(
+      height: 320,
+      margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.red[200]!, width: 1),
+      ),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, color: Colors.red[400], size: 32),
+              const SizedBox(height: 8),
+              Text(
+                mensaje,
+                style: TextStyle(
+                  color: Colors.red[700], 
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () {
+                  final provider = Provider.of<ProductoProvider>(context, listen: false);
+                  provider.refrescar();
+                },
+                child: Text(
+                  'Recargar',
+                  style: TextStyle(fontSize: 11, color: Colors.blue[600]),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Consumer<ProductoProvider>(
       builder: (context, provider, child) {
-        // Obtener datos del producto
         final producto = _findProductoInProvider(provider);
         
-        // MEJORADO: Obtener datos de forma más robusta
-        final nombre = producto?['nombre']?.toString() ?? 
+        if (producto == null && _validId.startsWith('unknown_')) {
+          return _buildErrorCard('ID de producto invalido');
+        }
+        
+        if (producto == null) {
+          return _buildErrorCard('Producto no encontrado\nID: $_validId');
+        }
+
+        final nombre = producto['nombre']?.toString() ?? 
                       widget.nombre ?? 
                       'Sin nombre';
         
-        // CORREGIDO: Manejar tanto 'imagen' como 'imagenUrl'
-        final imagenUrl = producto?['imagen']?.toString() ?? 
-                         producto?['imagenUrl']?.toString() ?? 
+        final imagenUrl = producto['imagen']?.toString() ?? 
+                         producto['imagenUrl']?.toString() ?? 
                          widget.imagenUrl ?? 
                          '';
         
-        final precio = (producto?['precio'] as num?)?.toDouble() ?? 
+        final precio = (producto['precio'] as num?)?.toDouble() ?? 
                       widget.precio ?? 
                       0.0;
         
-        final disponible = producto?['disponible'] as bool? ?? true;
-        final estado = producto?['estado']?.toString() ?? 'activo';
-        final stock = (producto?['stock'] as num?)?.toInt() ?? 0;
-
-        // MEJORADO: Mostrar más información de debug
-        if (producto == null && widget.nombre == null) {
-          return Container(
-            height: 320,
-            margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.red[200]!, width: 1),
-            ),
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.error_outline, color: Colors.red[400], size: 48),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Producto no encontrado',
-                      style: TextStyle(
-                        color: Colors.red[700], 
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'ID: ${widget.id}',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 11),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Productos en provider: ${provider.productos.length}',
-                      style: TextStyle(color: Colors.grey[500], fontSize: 10),
-                    ),
-                    if (provider.productos.isNotEmpty)
-                      Text(
-                        'Primer ID: ${provider.productos.first['_id']}',
-                        style: TextStyle(color: Colors.grey[500], fontSize: 10),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        }
+        final disponible = producto['disponible'] as bool? ?? true;
+        final estado = producto['estado']?.toString() ?? 'activo';
 
         return AnimatedBuilder(
           animation: _scaleAnimation,
@@ -234,95 +258,101 @@ class _ProductoCardState extends State<ProductoCard>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Imagen del producto
                       Expanded(
                         flex: 7,
                         child: Stack(
                           children: [
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(12),
-                              child: Hero(
-                                tag: 'producto_${widget.id}',
-                                child: Stack(
-                                  children: [
-                                    Image.network(
-                                      imagenUrl.isNotEmpty
-                                          ? imagenUrl
-                                          : 'https://via.placeholder.com/400x280/f5f5f5/cccccc?text=Sin+Imagen',
-                                      fit: BoxFit.contain,
-                                      loadingBuilder: (context, child, loadingProgress) {
-                                        if (loadingProgress == null) return child;
-                                        return Center(
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            valueColor: AlwaysStoppedAnimation<Color>(
-                                              Colors.blue[600]!,
+                            ClipRRect(
+                              borderRadius: const BorderRadius.only(
+                                topLeft: Radius.circular(8),
+                                topRight: Radius.circular(8),
+                              ),
+                              child: Container(
+                                width: double.infinity,
+                                height: double.infinity,
+                                color: Colors.grey[50],
+                                child: Hero(
+                                  tag: 'producto_$_validId',
+                                  child: Image.network(
+                                    imagenUrl.isNotEmpty
+                                        ? imagenUrl
+                                        : 'https://via.placeholder.com/400x280/f5f5f5/cccccc?text=Sin+Imagen',
+                                    fit: BoxFit.cover,
+                                    width: double.infinity,
+                                    height: double.infinity,
+                                    loadingBuilder: (context, child, loadingProgress) {
+                                      if (loadingProgress == null) return child;
+                                      return Center(
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          valueColor: AlwaysStoppedAnimation<Color>(
+                                            Colors.blue[600]!,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    errorBuilder: (context, error, stackTrace) =>
+                                        Center(
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.image_not_supported_outlined,
+                                            size: 40,
+                                            color: Colors.grey[400],
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            'Sin imagen',
+                                            style: TextStyle(
+                                              color: Colors.grey[500],
+                                              fontSize: 12,
                                             ),
                                           ),
-                                        );
-                                      },
-                                      errorBuilder: (context, error, stackTrace) =>
-                                          Center(
-                                        child: Column(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            Icon(
-                                              Icons.image_not_supported_outlined,
-                                              size: 40,
-                                              color: Colors.grey[400],
-                                            ),
-                                            const SizedBox(height: 8),
-                                            Text(
-                                              'Sin imagen',
-                                              style: TextStyle(
-                                                color: Colors.grey[500],
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
+                                        ],
                                       ),
                                     ),
-                                    // Overlay si no está disponible
-                                    if (!disponible || estado != 'activo')
-                                      Container(
-                                        width: double.infinity,
-                                        height: double.infinity,
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withOpacity(0.7),
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                        child: Center(
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 12, 
-                                              vertical: 6
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: Colors.red[100],
-                                              borderRadius: BorderRadius.circular(16),
-                                            ),
-                                            child: Text(
-                                              !disponible ? 'No disponible' : 'Inactivo',
-                                              style: TextStyle(
-                                                color: Colors.red[700],
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                  ],
+                                  ),
                                 ),
                               ),
                             ),
 
-                            // Botón de opciones
+                            if (!disponible || estado != 'activo')
+                              Container(
+                                width: double.infinity,
+                                height: double.infinity,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.7),
+                                  borderRadius: const BorderRadius.only(
+                                    topLeft: Radius.circular(8),
+                                    topRight: Radius.circular(8),
+                                  ),
+                                ),
+                                child: Center(
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, 
+                                      vertical: 6
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red[100],
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: Text(
+                                      !disponible ? 'No disponible' : 'Inactivo',
+                                      style: TextStyle(
+                                        color: Colors.red[700],
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+
                             Positioned(
-                              top: 8,
-                              right: 8,
+                              top: 12,
+                              right: 12,
                               child: Container(
                                 decoration: BoxDecoration(
                                   color: Colors.white,
@@ -353,34 +383,12 @@ class _ProductoCardState extends State<ProductoCard>
                               ),
                             ),
 
-                            // MEJORADO: Indicador de stock bajo
-                            if (stock <= 5 && stock > 0)
-                              Positioned(
-                                bottom: 8,
-                                left: 8,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.orange[600],
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    'Stock: $stock',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                              ),
-
-                            // Indicador de estado actualizado
                             if (provider.state == ProductoState.updating && 
-                                provider.productoSeleccionado?['_id'] == widget.id)
+                                (provider.productoSeleccionado?['_id'] == _validId || 
+                                 provider.productoSeleccionado?['id'] == _validId))
                               Positioned(
-                                top: 8,
-                                left: 8,
+                                top: 12,
+                                left: 12,
                                 child: Container(
                                   padding: const EdgeInsets.all(4),
                                   decoration: BoxDecoration(
@@ -401,7 +409,6 @@ class _ProductoCardState extends State<ProductoCard>
                         ),
                       ),
 
-                      // Información del producto
                       Padding(
                         padding: const EdgeInsets.all(8),
                         child: Column(
@@ -447,7 +454,6 @@ class _ProductoCardState extends State<ProductoCard>
     );
   }
 
-  // ... resto de los métodos permanecen igual ...
   void _mostrarOpciones(BuildContext context, String nombre, String imagenUrl, double precio) {
     showModalBottomSheet(
       context: context,
@@ -472,7 +478,6 @@ class _ProductoCardState extends State<ProductoCard>
                 ),
               ),
 
-              // Header con preview
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                 child: Row(
@@ -526,7 +531,6 @@ class _ProductoCardState extends State<ProductoCard>
 
               const Divider(height: 24),
 
-              // Opciones
               _buildOptionTile(
                 icon: Icons.tune,
                 iconColor: Colors.blue[600]!,
@@ -537,7 +541,7 @@ class _ProductoCardState extends State<ProductoCard>
                   Navigator.pushNamed(
                     context,
                     '/gestionar-variaciones',
-                    arguments: widget.id,
+                    arguments: _validId,
                   );
                 },
               ),
@@ -545,14 +549,14 @@ class _ProductoCardState extends State<ProductoCard>
                 icon: Icons.edit_outlined,
                 iconColor: Colors.orange[600]!,
                 title: 'Editar producto',
-                subtitle: 'Modificar información y detalles',
+                subtitle: 'Modificar informacion y detalles',
                 onTap: () => _editarProducto(context),
               ),
               _buildOptionTile(
                 icon: Icons.delete_outline,
                 iconColor: Colors.red[600]!,
                 title: 'Eliminar producto',
-                subtitle: 'Esta acción no se puede deshacer',
+                subtitle: 'Esta accion no se puede deshacer',
                 onTap: () => _confirmarEliminacion(context, nombre),
               ),
               const SizedBox(height: 16),
@@ -605,7 +609,7 @@ class _ProductoCardState extends State<ProductoCard>
     final result = await Navigator.pushNamed(
       context,
       '/editar-producto',
-      arguments: widget.id,
+      arguments: _validId,
     );
 
     if (result == true && mounted) {
@@ -641,23 +645,35 @@ class _ProductoCardState extends State<ProductoCard>
     navigator.pop();
 
     final provider = Provider.of<ProductoProvider>(context, listen: false);
-    final success = await provider.eliminarProducto(widget.id);
+    final idAEliminar = _validId;
+    
+    debugPrint('Iniciando eliminacion producto ID: $idAEliminar');
+    
+    final success = await provider.eliminarProducto(idAEliminar);
 
     if (!mounted) return;
 
     if (success) {
       widget.onProductoEliminado?.call();
+      
       scaffoldMessenger.showSnackBar(
         const SnackBar(
           content: Text('Producto eliminado exitosamente'),
           backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
         ),
       );
     } else {
       scaffoldMessenger.showSnackBar(
         SnackBar(
-          content: Text(provider.errorMessage ?? 'Error desconocido'),
+          content: Text(provider.errorMessage ?? 'Error al eliminar producto'),
           backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+          action: SnackBarAction(
+            label: 'Reintentar',
+            textColor: Colors.white,
+            onPressed: () => _eliminarProducto(context),
+          ),
         ),
       );
     }

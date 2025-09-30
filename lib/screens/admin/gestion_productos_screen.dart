@@ -160,7 +160,6 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
   late AnimationController _listAnimationController;
   late AnimationController _staggeredAnimationController;
   
-  // ScrollController solo para el CustomScrollView principal
   late ScrollController _mainScrollController;
 
   List<Map<String, dynamic>> categorias = [];
@@ -190,7 +189,6 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
       ),
     );
 
-    // ScrollController solo para paginación infinita
     _mainScrollController = ScrollController();
     _mainScrollController.addListener(_onScroll);
 
@@ -210,7 +208,6 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
     super.dispose();
   }
 
-  // Listener optimizado para scroll infinito
   void _onScroll() {
     if (_mainScrollController.position.pixels >= 
         _mainScrollController.position.maxScrollExtent - 200) {
@@ -230,81 +227,80 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
     }
   }
 
-  // CORREGIDO: Limpiar filtros de categoría al cargar
-  Future<void> _cargarDatos() async {
-    if (!mounted) return;
-    
-    setState(() {
-      _connectionState = ConnectionState.loading;
-      _errorMessage = null;
-    });
+Future<void> _cargarDatos() async {
+  if (!mounted) return;
+  
+  setState(() {
+    _connectionState = ConnectionState.loading;
+    _errorMessage = null;
+  });
 
-    try {
-      final hasInternet = await _checkInternetConnection();
-      if (!hasInternet) {
-        if (mounted) {
-          setState(() {
-            _connectionState = ConnectionState.offline;
-          });
-        }
-        return;
-      }
-
-      categorias = await categoriaService.obtenerCategorias();
-      
-      final provider = Provider.of<ProductoProvider>(context, listen: false);
-      
-      // NUEVO: Limpiar filtros de categoría antes de inicializar/refrescar
-      debugPrint('🔄 GestionProductosScreen: Limpiando filtros de categoría');
-      provider.mostrarTodosLosProductos();
-      
-      // Si el provider no está inicializado, inicializarlo
-      if (provider.state == ProductoState.initial || provider.productos.isEmpty) {
-        await provider.inicializar();
-      } else {
-        // Si ya está inicializado, solo refrescar para asegurar datos actuales
-        await provider.refrescar();
-      }
-      
-      if (mounted) {
-        setState(() {
-          _connectionState = ConnectionState.online;
-        });
-
-        _fadeAnimationController.forward();
-        _listAnimationController.forward();
-      }
-
-    } on SocketException catch (_) {
+  try {
+    final hasInternet = await _checkInternetConnection();
+    if (!hasInternet) {
       if (mounted) {
         setState(() {
           _connectionState = ConnectionState.offline;
-          _errorMessage = 'Sin conexión a internet';
         });
       }
-    } on HttpException catch (e) {
-      if (mounted) {
-        setState(() {
-          _connectionState = ConnectionState.serverError;
-          _errorMessage = 'Error del servidor: ${e.message}';
-        });
-      }
-    } catch (e) {
-      final errorMessage = _getErrorMessage(e.toString());
-      if (mounted) {
-        setState(() {
-          _connectionState = ConnectionState.serverError;
-          _errorMessage = errorMessage;
-        });
-        
-        _mostrarSnackBar(
-          errorMessage,
-          Colors.red,
-          Icons.error_outline,
-        );
-      }
+      return;
+    }
+
+    categorias = await categoriaService.obtenerCategorias();
+    
+    final provider = Provider.of<ProductoProvider>(context, listen: false);
+    
+    // ✅ CORREGIDO: NO limpiar filtros automáticamente
+    // Solo limpiar si es la primera carga (state == initial)
+    if (provider.state == ProductoState.initial) {
+      debugPrint('🔄 Primera carga: Limpiando filtros');
+      provider.mostrarTodosLosProductos();
+      await provider.inicializar();
+    } else {
+      // ✅ Refrescar MANTENIENDO los filtros actuales
+      debugPrint('🔄 Recarga: Manteniendo filtros actuales');
+      await provider.refrescar();
+    }
+    
+    if (mounted) {
+      setState(() {
+        _connectionState = ConnectionState.online;
+      });
+
+      _fadeAnimationController.forward();
+      _listAnimationController.forward();
+    }
+
+  } on SocketException catch (_) {
+    if (mounted) {
+      setState(() {
+        _connectionState = ConnectionState.offline;
+        _errorMessage = 'Sin conexión a internet';
+      });
+    }
+  } on HttpException catch (e) {
+    if (mounted) {
+      setState(() {
+        _connectionState = ConnectionState.serverError;
+        _errorMessage = 'Error del servidor: ${e.message}';
+      });
+    }
+  } catch (e) {
+    final errorMessage = _getErrorMessage(e.toString());
+    if (mounted) {
+      setState(() {
+        _connectionState = ConnectionState.serverError;
+        _errorMessage = errorMessage;
+      });
+      
+      _mostrarSnackBar(
+        errorMessage,
+        Colors.red,
+        Icons.error_outline,
+      );
     }
   }
+}
 
   String _getErrorMessage(String error) {
     if (error.toLowerCase().contains('timeout')) {
@@ -950,7 +946,6 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
     );
   }
 
-  // Función para obtener el número de columnas según el ancho de pantalla
   int _getCrossAxisCount(double screenWidth) {
     if (screenWidth < 360) return 1;
     if (screenWidth < 600) return 2;
@@ -958,14 +953,12 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
     return 4;
   }
 
-  // Función para obtener el espaciado del grid según el ancho de pantalla
   double _getGridSpacing(double screenWidth) {
     if (screenWidth < 360) return 8.0;
     if (screenWidth < 600) return 12.0;
     return 16.0;
   }
 
-  // Función para obtener el aspect ratio según el ancho de pantalla
   double _getChildAspectRatio(double screenWidth) {
     if (screenWidth < 360) return 0.85;
     if (screenWidth < 600) return 0.75;
@@ -1288,117 +1281,114 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
     );
   }
 
-  // Grid real con 2 columnas verticales
-  Widget _buildProductGrid() {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final crossAxisCount = _getCrossAxisCount(screenWidth);
-    final spacing = _getGridSpacing(screenWidth);
-    final childAspectRatio = _getChildAspectRatio(screenWidth);
-    
-    return Consumer<ProductoProvider>(
-      builder: (context, provider, child) {
-        final productos = provider.productosFiltrados;
-        
-        if (productos.isEmpty) return const SizedBox.shrink();
-        
-        return Column(
-          children: [
-            // GridView en lugar de Wrap
-            GridView.builder(
-              shrinkWrap: true, // Importante para evitar overflow
-              physics: const NeverScrollableScrollPhysics(), // El scroll lo maneja el CustomScrollView padre
-              padding: EdgeInsets.zero,
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: crossAxisCount, // 2 columnas en móvil
-                crossAxisSpacing: spacing,
-                mainAxisSpacing: spacing,
-                childAspectRatio: childAspectRatio,
-              ),
-              itemCount: productos.length,
-              itemBuilder: (context, index) {
-                final producto = productos[index];
-                
-                return AnimatedBuilder(
-                  animation: _listAnimationController,
-                  builder: (context, child) {
-                    final animationProgress = _listAnimationController.value;
-                    final itemDelay = (index * 0.1).clamp(0.0, 0.8);
-                    final animationValue = ((animationProgress - itemDelay) / (1.0 - itemDelay))
-                        .clamp(0.0, 1.0);
-                    
-                    final curvedValue = Curves.easeOutBack.transform(animationValue);
-                    final opacity = curvedValue.clamp(0.0, 1.0);
-                    final scale = (0.5 + (curvedValue * 0.5)).clamp(0.0, 1.0);
-                    
-                    return Transform.scale(
-                      scale: scale,
-                      child: Opacity(
-                        opacity: opacity,
-                        child: ProductoCard(
-                          id: producto['_id'] ?? producto['id'] ?? '',
-                          // NUEVO: Callbacks para actualizar la pantalla
-                          onProductoEliminado: () {
-                            // El provider ya maneja la eliminación, solo necesitamos refrescar si es necesario
-                            if (mounted) {
-                              setState(() {}); // Forzar rebuild para mostrar cambios inmediatos
-                            }
-                          },
-                          onProductoActualizado: () {
-                            // El provider ya maneja la actualización, solo necesitamos refrescar si es necesario
-                            if (mounted) {
-                              setState(() {}); // Forzar rebuild para mostrar cambios inmediatos
-                            }
-                          },
-                        ),
+ // En GestionProductosScreen - Método _buildProductGrid CORREGIDO
+
+Widget _buildProductGrid() {
+  final screenWidth = MediaQuery.of(context).size.width;
+  final crossAxisCount = _getCrossAxisCount(screenWidth);
+  final spacing = _getGridSpacing(screenWidth);
+  final childAspectRatio = _getChildAspectRatio(screenWidth);
+  
+  return Consumer<ProductoProvider>(
+    builder: (context, provider, child) {
+      final productos = provider.productosFiltrados;
+      
+      if (productos.isEmpty) return const SizedBox.shrink();
+      
+      return Column(
+        children: [
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            padding: EdgeInsets.zero,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: crossAxisCount,
+              crossAxisSpacing: spacing,
+              mainAxisSpacing: spacing,
+              childAspectRatio: childAspectRatio,
+            ),
+            itemCount: productos.length,
+            itemBuilder: (context, index) {
+              final producto = productos[index];
+              final productoId = producto['_id'] ?? producto['id'] ?? '';
+              
+              return AnimatedBuilder(
+                key: ValueKey('producto_${productoId}_${provider.state}'), // ✅ Key dinámica
+                animation: _listAnimationController,
+                builder: (context, child) {
+                  final animationProgress = _listAnimationController.value;
+                  final itemDelay = (index * 0.1).clamp(0.0, 0.8);
+                  final animationValue = ((animationProgress - itemDelay) / (1.0 - itemDelay))
+                      .clamp(0.0, 1.0);
+                  
+                  final curvedValue = Curves.easeOutBack.transform(animationValue);
+                  final opacity = curvedValue.clamp(0.0, 1.0);
+                  final scale = (0.5 + (curvedValue * 0.5)).clamp(0.0, 1.0);
+                  
+                  return Transform.scale(
+                    scale: scale,
+                    child: Opacity(
+                      opacity: opacity,
+                      child: ProductoCard(
+                        key: ValueKey('card_$productoId'),
+                        id: productoId,
+                        producto: producto,
+                        onProductoEliminado: () {
+                          // ✅ NO hacer nada - el Consumer se reconstruirá automáticamente
+                          debugPrint('✅ Producto eliminado confirmado');
+                        },
+                        onProductoActualizado: () {
+                          // ✅ Solo notificar
+                          debugPrint('📝 Producto actualizado confirmado');
+                        },
                       ),
-                    );
-                  },
-                );
-              },
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+          
+          if (provider.isLoadingMore)
+            Container(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Cargando más productos...',
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
             ),
             
-            // Indicador de carga para paginación infinita
-            if (provider.isLoadingMore)
-              Container(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      'Cargando más productos...',
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
+          if (!provider.hasMore && productos.isNotEmpty && productos.length > 10)
+            Container(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'Has visto todos los productos (${productos.length})',
+                style: TextStyle(
+                  color: Colors.grey[500],
+                  fontSize: 12,
                 ),
+                textAlign: TextAlign.center,
               ),
-              
-            // Indicador de final de lista
-            if (!provider.hasMore && productos.isNotEmpty && productos.length > 10)
-              Container(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  'Has visto todos los productos (${productos.length})',
-                  style: TextStyle(
-                    color: Colors.grey[500],
-                    fontSize: 12,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-          ],
-        );
-      },
-    );
-  }
+            ),
+        ],
+      );
+    },
+  );
+}
 
   Widget _buildConnectionStatus() {
     if (_connectionState == ConnectionState.online) return const SizedBox.shrink();
@@ -1482,7 +1472,6 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
         builder: (context, provider, child) {
           return RefreshIndicator(
             onRefresh: () async {
-              // CORREGIDO: Asegurar que se muestren todos los productos al refrescar
               await _cargarDatos();
             },
             child: CustomScrollView(
@@ -1531,7 +1520,6 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
                             _connectionState == ConnectionState.serverError)
                           _buildConnectionErrorState()
                         else ...[
-                          // Buscador
                           if (provider.isLoading && provider.state == ProductoState.initial)
                             _buildShimmerElement(
                               delay: 0,
@@ -1552,7 +1540,6 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
                             ),
                           SizedBox(height: isSmallScreen ? 20 : 24),
                           
-                          // Estadísticas
                           if (provider.isLoading && provider.state == ProductoState.initial)
                             _buildShimmerElement(
                               delay: 1,
@@ -1587,7 +1574,6 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
                             ),
                           SizedBox(height: isSmallScreen ? 20 : 24),
                           
-                          // Filtros
                           if (provider.isLoading && provider.state == ProductoState.initial)
                             _buildShimmerElement(
                               delay: 2,
@@ -1600,7 +1586,6 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
                             ),
                           SizedBox(height: isSmallScreen ? 20 : 24),
                           
-                          // Header de productos
                           if (provider.isLoading && provider.state == ProductoState.initial)
                             _buildShimmerElement(
                               delay: 3,
@@ -1681,7 +1666,6 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
                             ),
                           SizedBox(height: isSmallScreen ? 12 : 16),
                           
-                          // Grid de productos
                           if (provider.isLoading && provider.state == ProductoState.initial)
                             _buildShimmerProductGrid()
                           else if (provider.productosFiltrados.isEmpty)

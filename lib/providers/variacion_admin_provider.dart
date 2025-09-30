@@ -1,330 +1,244 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
-
 import '../models/variacion.dart';
 import '../services/variacion_service.dart';
 
-enum VariacionEstado { initial, loading, loaded, error }
-
-class VariacionProvider extends ChangeNotifier {
-  final VariacionService _variacionService = VariacionService();
+class VariacionProvider with ChangeNotifier {
+  final VariacionService _service = VariacionService();
   
-  // --- ESTADO ---
-  VariacionEstado _estado = VariacionEstado.initial;
-  List<Map<String, dynamic>> _variaciones = [];
-  String? _mensajeError;
-  bool _cargandoAccion = false;
+  List<Variacion> _variaciones = [];
+  bool _isLoading = false;
+  String? _error;
+  
+  // Getters
+  List<Variacion> get variaciones => _variaciones;
+  bool get isLoading => _isLoading;
+  String? get error => _error;
+  bool get hasError => _error != null;
 
-  // --- GETTERS ---
-  VariacionEstado get estado => _estado;
-  List<Map<String, dynamic>> get variaciones => List.unmodifiable(_variaciones);
-  String? get mensajeError => _mensajeError;
-  bool get cargandoAccion => _cargandoAccion;
-  bool get isLoading => _estado == VariacionEstado.loading;
-  bool get hasError => _estado == VariacionEstado.error;
-  bool get hasData => _estado == VariacionEstado.loaded && _variaciones.isNotEmpty;
-  bool get isEmpty => _estado == VariacionEstado.loaded && _variaciones.isEmpty;
+  // Limpiar error
+  void clearError() {
+    _error = null;
+    notifyListeners();
+  }
 
-  // --- MÉTODOS PRINCIPALES ---
-
-  /// Obtiene todas las variaciones de un producto
+  // --- CARGAR VARIACIONES ---
   Future<void> cargarVariaciones(String productoId) async {
-    if (productoId.isEmpty) {
-      _setError('❌ ID de producto inválido');
-      return;
-    }
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
 
-    _setEstado(VariacionEstado.loading);
-    
     try {
-      debugPrint('🔄 Cargando variaciones para producto: $productoId');
-      final variaciones = await _variacionService.obtenerVariacionesPorProducto(productoId);
-      
-      _variaciones = variaciones;
-      _setEstado(VariacionEstado.loaded);
-      debugPrint('✅ Variaciones cargadas: ${_variaciones.length}');
-      
+      final variacionesData = await _service.obtenerVariacionesPorProducto(productoId);
+      _variaciones = variacionesData.map((v) => Variacion.fromJson(v)).toList();
+      debugPrint('✅ ${_variaciones.length} variaciones cargadas');
     } catch (e) {
+      _error = e.toString();
       debugPrint('❌ Error al cargar variaciones: $e');
-      _setError(e.toString());
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
-  /// Crea una nueva variación
+  // --- CREAR VARIACIÓN ---
   Future<bool> crearVariacion(Variacion variacion) async {
-    if (variacion.productoId.isEmpty) {
-      _setError('❌ ID de producto requerido');
-      return false;
-    }
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
 
-    _setCargandoAccion(true);
-    
     try {
-      debugPrint('🔄 Creando nueva variación...');
-      await _variacionService.crearVariacionDesdeModelo(variacion);
+      await _service.crearVariacionDesdeModelo(variacion);
       
-      // Recargar las variaciones para mostrar la nueva
+      // Recargar variaciones después de crear
       await cargarVariaciones(variacion.productoId);
       
-      _setCargandoAccion(false);
-      _showSuccessMessage('✅ Variación creada exitosamente');
-      debugPrint('✅ Variación creada correctamente');
+      debugPrint('✅ Variación creada exitosamente');
       return true;
-      
     } catch (e) {
+      _error = e.toString();
       debugPrint('❌ Error al crear variación: $e');
-      _setCargandoAccion(false);
-      _setError(e.toString());
+      _isLoading = false;
+      notifyListeners();
       return false;
     }
   }
 
-  /// Actualiza una variación existente
-  Future<bool> actualizarVariacion({
-    required String productoId,
-    required String variacionId,
-    String? tallaNumero,
-    String? tallaLetra,
-    String? colorHex,
-    String? colorNombre,
-    int? stock,
-    double? precio,
-    File? imagenLocal,
-  }) async {
-    if (productoId.isEmpty || variacionId.isEmpty) {
-      _setError('❌ IDs de producto y variación requeridos');
-      return false;
-    }
+  // --- ACTUALIZAR VARIACIÓN ---
+  Future<bool> actualizarVariacion(Variacion variacion) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
 
-    _setCargandoAccion(true);
-    
     try {
-      debugPrint('🔄 Actualizando variación: $variacionId');
+      await _service.actualizarVariacionDesdeModelo(variacion);
       
-      await _variacionService.actualizarVariacion(
-        productoId: productoId,
-        variacionId: variacionId,
-        tallaNumero: tallaNumero,
-        tallaLetra: tallaLetra,
-        colorHex: colorHex,
-        colorNombre: colorNombre,
-        stock: stock,
-        precio: precio,
-        imagenLocal: imagenLocal,
-      );
-
-      // Recargar variaciones para mostrar cambios
-      await cargarVariaciones(productoId);
+      // Actualizar en la lista local
+      final index = _variaciones.indexWhere((v) => v.id == variacion.id);
+      if (index != -1) {
+        _variaciones[index] = variacion;
+      }
       
-      _setCargandoAccion(false);
-      _showSuccessMessage('✅ Variación actualizada exitosamente');
-      debugPrint('✅ Variación actualizada correctamente');
-      return true;
-      
-    } catch (e) {
-      debugPrint('❌ Error al actualizar variación: $e');
-      _setCargandoAccion(false);
-      _setError(e.toString());
-      return false;
-    }
-  }
-
-  /// Actualiza una variación usando el modelo completo
-  Future<bool> actualizarVariacionDesdeModelo(Variacion variacion) async {
-    if (variacion.id == null || variacion.productoId.isEmpty) {
-      _setError('❌ Variación incompleta para actualización');
-      return false;
-    }
-
-    _setCargandoAccion(true);
-    
-    try {
-      debugPrint('🔄 Actualizando variación desde modelo...');
-      await _variacionService.actualizarVariacionDesdeModelo(variacion);
-      
-      // Recargar variaciones
+      // O recargar todas las variaciones
       await cargarVariaciones(variacion.productoId);
       
-      _setCargandoAccion(false);
-      _showSuccessMessage('✅ Variación actualizada exitosamente');
+      debugPrint('✅ Variación actualizada exitosamente');
       return true;
-      
     } catch (e) {
+      _error = e.toString();
       debugPrint('❌ Error al actualizar variación: $e');
-      _setCargandoAccion(false);
-      _setError(e.toString());
+      _isLoading = false;
+      notifyListeners();
       return false;
     }
   }
 
-  /// Elimina una variación
+  // --- ELIMINAR VARIACIÓN ---
   Future<bool> eliminarVariacion({
     required String productoId,
     required String variacionId,
   }) async {
-    if (productoId.isEmpty || variacionId.isEmpty) {
-      _setError('❌ IDs de producto y variación requeridos');
-      return false;
-    }
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
 
-    _setCargandoAccion(true);
-    
     try {
-      debugPrint('🔄 Eliminando variación: $variacionId');
-      await _variacionService.eliminarVariacion(
+      await _service.eliminarVariacion(
         productoId: productoId,
         variacionId: variacionId,
       );
-
-      // Remover de la lista local
-      _variaciones.removeWhere((v) => v['_id'] == variacionId);
       
-      _setCargandoAccion(false);
-      _showSuccessMessage('✅ Variación eliminada exitosamente');
-      debugPrint('✅ Variación eliminada correctamente');
+      // Eliminar de la lista local
+      _variaciones.removeWhere((v) => v.id == variacionId);
+      
+      debugPrint('✅ Variación eliminada exitosamente');
+      _isLoading = false;
       notifyListeners();
       return true;
-      
     } catch (e) {
+      _error = e.toString();
       debugPrint('❌ Error al eliminar variación: $e');
-      _setCargandoAccion(false);
-      _setError(e.toString());
+      _isLoading = false;
+      notifyListeners();
       return false;
     }
   }
 
-  /// Reduce el stock de una variación
-  Future<Map<String, dynamic>?> reducirStock({
+  // --- REDUCIR STOCK ---
+  Future<bool> reducirStock({
     required String productoId,
     required String variacionId,
     required int cantidad,
   }) async {
-    if (productoId.isEmpty || variacionId.isEmpty || cantidad <= 0) {
-      _setError('❌ Parámetros inválidos para reducir stock');
-      return null;
-    }
+    _error = null;
 
-    _setCargandoAccion(true);
-    
     try {
-      debugPrint('🔄 Reduciendo stock: $cantidad unidades');
-      final resultado = await _variacionService.reducirStockVariacion(
+      final result = await _service.reducirStockVariacion(
         productoId: productoId,
         variacionId: variacionId,
         cantidad: cantidad,
       );
-
-      // Actualizar el stock en la lista local
-      _actualizarStockLocal(variacionId, resultado);
       
-      _setCargandoAccion(false);
-      _showSuccessMessage('✅ Stock reducido exitosamente');
-      debugPrint('✅ Stock reducido correctamente');
-      return resultado;
+      // Actualizar stock localmente
+      final index = _variaciones.indexWhere((v) => v.id == variacionId);
+      if (index != -1) {
+        _variaciones[index] = _variaciones[index].copyWith(
+          stock: result['variacion']['stock'] as int,
+        );
+      }
       
-    } catch (e) {
-      debugPrint('❌ Error al reducir stock: $e');
-      _setCargandoAccion(false);
-      _setError(e.toString());
-      return null;
-    }
-  }
-
-  // --- MÉTODOS DE UTILIDAD ---
-
-  /// Obtiene una variación específica por ID
-  Map<String, dynamic>? obtenerVariacionPorId(String variacionId) {
-    try {
-      return _variaciones.firstWhere((v) => v['_id'] == variacionId);
-    } catch (e) {
-      debugPrint('⚠️ Variación no encontrada: $variacionId');
-      return null;
-    }
-  }
-
-  /// Filtra variaciones por color
-  List<Map<String, dynamic>> obtenerVariacionesPorColor(String colorHex) {
-    return _variaciones.where((v) {
-      final color = v['color'];
-      return color != null && color['hex'] == colorHex;
-    }).toList();
-  }
-
-  /// Filtra variaciones por talla
-  List<Map<String, dynamic>> obtenerVariacionesPorTalla({
-    String? tallaNumero,
-    String? tallaLetra,
-  }) {
-    return _variaciones.where((v) {
-      if (tallaNumero != null && v['tallaNumero'] != tallaNumero) return false;
-      if (tallaLetra != null && v['tallaLetra'] != tallaLetra) return false;
-      return true;
-    }).toList();
-  }
-
-  /// Obtiene variaciones con stock disponible
-  List<Map<String, dynamic>> obtenerVariacionesConStock() {
-    return _variaciones.where((v) => (v['stock'] ?? 0) > 0).toList();
-  }
-
-  /// Limpia el estado del provider
-  void limpiarEstado() {
-    _variaciones.clear();
-    _mensajeError = null;
-    _estado = VariacionEstado.initial;
-    _cargandoAccion = false;
-    notifyListeners();
-    debugPrint('🧹 Estado del provider limpiado');
-  }
-
-  /// Limpia solo el mensaje de error
-  void limpiarError() {
-    _mensajeError = null;
-    if (_estado == VariacionEstado.error) {
-      _estado = _variaciones.isEmpty ? VariacionEstado.initial : VariacionEstado.loaded;
-    }
-    notifyListeners();
-  }
-
-  // --- MÉTODOS PRIVADOS ---
-
-  void _setEstado(VariacionEstado nuevoEstado) {
-    _estado = nuevoEstado;
-    if (nuevoEstado != VariacionEstado.error) {
-      _mensajeError = null;
-    }
-    notifyListeners();
-  }
-
-  void _setError(String mensaje) {
-    _mensajeError = mensaje;
-    _estado = VariacionEstado.error;
-    notifyListeners();
-  }
-
-  void _setCargandoAccion(bool cargando) {
-    _cargandoAccion = cargando;
-    notifyListeners();
-  }
-
-  void _showSuccessMessage(String mensaje) {
-    debugPrint(mensaje);
-    // Aquí podrías mostrar un SnackBar o notificación de éxito
-    // si tienes acceso al context o un servicio de notificaciones
-  }
-
-  void _actualizarStockLocal(String variacionId, Map<String, dynamic> nuevosdatos) {
-    final index = _variaciones.indexWhere((v) => v['_id'] == variacionId);
-    if (index != -1) {
-      _variaciones[index] = {..._variaciones[index], ...nuevosdatos};
+      debugPrint('✅ Stock reducido exitosamente');
       notifyListeners();
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      debugPrint('❌ Error al reducir stock: $e');
+      notifyListeners();
+      return false;
     }
+  }
+
+  // --- MÉTODOS AUXILIARES ---
+
+  // Obtener variación por ID
+  Variacion? obtenerVariacionPorId(String variacionId) {
+    try {
+      return _variaciones.firstWhere((v) => v.id == variacionId);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Filtrar variaciones por color
+  List<Variacion> filtrarPorColor(String colorHex) {
+    return _variaciones.where((v) => v.colorHex == colorHex).toList();
+  }
+
+  // Filtrar variaciones por talla
+  List<Variacion> filtrarPorTalla({String? tallaNumero, String? tallaLetra}) {
+    return _variaciones.where((v) {
+      if (tallaNumero != null && v.tallaNumero == tallaNumero) return true;
+      if (tallaLetra != null && v.tallaLetra == tallaLetra) return true;
+      return false;
+    }).toList();
+  }
+
+  // Obtener variaciones con stock disponible
+  List<Variacion> obtenerConStock() {
+    return _variaciones.where((v) => v.stock > 0).toList();
+  }
+
+  // Obtener variaciones sin stock
+  List<Variacion> obtenerSinStock() {
+    return _variaciones.where((v) => v.stock == 0).toList();
+  }
+
+  // Obtener total de stock
+  int get totalStock {
+    return _variaciones.fold(0, (sum, v) => sum + v.stock);
+  }
+
+  // Obtener colores únicos
+  List<String> get coloresUnicos {
+    final colores = _variaciones
+        .where((v) => v.colorHex != null)
+        .map((v) => v.colorHex!)
+        .toSet()
+        .toList();
+    return colores;
+  }
+
+  // Obtener tallas únicas
+  Map<String, List<String>> get tallasUnicas {
+    final tallasNumero = _variaciones
+        .where((v) => v.tallaNumero != null && v.tallaNumero!.isNotEmpty)
+        .map((v) => v.tallaNumero!)
+        .toSet()
+        .toList();
+    
+    final tallasLetra = _variaciones
+        .where((v) => v.tallaLetra != null && v.tallaLetra!.isNotEmpty)
+        .map((v) => v.tallaLetra!)
+        .toSet()
+        .toList();
+    
+    return {
+      'numero': tallasNumero,
+      'letra': tallasLetra,
+    };
+  }
+
+  // Limpiar variaciones
+  void limpiar() {
+    _variaciones = [];
+    _error = null;
+    _isLoading = false;
+    notifyListeners();
   }
 
   @override
   void dispose() {
-    debugPrint('🗑️ VariacionProvider disposed');
+    _variaciones = [];
     super.dispose();
   }
 }

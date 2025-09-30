@@ -8,7 +8,7 @@ import 'widgets/error_message.dart';
 import 'widgets/top_icons.dart';
 import 'widgets/categoria_skeleton.dart';
 import 'widgets/connection_error_widget.dart';
-import 'styles/control_panel_styles.dart';
+import 'styles/control_panel/control_panel_styles.dart';
 
 // 👇 AGREGAR: Importar el routeObserver
 import '../../main.dart';

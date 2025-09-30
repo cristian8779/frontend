@@ -26,8 +26,8 @@ class ProductoProvider extends ChangeNotifier {
   List<Map<String, dynamic>> _categorias = [];
   Map<String, dynamic> _filtrosDisponibles = {};
   
-  // === PAGINACIÓN - CORREGIDA ===
-  int _page = 0; // ← CAMBIO: Empezar desde 0 como el provider funcional
+  // === PAGINACION ===
+  int _page = 0;
   int _totalProductos = 0;
   bool _hasMore = true;
   static const int _pageSize = 20;
@@ -36,7 +36,7 @@ class ProductoProvider extends ChangeNotifier {
   DateTime? _lastFetch;
   static const Duration _cacheDuration = Duration(minutes: 5);
 
-  // === FILTROS Y BÚSQUEDA ===
+  // === FILTROS Y BUSQUEDA ===
   String _busqueda = '';
   String? _categoriaSeleccionada;
   String? _subcategoriaSeleccionada;
@@ -92,21 +92,17 @@ class ProductoProvider extends ChangeNotifier {
   int get totalFiltrados => _productosFiltrados.length;
   int get totalCategorias => _categorias.length;
 
-  // === MÉTODOS AUXILIARES PARA MANEJAR IDs ===
+  // === METODOS AUXILIARES PARA MANEJAR IDs ===
   
-  /// Método auxiliar para obtener el ID de un producto de manera consistente
   String _obtenerIdProducto(Map<String, dynamic> producto) {
     return producto['_id']?.toString() ?? producto['id']?.toString() ?? '';
   }
   
-  /// Método auxiliar para encontrar un producto por ID (maneja tanto _id como id)
   Map<String, dynamic>? _encontrarProductoPorId(String id, List<Map<String, dynamic>> lista) {
     try {
-      // Buscar por _id primero
       return lista.firstWhere((producto) => producto['_id']?.toString() == id);
     } catch (e) {
       try {
-        // Si no encuentra por _id, buscar por id
         return lista.firstWhere((producto) => producto['id']?.toString() == id);
       } catch (e) {
         return null;
@@ -114,82 +110,76 @@ class ProductoProvider extends ChangeNotifier {
     }
   }
 
-  /// Método auxiliar para remover un producto por ID (maneja tanto _id como id)
   void _removerProductoPorId(String id, List<Map<String, dynamic>> lista) {
-    // Remover por _id
     lista.removeWhere((p) => p['_id']?.toString() == id);
-    // Remover por id (por si acaso)
     lista.removeWhere((p) => p['id']?.toString() == id);
   }
 
-  // === MÉTODOS PRINCIPALES CORREGIDOS ===
+  // === METODOS PRINCIPALES ===
 
-  /// Inicializar datos (categorías y productos iniciales)
   Future<void> inicializar() async {
     if (_state == ProductoState.loading) return;
 
-    debugPrint('🔄 Inicializando ProductoProvider...');
+    debugPrint('Inicializando ProductoProvider...');
     _setState(ProductoState.loading);
     _limpiarError();
 
     try {
-      // Cargar categorías y filtros en paralelo
       await Future.wait([
         _cargarCategorias(),
         _cargarFiltrosDisponibles(),
       ]);
-      debugPrint('✅ Categorías y filtros cargados');
+      debugPrint('Categorias y filtros cargados');
 
-      // Cargar productos iniciales
       await cargarProductos(forceRefresh: true);
-      debugPrint('✅ Productos iniciales cargados');
+      debugPrint('Productos iniciales cargados');
       
     } catch (e) {
-      debugPrint('❌ Error en inicializar: $e');
+      debugPrint('Error en inicializar: $e');
       _manejarError(e, 'Error al inicializar datos');
     }
   }
 
-  /// Cargar productos iniciales o con filtros nuevos
   Future<void> cargarProductos({
     bool forceRefresh = false,
     bool mostrarLoading = true,
   }) async {
-    // Cache check
-    if (!forceRefresh &&
-        _productos.isNotEmpty &&
-        _lastFetch != null &&
-        DateTime.now().difference(_lastFetch!) < _cacheDuration) {
-      debugPrint("⏩ Usando cache de productos (última carga hace menos de 5 min)");
-      return;
-    }
-
-    // ✅ CORREGIDO: Reset completo para nueva búsqueda/filtros
-    _page = 0;
-    _hasMore = true;
+    debugPrint('cargarProductos - forceRefresh: $forceRefresh');
     
     if (forceRefresh) {
-      debugPrint("🔄 Refrescando productos (forceRefresh: true)...");
+      debugPrint('Force refresh activado - limpiando datos...');
       _productos.clear();
+      _productosFiltrados.clear();
+      _page = 0;
+      _hasMore = true;
+      _lastFetch = null;
       _setState(ProductoState.refreshing);
       notifyListeners();
+    } else {
+      if (_productos.isNotEmpty &&
+          _lastFetch != null &&
+          DateTime.now().difference(_lastFetch!) < _cacheDuration) {
+        debugPrint("Usando cache (ultima carga hace menos de 5 min)");
+        return;
+      }
+      
+      _page = 0;
+      _hasMore = true;
     }
 
     await _fetchProductos(isFirstLoad: true, mostrarLoading: mostrarLoading);
   }
 
-  /// ✅ CORREGIDO: Método separado para cargar más productos
   Future<void> cargarMasProductos({bool mostrarLoading = true}) async {
     if (isLoadingMore || !_hasMore) {
-      debugPrint("⚠️ No se cargan más productos (isLoadingMore=$isLoadingMore, hasMore=$_hasMore)");
+      debugPrint("No se cargan mas productos (isLoadingMore=$isLoadingMore, hasMore=$_hasMore)");
       return;
     }
     
-    debugPrint("➡️ Cargando más productos (página ${_page + 1})...");
+    debugPrint("Cargando mas productos (pagina ${_page + 1})...");
     await _fetchProductos(isFirstLoad: false, mostrarLoading: mostrarLoading);
   }
 
-  /// ✅ NUEVO: Método interno simplificado y claro
   Future<void> _fetchProductos({
     required bool isFirstLoad,
     bool mostrarLoading = true,
@@ -200,13 +190,13 @@ class ProductoProvider extends ChangeNotifier {
     }
 
     try {
-      // ✅ CORREGIDO: Solo incrementar página si NO es primera carga
       if (!isFirstLoad) {
         _page++;
       }
       
       final filtros = _construirFiltros();
-      debugPrint('🌐 Llamando API - Página: $_page, Límite: $_pageSize');
+      debugPrint('=== FETCHING PRODUCTOS ===');
+      debugPrint('Pagina: $_page, Limite: $_pageSize');
       
       final response = await _productoService.obtenerProductosPaginados(filtros);
 
@@ -215,28 +205,35 @@ class ProductoProvider extends ChangeNotifier {
       );
       final total = response['total'] ?? 0;
 
-      // ✅ CORREGIDO: Lógica clara de append/replace
-      if (isFirstLoad) {
-        _productos = nuevosProductos;
-        debugPrint('🔄 Productos reemplazados: ${nuevosProductos.length}');
-      } else {
-        _productos.addAll(nuevosProductos);
-        debugPrint('➕ Productos añadidos: ${nuevosProductos.length}');
+      debugPrint('Respuesta del servidor:');
+      debugPrint('  - Productos recibidos: ${nuevosProductos.length}');
+      debugPrint('  - Total en servidor: $total');
+      if (nuevosProductos.isNotEmpty) {
+        debugPrint('  - IDs recibidos: ${nuevosProductos.map((p) => p['_id']).take(3).toList()}...');
       }
 
-      // ✅ CORREGIDO: Actualizar estado de paginación
+      if (isFirstLoad) {
+        _productos = nuevosProductos;
+        debugPrint('Productos REEMPLAZADOS: ${nuevosProductos.length}');
+      } else {
+        _productos.addAll(nuevosProductos);
+        debugPrint('Productos AÑADIDOS: ${nuevosProductos.length}');
+      }
+
       _hasMore = _productos.length < total;
       _totalProductos = total;
       _lastFetch = DateTime.now();
 
-      debugPrint('📦 Página $_page cargada: ${nuevosProductos.length} productos (total: ${_productos.length}/$total, hasMore: $_hasMore)');
+      debugPrint('Estado final:');
+      debugPrint('  - Total local: ${_productos.length}');
+      debugPrint('  - Total servidor: $_totalProductos');
+      debugPrint('  - Hay mas: $_hasMore');
 
-      // ✅ CORREGIDO: Auto-carga solo en primera carga y si faltan pocos
       if (isFirstLoad &&
           _productos.length < total &&
           (total - _productos.length) <= _pageSize &&
-          total <= 40) { // Limitar auto-carga para listas muy grandes
-        debugPrint('⚡ Auto-cargando página restante...');
+          total <= 40) {
+        debugPrint('Auto-cargando pagina restante...');
         await cargarMasProductos(mostrarLoading: false);
       }
 
@@ -244,29 +241,36 @@ class ProductoProvider extends ChangeNotifier {
       _setState(ProductoState.loaded);
 
     } on SocketException {
-      _errorMessage = 'Sin conexión a internet';
-      debugPrint("❌ Error: $_errorMessage");
+      _errorMessage = 'Sin conexion a internet';
+      debugPrint("Error: $_errorMessage");
       _setState(ProductoState.error);
     } on TimeoutException {
       _errorMessage = 'Tiempo de espera agotado';
-      debugPrint("❌ Error: $_errorMessage");
+      debugPrint("Error: $_errorMessage");
       _setState(ProductoState.error);
     } catch (e) {
-      debugPrint('❌ Error cargando productos: $e');
+      debugPrint('Error cargando productos: $e');
       _manejarError(e, 'Error al cargar productos');
     }
   }
 
-  /// Refrescar todos los datos
   Future<void> refrescar() async {
-    debugPrint('🔄 Refrescando datos...');
+    debugPrint('=== REFRESH FORZADO ===');
+    
+    _productos.clear();
+    _productosFiltrados.clear();
+    _page = 0;
+    _hasMore = true;
+    _lastFetch = null;
+    
+    debugPrint('Cache limpiado completamente');
+    
     await cargarProductos(forceRefresh: true);
   }
 
-  /// Buscar productos - CORREGIDO
   void buscarProductos(String query) {
     final nuevaBusqueda = query.trim();
-    debugPrint('🔍 Buscando productos: "$nuevaBusqueda"');
+    debugPrint('Buscando productos: "$nuevaBusqueda"');
     
     if (_busqueda != nuevaBusqueda) {
       _busqueda = nuevaBusqueda;
@@ -278,9 +282,8 @@ class ProductoProvider extends ChangeNotifier {
     }
   }
 
-  /// Filtrar por categoría - CORREGIDO
   void filtrarPorCategoria(String? categoriaId) {
-    debugPrint('🏷️ Filtrando por categoría: $categoriaId');
+    debugPrint('Filtrando por categoria: $categoriaId');
     
     if (_categoriaSeleccionada != categoriaId) {
       _categoriaSeleccionada = categoriaId;
@@ -290,7 +293,6 @@ class ProductoProvider extends ChangeNotifier {
     }
   }
 
-  /// Filtrar por subcategoría
   void filtrarPorSubcategoria(String? subcategoriaId) {
     if (_subcategoriaSeleccionada != subcategoriaId) {
       _subcategoriaSeleccionada = subcategoriaId;
@@ -299,7 +301,6 @@ class ProductoProvider extends ChangeNotifier {
     }
   }
 
-  /// Aplicar filtros múltiples
   void aplicarFiltros({
     String? busqueda,
     String? categoria,
@@ -349,7 +350,6 @@ class ProductoProvider extends ChangeNotifier {
     }
   }
 
-  /// Limpiar filtros
   void limpiarFiltros() {
     _busqueda = '';
     _categoriaSeleccionada = null;
@@ -363,7 +363,6 @@ class ProductoProvider extends ChangeNotifier {
     cargarProductos(forceRefresh: true);
   }
 
-  /// Cambiar ordenamiento
   void cambiarOrdenamiento(String sortBy, {bool? ascending}) {
     _sortBy = sortBy;
     if (ascending != null) {
@@ -378,7 +377,6 @@ class ProductoProvider extends ChangeNotifier {
 
   // === CRUD OPERATIONS ===
 
-  /// Crear producto
   Future<bool> crearProducto({
     required String nombre,
     required String descripcion,
@@ -406,15 +404,13 @@ class ProductoProvider extends ChangeNotifier {
         imagenLocal: imagenLocal,
       );
 
-      // NUEVO: Si el servicio retorna el producto creado, agregarlo localmente
       if (productoCreado != null) {
         _productos.insert(0, Map<String, dynamic>.from(productoCreado));
         _aplicarFiltrosLocales();
         _setState(ProductoState.loaded);
-        debugPrint('✅ Producto creado y agregado localmente: $nombre');
+        debugPrint('Producto creado y agregado localmente: $nombre');
         return true;
       } else {
-        // Si no retorna el producto, recargar todo
         await refrescar();
         return true;
       }
@@ -425,10 +421,8 @@ class ProductoProvider extends ChangeNotifier {
     }
   }
 
-  /// Obtener producto por ID - CORREGIDO
   Future<Map<String, dynamic>?> obtenerProductoPorId(String id) async {
     try {
-      // Primero intentar encontrar en la lista local
       Map<String, dynamic>? producto = _encontrarProductoPorId(id, _productos);
       
       if (producto != null) {
@@ -437,7 +431,6 @@ class ProductoProvider extends ChangeNotifier {
         return _productoSeleccionado;
       }
 
-      // Si no está en local, hacer llamada al servicio
       _productoSeleccionado = await _productoService.obtenerProductoPorId(id);
       notifyListeners();
       return _productoSeleccionado;
@@ -447,7 +440,6 @@ class ProductoProvider extends ChangeNotifier {
     }
   }
 
-/// Actualizar producto - CORREGIDO
   Future<bool> actualizarProducto({
     required String id,
     required String nombre,
@@ -460,14 +452,14 @@ class ProductoProvider extends ChangeNotifier {
     required String estado,
     File? imagenLocal,
   }) async {
+    debugPrint('Iniciando actualizacion - ID: $id');
     _setState(ProductoState.updating);
     _limpiarError();
 
-    // Almacenar el producto que se está actualizando
     _productoSeleccionado = _encontrarProductoPorId(id, _productos);
+    debugPrint('   - Producto encontrado para actualizar: ${_productoSeleccionado?['nombre']}');
 
     try {
-      // Llamada al servicio
       final productoActualizado = await _productoService.actualizarProducto(
         id: id,
         nombre: nombre,
@@ -481,15 +473,19 @@ class ProductoProvider extends ChangeNotifier {
         imagenLocal: imagenLocal,
       );
 
-      // CORREGIDO: Actualizar producto localmente sin recargar todo
       final index = _productos.indexWhere((p) => 
         p['_id']?.toString() == id || p['id']?.toString() == id);
       
+      debugPrint('   - Producto encontrado en indice: $index');
+      
       if (index != -1) {
-        // Si el servicio retorna el producto actualizado, usarlo
-        // Si no, construir el producto actualizado con los datos locales
-        final productoActualizadoLocal = productoActualizado ?? {
-          ..._productos[index], // Mantener datos existentes
+        final productoOriginal = _productos[index];
+        debugPrint('   - ID original: ${productoOriginal['_id']}');
+        
+        final productoActualizadoLocal = {
+          '_id': productoOriginal['_id'],
+          'id': productoOriginal['id'] ?? productoOriginal['_id'],
+          
           'nombre': nombre,
           'descripcion': descripcion,
           'precio': precio,
@@ -499,29 +495,44 @@ class ProductoProvider extends ChangeNotifier {
           'disponible': disponible,
           'estado': estado,
           'updatedAt': DateTime.now().toIso8601String(),
-          // NUEVO: Si hay imagen local, actualizar también el campo imagen
-          if (imagenLocal != null) 'imagen': productoActualizado?['imagen'] ?? _productos[index]['imagen'],
+          
+          'createdAt': productoOriginal['createdAt'],
+          'imagen': imagenLocal != null 
+            ? (productoActualizado?['imagen'] ?? productoOriginal['imagen'])
+            : productoOriginal['imagen'],
+          'imagenUrl': imagenLocal != null 
+            ? (productoActualizado?['imagenUrl'] ?? productoOriginal['imagenUrl'])
+            : productoOriginal['imagenUrl'],
+          
+          ...Map.from(productoOriginal)..removeWhere((key, value) => [
+            'nombre', 'descripcion', 'precio', 'categoria', 'subcategoria', 
+            'stock', 'disponible', 'estado', 'updatedAt', 'imagen', 'imagenUrl'
+          ].contains(key)),
         };
         
-        // Actualizar el producto en la lista local
-        _productos[index] = Map<String, dynamic>.from(productoActualizadoLocal);
-        debugPrint('✅ Producto actualizado localmente: $nombre');
+        debugPrint('Producto actualizado - ID preservado: ${productoActualizadoLocal['_id']}');
+        debugPrint('   - Nombre: ${productoActualizadoLocal['nombre']}');
         
-        // IMPORTANTE: Aplicar filtros para actualizar AMBAS listas
+        _productos[index] = Map<String, dynamic>.from(productoActualizadoLocal);
+        
         _aplicarFiltrosLocales();
         
-        // Notificar cambios inmediatamente
+        debugPrint('DEBUG POST-ACTUALIZACION:');
+        debugPrint('   - Total productos: ${_productos.length}');
+        debugPrint('   - Total filtrados: ${_productosFiltrados.length}');
+        
         _setState(ProductoState.loaded);
-        notifyListeners(); // Forzar notificación adicional
+        
+        debugPrint('Actualizacion completada exitosamente');
         return true;
       } else {
-        // Si no se encuentra localmente, recargar todo
-        debugPrint('⚠️ Producto no encontrado localmente, recargando...');
+        debugPrint('Producto no encontrado localmente, recargando...');
         await refrescar();
         return true;
       }
 
     } catch (e) {
+      debugPrint('Error actualizando producto: $e');
       _manejarError(e, 'Error al actualizar producto');
       return false;
     } finally {
@@ -529,33 +540,64 @@ class ProductoProvider extends ChangeNotifier {
     }
   }
 
-  /// Eliminar producto - CORREGIDO
   Future<bool> eliminarProducto(String id) async {
+    debugPrint('=== ELIMINANDO PRODUCTO ===');
+    debugPrint('ID: $id');
+    
+    final productoAEliminar = _encontrarProductoPorId(id, _productos);
+    if (productoAEliminar != null) {
+      debugPrint('Producto: ${productoAEliminar['nombre']}');
+    }
+    
     _setState(ProductoState.deleting);
     _limpiarError();
 
     try {
+      debugPrint('Eliminando en servidor...');
       await _productoService.eliminarProducto(id);
+      debugPrint('Servidor confirma eliminacion');
       
-      // Remover de lista local (maneja tanto _id como id)
+      debugPrint('Eliminando localmente...');
+      final cantidadAntes = _productos.length;
+      
       _removerProductoPorId(id, _productos);
-      _aplicarFiltrosLocales();
+      _removerProductoPorId(id, _productosFiltrados);
       
-      _setState(ProductoState.loaded);
+      final cantidadDespues = _productos.length;
+      debugPrint('Productos: $cantidadAntes -> $cantidadDespues');
+      
+      _totalProductos = _productos.length;
+      
+      _lastFetch = null;
+      
+      debugPrint('Cache invalidado - proximo refresh traera datos frescos');
+      
+      _state = ProductoState.loaded;
+      notifyListeners();
+      
+      debugPrint('=== ELIMINACION EXITOSA ===');
       return true;
 
     } catch (e) {
+      debugPrint('Error eliminando: $e');
       _manejarError(e, 'Error al eliminar producto');
       return false;
     }
   }
 
-  /// Reducir stock - CORREGIDO
+  bool productoExiste(String id) {
+    return _encontrarProductoPorId(id, _productos) != null;
+  }
+
+  void forzarActualizacion() {
+    debugPrint('Forzando actualizacion de UI');
+    notifyListeners();
+  }
+
   Future<bool> reducirStock(String id, int cantidad) async {
     try {
       await _productoService.reducirStock(id, cantidad);
       
-      // Actualizar stock local
       final producto = _encontrarProductoPorId(id, _productos);
       if (producto != null) {
         final stockActual = (producto['stock'] as int?) ?? 0;
@@ -571,10 +613,10 @@ class ProductoProvider extends ChangeNotifier {
     }
   }
 
-  // === MÉTODOS PRIVADOS ===
+  // === METODOS PRIVADOS ===
 
   void _setState(ProductoState newState) {
-    debugPrint('🔄 Cambiando estado: $_state -> $newState');
+    debugPrint('Cambiando estado: $_state -> $newState');
     _state = newState;
     notifyListeners();
   }
@@ -585,7 +627,7 @@ class ProductoProvider extends ChangeNotifier {
   }
 
   void _manejarError(dynamic error, [String? contexto]) {
-    debugPrint('❌ Error en ProductoProvider: $error');
+    debugPrint('Error en ProductoProvider: $error');
     
     if (error is ProductoException) {
       _errorMessage = error.message;
@@ -598,23 +640,22 @@ class ProductoProvider extends ChangeNotifier {
   }
 
   Future<void> _cargarCategorias() async {
-    debugPrint('🏷️ Cargando categorías...');
+    debugPrint('Cargando categorias...');
     _categorias = await _productoService.obtenerCategorias();
-    debugPrint('✅ Categorías cargadas: ${_categorias.length}');
+    debugPrint('Categorias cargadas: ${_categorias.length}');
   }
 
   Future<void> _cargarFiltrosDisponibles() async {
-    debugPrint('🔧 Cargando filtros disponibles...');
+    debugPrint('Cargando filtros disponibles...');
     _filtrosDisponibles = await _productoService.obtenerFiltrosDisponibles();
-    debugPrint('✅ Filtros disponibles cargados: ${_filtrosDisponibles.keys}');
+    debugPrint('Filtros disponibles cargados: ${_filtrosDisponibles.keys}');
   }
 
-  /// CORREGIDO: Reset paginación igual que el provider funcional
   void _resetearPaginacion() {
-    _page = 0; // ← CAMBIO: Reset a 0
+    _page = 0;
     _hasMore = true;
     _productos.clear();
-    _lastFetch = null; // Invalidar cache
+    _lastFetch = null;
   }
 
   FiltrosBusqueda _construirFiltros() {
@@ -626,33 +667,32 @@ class ProductoProvider extends ChangeNotifier {
       tallas: _tallasFiltradas.isNotEmpty ? _tallasFiltradas : null,
       precioMin: _precioMin,
       precioMax: _precioMax,
-      page: _page, // ← CORREGIDO: Usar _page en lugar de _currentPage
+      page: _page,
       limit: _pageSize,
     );
     
-    // DEBUG
-    debugPrint('🔍 FILTROS: page=$_page, limit=$_pageSize, query=${_busqueda}');
+    debugPrint('FILTROS: page=$_page, limit=$_pageSize, query=${_busqueda}');
     
     return filtros;
   }
 
   void _aplicarFiltrosLocales() {
-    debugPrint('🏷️ Aplicando filtros locales a ${_productos.length} productos...');
+    debugPrint('Aplicando filtros locales a ${_productos.length} productos...');
     
-    // Para filtros del servidor, usar la lista completa
-    if (_tieneServidorFiltros()) {
-      _productosFiltrados = List.from(_productos);
-    } else {
-      _productosFiltrados = _productos.where((producto) {
-        return true; // Mostrar todos si no hay filtros del servidor
-      }).toList();
-    }
+    _productosFiltrados = _productos.map((producto) {
+      return Map<String, dynamic>.from(producto);
+    }).toList();
 
-    debugPrint('✅ Productos después del filtro: ${_productosFiltrados.length}');
+    debugPrint('Productos despues del filtro: ${_productosFiltrados.length}');
+    if (_productosFiltrados.isNotEmpty) {
+      debugPrint('   - Primer producto ID: ${_productosFiltrados.first['_id']}');
+      debugPrint('   - Primer producto nombre: ${_productosFiltrados.first['nombre']}');
+    }
+    
     _aplicarOrdenamiento();
   }
 
-  bool _tieneServidorFiltros() {
+  bool _tieneFiltrosActivos() {
     return _busqueda.isNotEmpty ||
            _categoriaSeleccionada != null ||
            _subcategoriaSeleccionada != null ||
@@ -682,7 +722,7 @@ class ProductoProvider extends ChangeNotifier {
           final fechaB = DateTime.tryParse(b['createdAt']?.toString() ?? '') ?? DateTime.now();
           comparison = fechaA.compareTo(fechaB);
           break;
-        default: // nombre
+        default:
           final nombreA = a['nombre']?.toString().toLowerCase() ?? '';
           final nombreB = b['nombre']?.toString().toLowerCase() ?? '';
           comparison = nombreA.compareTo(nombreB);
@@ -690,7 +730,7 @@ class ProductoProvider extends ChangeNotifier {
       
       return _sortAscending ? comparison : -comparison;
     });
-    debugPrint('🔄 Productos ordenados por $_sortBy (${_sortAscending ? 'ASC' : 'DESC'})');
+    debugPrint('Productos ordenados por $_sortBy (${_sortAscending ? 'ASC' : 'DESC'})');
   }
 
   bool _listEquals<T>(List<T> list1, List<T> list2) {
@@ -701,30 +741,25 @@ class ProductoProvider extends ChangeNotifier {
     return true;
   }
 
-  // === UTILIDADES PÚBLICAS ===
+  // === UTILIDADES PUBLICAS ===
 
-  /// Método para mostrar todos los productos (quitar filtros de categoría pero mantener búsqueda)
   void mostrarTodosLosProductos() {
-    debugPrint('🔄 Mostrando todos los productos (quitando filtro de categoría)');
+    debugPrint('Mostrando todos los productos (quitando filtro de categoria)');
     
-    // Solo limpiar filtro de categoría, mantener búsqueda si existe
     final busquedaActual = _busqueda;
     
     _categoriaSeleccionada = null;
     _subcategoriaSeleccionada = null;
     
-    // Si había búsqueda, mantenerla y recargar con ese filtro
     if (busquedaActual.isNotEmpty) {
       _resetearPaginacion();
       cargarProductos(forceRefresh: true);
     } else {
-      // Si no hay búsqueda, simplemente aplicar filtros locales sin recargar
       _aplicarFiltrosLocales();
       notifyListeners();
     }
   }
 
-  /// Productos aleatorios - igual que el provider funcional
   List<Map<String, dynamic>> obtenerProductosAleatorios(int cantidad) {
     if (_productos.isEmpty) return [];
     final copia = List<Map<String, dynamic>>.from(_productos);
@@ -732,7 +767,6 @@ class ProductoProvider extends ChangeNotifier {
     return copia.take(cantidad).toList();
   }
 
-  /// Filtrar por categoría - igual que el provider funcional
   List<Map<String, dynamic>> filtrarPorCategoriaLocal(String? categoria) {
     if (categoria == null || categoria.isEmpty) return _productos;
     return _productos.where((p) {
@@ -741,9 +775,8 @@ class ProductoProvider extends ChangeNotifier {
     }).toList();
   }
 
-  /// Reintentar última operación fallida
   Future<void> reintentar() async {
-    debugPrint('🔄 Reintentando operación...');
+    debugPrint('Reintentando operacion...');
     switch (_state) {
       case ProductoState.error:
         await inicializar();
@@ -753,9 +786,8 @@ class ProductoProvider extends ChangeNotifier {
     }
   }
 
-  /// Limpiar datos - igual que el provider funcional
   void limpiar() {
-    debugPrint('🧹 Limpiando datos del provider...');
+    debugPrint('Limpiando datos del provider...');
     _productos.clear();
     _productosFiltrados.clear();
     _categorias.clear();
@@ -775,19 +807,17 @@ class ProductoProvider extends ChangeNotifier {
     _setState(ProductoState.initial);
   }
 
-  /// Obtener nombre de categoría por ID
   String obtenerNombreCategoria(String? categoriaId) {
-    if (categoriaId == null) return 'Sin categoría';
+    if (categoriaId == null) return 'Sin categoria';
     
     final categoria = _categorias.firstWhere(
       (cat) => cat['_id'] == categoriaId,
       orElse: () => <String, dynamic>{},
     );
     
-    return categoria['nombre']?.toString() ?? 'Categoría desconocida';
+    return categoria['nombre']?.toString() ?? 'Categoria desconocida';
   }
 
-  /// Verificar si hay filtros activos
   bool get tieneFiltrosActivos {
     return _busqueda.isNotEmpty ||
            _categoriaSeleccionada != null ||
@@ -800,7 +830,7 @@ class ProductoProvider extends ChangeNotifier {
 
   @override
   void dispose() {
-    debugPrint('🧹 Disposing ProductoProvider...');
+    debugPrint('Disposing ProductoProvider...');
     super.dispose();
   }
 }

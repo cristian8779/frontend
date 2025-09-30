@@ -180,55 +180,62 @@ class _CrearProductoScreenState extends State<CrearProductoScreen> {
     );
   }
 
-  Future<void> guardarProducto() async {
-    if (!_formKey.currentState!.validate()) return;
+ // Función corregida para guardarProducto en CrearProductoScreen
 
-    if (imagenSeleccionada == null || categoriaSeleccionada == null) {
-      _showSnackBar('Por favor, completa todos los campos requeridos.', isError: true);
-      return;
-    }
+Future<void> guardarProducto() async {
+  if (!_formKey.currentState!.validate()) return;
 
-    final provider = context.read<ProductoProvider>();
-    final int? stockGeneral = int.tryParse(stockController.text.trim());
-    final double precioValue = _extractPriceValue(precioController.text);
+  if (imagenSeleccionada == null || categoriaSeleccionada == null) {
+    _showSnackBar('Por favor, completa todos los campos requeridos.', isError: true);
+    return;
+  }
 
-    try {
-      final exito = await provider.crearProducto(
-        nombre: nombreController.text.trim(),
-        descripcion: descripcionController.text.trim(),
-        precio: precioValue,
-        categoria: categoriaSeleccionada!['_id'],
-        subcategoria: subcategoriaSeleccionada ?? '',
-        stock: stockGeneral ?? 0,
-        disponible: disponible,
-        estado: 'activo',
-        imagenLocal: imagenSeleccionada!,
-      );
+  final provider = context.read<ProductoProvider>();
+  final int? stockGeneral = int.tryParse(stockController.text.trim());
+  final double precioValue = _extractPriceValue(precioController.text);
 
-      if (mounted) {
-        if (exito) {
-          _showSnackBar('¡Producto creado exitosamente!');
-          
-          // Pequeña pausa para mostrar el mensaje de éxito
-          await Future.delayed(const Duration(milliseconds: 1500));
-          
-          // Redirigir a la pantalla de gestión de productos
-          if (mounted) {
-            Navigator.of(context).pushReplacementNamed('/gestion-productos');
-          }
-        } else {
-          _showSnackBar(
-            provider.errorMessage ?? 'Error al crear producto',
-            isError: true
-          );
+  try {
+    final exito = await provider.crearProducto(
+      nombre: nombreController.text.trim(),
+      descripcion: descripcionController.text.trim(),
+      precio: precioValue,
+      categoria: categoriaSeleccionada!['_id'],
+      subcategoria: subcategoriaSeleccionada ?? '',
+      stock: stockGeneral ?? 0,
+      disponible: disponible,
+      estado: 'activo',
+      imagenLocal: imagenSeleccionada!,
+    );
+
+    if (mounted) {
+      if (exito) {
+        _showSnackBar('¡Producto creado exitosamente!');
+        
+        // ✅ CORREGIDO: Forzar actualización del provider
+        debugPrint('🔄 Refrescando provider después de crear producto');
+        await provider.refrescar();
+        
+        // Pequeña pausa para mostrar el mensaje de éxito
+        await Future.delayed(const Duration(milliseconds: 1500));
+        
+        // ✅ CORREGIDO: Pop con resultado true para notificar éxito
+        if (mounted) {
+          debugPrint('✅ Producto creado exitosamente, regresando con resultado true');
+          Navigator.of(context).pop(true); // ← Esto notifica que se creó un producto
         }
+      } else {
+        _showSnackBar(
+          provider.errorMessage ?? 'Error al crear producto',
+          isError: true
+        );
       }
-    } catch (e) {
-      if (mounted) {
-        _showSnackBar('Error al crear producto: ${e.toString()}', isError: true);
-      }
+    }
+  } catch (e) {
+    if (mounted) {
+      _showSnackBar('Error al crear producto: ${e.toString()}', isError: true);
     }
   }
+}
 
   void _resetForm() {
     nombreController.clear();

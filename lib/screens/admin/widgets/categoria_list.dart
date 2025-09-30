@@ -4,7 +4,7 @@ import '../../../services/categoria_service.dart';
 import '../categoria_preview_screen.dart';
 import '../create_category_screen.dart';
 import '/models/categoria.dart';
-import '../styles/categoria_list_styles.dart'; // Import de los estilos
+import '../styles/categoria_list/categoria_list_styles.dart'; // Import de los estilos
 
 class CategoriaList extends StatelessWidget {
   final List<Map<String, dynamic>> categorias;

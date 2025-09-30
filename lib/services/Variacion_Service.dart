@@ -155,8 +155,10 @@ class VariacionService {
         final data = jsonDecode(response.body);
         final variaciones = List<Map<String, dynamic>>.from(data['variaciones'] ?? []);
 
+        // ✅ Forzar productoId en cada variación
         for (final v in variaciones) {
-          debugPrint("🆔 VARIACIÓN ID: ${v['_id']}");
+          v['productoId'] = productoId;
+          debugPrint("🆔 VARIACIÓN ID: ${v['_id']} (productoId: ${v['productoId']})");
         }
 
         return variaciones;

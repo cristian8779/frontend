@@ -23,6 +23,9 @@ class Variacion {
     List<ImagenVariacion>? imagenes,
   }) : imagenes = imagenes ?? [];
 
+  /// ======================
+  /// JSON
+  /// ======================
   factory Variacion.fromJson(Map<String, dynamic> json) {
     return Variacion(
       id: json['_id'] as String?,
@@ -59,6 +62,73 @@ class Variacion {
       'imagenes': imagenes.map((img) => img.toJson()).toList(),
     };
   }
+
+  /// ======================
+  /// copyWith
+  /// ======================
+  Variacion copyWith({
+    String? id,
+    String? productoId,
+    String? tallaLetra,
+    String? tallaNumero,
+    String? colorHex,
+    String? colorNombre,
+    double? precio,
+    int? stock,
+    List<ImagenVariacion>? imagenes,
+  }) {
+    return Variacion(
+      id: id ?? this.id,
+      productoId: productoId ?? this.productoId,
+      tallaLetra: tallaLetra ?? this.tallaLetra,
+      tallaNumero: tallaNumero ?? this.tallaNumero,
+      colorHex: colorHex ?? this.colorHex,
+      colorNombre: colorNombre ?? this.colorNombre,
+      precio: precio ?? this.precio,
+      stock: stock ?? this.stock,
+      imagenes: imagenes ?? List.from(this.imagenes),
+    );
+  }
+
+  /// ======================
+  /// Equals & Hashcode
+  /// ======================
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+
+    return other is Variacion &&
+        other.id == id &&
+        other.productoId == productoId &&
+        other.tallaLetra == tallaLetra &&
+        other.tallaNumero == tallaNumero &&
+        other.colorHex == colorHex &&
+        other.colorNombre == colorNombre &&
+        other.precio == precio &&
+        other.stock == stock &&
+        _listEquals(other.imagenes, imagenes);
+  }
+
+  @override
+  int get hashCode {
+    return id.hashCode ^
+        productoId.hashCode ^
+        tallaLetra.hashCode ^
+        tallaNumero.hashCode ^
+        colorHex.hashCode ^
+        colorNombre.hashCode ^
+        precio.hashCode ^
+        stock.hashCode ^
+        imagenes.hashCode;
+  }
+
+  bool _listEquals(List<ImagenVariacion> a, List<ImagenVariacion> b) {
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
 }
 
 class ImagenVariacion {
@@ -89,4 +159,18 @@ class ImagenVariacion {
       'public_id': publicId,
     };
   }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+
+    return other is ImagenVariacion &&
+        other.url == url &&
+        other.publicId == publicId &&
+        other.isLocal == isLocal;
+  }
+
+  @override
+  int get hashCode =>
+      url.hashCode ^ publicId.hashCode ^ isLocal.hashCode ^ localFile.hashCode;
 }

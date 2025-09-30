@@ -1,7 +1,7 @@
 class Perfil {
   final String id;
   final String nombre;
-  final String direccion;
+  final Direccion direccion; // 👈 ahora es objeto
   final String telefono;
   final String imagenPerfil;
   final String cloudinaryId;
@@ -25,7 +25,7 @@ class Perfil {
     return Perfil(
       id: json['_id'] ?? '',
       nombre: json['nombre'] ?? '',
-      direccion: json['direccion'] ?? '',
+      direccion: Direccion.fromJson(json['direccion'] ?? {}), // 👈 se parsea como objeto
       telefono: json['telefono'] ?? '',
       imagenPerfil: json['imagenPerfil'] ?? '',
       cloudinaryId: json['cloudinaryId'] ?? '',
@@ -39,13 +39,45 @@ class Perfil {
     return {
       "_id": id,
       "nombre": nombre,
-      "direccion": direccion,
+      "direccion": direccion.toJson(), // 👈 exporta como objeto JSON
       "telefono": telefono,
       "imagenPerfil": imagenPerfil,
       "cloudinaryId": cloudinaryId,
       "credenciales": credenciales.toJson(),
       "createdAt": createdAt.toIso8601String(),
       "updatedAt": updatedAt.toIso8601String(),
+    };
+  }
+}
+
+class Direccion {
+  final String departamento;
+  final String ciudad;
+  final String barrio;
+  final String calle;
+
+  Direccion({
+    required this.departamento,
+    required this.ciudad,
+    required this.barrio,
+    required this.calle,
+  });
+
+  factory Direccion.fromJson(Map<String, dynamic> json) {
+    return Direccion(
+      departamento: json['departamento'] ?? '',
+      ciudad: json['ciudad'] ?? '',
+      barrio: json['barrio'] ?? '',
+      calle: json['calle'] ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      "departamento": departamento,
+      "ciudad": ciudad,
+      "barrio": barrio,
+      "calle": calle,
     };
   }
 }

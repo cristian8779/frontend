@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../services/anuncio_service.dart';
+import 'styles/selector_visual/selector_visual_colors.dart';
+import 'styles/selector_visual/selector_visual_text_styles.dart';
+import 'styles/selector_visual/selector_visual_decorations.dart';
+import 'styles/selector_visual/selector_visual_constants.dart';
+
 
 class SelectorVisualScreen extends StatefulWidget {
   final bool esProducto;
@@ -33,7 +38,7 @@ class _SelectorVisualScreenState extends State<SelectorVisualScreen>
 
   void _initAnimations() {
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 800),
+      duration: Duration(milliseconds: SelectorVisualConstants.animationDuration),
       vsync: this,
     );
     
@@ -67,26 +72,30 @@ class _SelectorVisualScreenState extends State<SelectorVisualScreen>
       _animationController.forward();
     } catch (e) {
       setState(() => _loading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.error_outline, color: Colors.white),
-              const SizedBox(width: 8),
-              Expanded(child: Text('Error al cargar los datos: $e')),
-            ],
-          ),
-          backgroundColor: Colors.red[600],
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          action: SnackBarAction(
-            label: 'Reintentar',
-            textColor: Colors.white,
-            onPressed: _cargarDatos,
-          ),
-        ),
-      );
+      _mostrarError(e);
     }
+  }
+
+  void _mostrarError(dynamic error) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline, color: SelectorVisualColors.errorIcon),
+            const SizedBox(width: SelectorVisualConstants.spacingMedium),
+            Expanded(child: Text('Error al cargar los datos: $error')),
+          ],
+        ),
+        backgroundColor: SelectorVisualColors.errorBackground,
+        behavior: SnackBarBehavior.floating,
+        shape: SelectorVisualDecorations.snackBarShape,
+        action: SnackBarAction(
+          label: 'Reintentar',
+          textColor: SelectorVisualColors.errorActionText,
+          onPressed: _cargarDatos,
+        ),
+      ),
+    );
   }
 
   void _filtrar(String query) {
@@ -102,401 +111,363 @@ class _SelectorVisualScreenState extends State<SelectorVisualScreen>
     });
   }
 
+  void _limpiarBusqueda() {
+    _searchController.clear();
+    setState(() => _busqueda = '');
+    _filtrar('');
+  }
+
   @override
   Widget build(BuildContext context) {
     final tipo = widget.esProducto ? 'producto' : 'categoría';
 
     return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        title: Text(
-          'Seleccionar $tipo',
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 20),
-        ),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-        elevation: 0,
-        actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 8),
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-              borderRadius: BorderRadius.circular(12),
+      backgroundColor: SelectorVisualColors.backgroundColor,
+      appBar: _buildAppBar(tipo),
+      body: _loading
+          ? _buildLoadingState(tipo)
+          : _items.isEmpty
+              ? _buildEmptyState()
+              : _buildContentState(tipo),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar(String tipo) {
+    return AppBar(
+      title: Text(
+        'Seleccionar $tipo',
+        style: SelectorVisualTextStyles.appBarTitle,
+      ),
+      backgroundColor: SelectorVisualColors.appBarBackground,
+      foregroundColor: SelectorVisualColors.appBarForeground,
+      elevation: 0,
+      actions: [
+        Container(
+          margin: const EdgeInsets.only(right: SelectorVisualConstants.spacingMedium),
+          decoration: SelectorVisualDecorations.closeButtonDecoration,
+          child: IconButton(
+            icon: const Icon(
+              Icons.close_rounded,
+              size: SelectorVisualConstants.closeIconSize,
             ),
-            child: IconButton(
-              icon: const Icon(Icons.close_rounded, size: 20),
-              tooltip: 'Cancelar',
-              onPressed: () => Navigator.pop(context),
+            tooltip: 'Cancelar',
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLoadingState(String tipo) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(SelectorVisualConstants.loadingContainerPadding),
+            decoration: SelectorVisualDecorations.loadingContainer,
+            child: Column(
+              children: [
+                SizedBox(
+                  width: SelectorVisualConstants.loadingIndicatorSize,
+                  height: SelectorVisualConstants.loadingIndicatorSize,
+                  child: CircularProgressIndicator(
+                    strokeWidth: SelectorVisualConstants.loadingIndicatorStroke,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      SelectorVisualColors.loadingIndicator,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: SelectorVisualConstants.spacingLarge),
+                Text(
+                  'Cargando ${tipo}s...',
+                  style: SelectorVisualTextStyles.loadingText,
+                ),
+              ],
             ),
           ),
         ],
       ),
-      body: _loading
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.08),
-                          blurRadius: 20,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        SizedBox(
-                          width: 40,
-                          height: 40,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 3,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue[600]!),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Cargando ${tipo}s...',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey[700],
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(SelectorVisualConstants.emptyContainerPadding),
+            decoration: SelectorVisualDecorations.emptyContainer,
+            child: Icon(
+              widget.esProducto
+                  ? Icons.inventory_2_outlined
+                  : Icons.category_outlined,
+              size: SelectorVisualConstants.emptyIconSize,
+              color: SelectorVisualColors.emptyIconColor,
+            ),
+          ),
+          const SizedBox(height: SelectorVisualConstants.spacingXLarge),
+          const Text(
+            'No hay elementos disponibles',
+            style: SelectorVisualTextStyles.emptyTitle,
+          ),
+          const SizedBox(height: SelectorVisualConstants.spacingMedium),
+          Text(
+            'Intenta nuevamente más tarde',
+            style: SelectorVisualTextStyles.emptySubtitle,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContentState(String tipo) {
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: Column(
+        children: [
+          _buildSearchBar(tipo),
+          if (_filteredItems.isNotEmpty) _buildResultCounter(tipo),
+          Expanded(
+            child: _filteredItems.isEmpty
+                ? _buildNoResultsState()
+                : _buildGridView(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchBar(String tipo) {
+    return Container(
+      margin: const EdgeInsets.all(SelectorVisualConstants.screenPadding),
+      decoration: SelectorVisualDecorations.searchContainer,
+      child: TextField(
+        controller: _searchController,
+        onChanged: _filtrar,
+        style: SelectorVisualTextStyles.searchInput,
+        decoration: SelectorVisualDecorations.searchInputDecoration(
+          tipo,
+          _busqueda.isNotEmpty,
+        ).copyWith(
+          suffixIcon: _busqueda.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(
+                    Icons.clear_rounded,
+                    color: SelectorVisualColors.searchClearIcon,
                   ),
-                ],
-              ),
-            )
-          : _items.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(32),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [Colors.grey[100]!, Colors.grey[50]!],
-                          ),
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.grey.withOpacity(0.2),
-                              blurRadius: 20,
-                              offset: const Offset(0, 10),
-                            ),
-                          ],
-                        ),
-                        child: Icon(
-                          widget.esProducto
-                              ? Icons.inventory_2_outlined
-                              : Icons.category_outlined,
-                          size: 80,
-                          color: Colors.grey[400],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      const Text(
-                        'No hay elementos disponibles',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Intenta nuevamente más tarde',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.grey[600],
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
-                    ],
-                  ),
+                  onPressed: _limpiarBusqueda,
                 )
-              : FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: Column(
-                    children: [
-                      // Barra de búsqueda
-                      Container(
-                        margin: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.08),
-                              blurRadius: 20,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        child: TextField(
-                          controller: _searchController,
-                          onChanged: _filtrar,
-                          style: const TextStyle(fontSize: 16),
-                          decoration: InputDecoration(
-                            hintText: 'Buscar $tipo...',
-                            hintStyle: TextStyle(color: Colors.grey[400], fontSize: 16),
-                            prefixIcon: Container(
-                              margin: const EdgeInsets.all(12),
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [Colors.blue[400]!, Colors.blue[600]!],
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(Icons.search_rounded, color: Colors.white, size: 20),
-                            ),
-                            suffixIcon: _busqueda.isNotEmpty
-                                ? IconButton(
-                                    icon: const Icon(Icons.clear_rounded, color: Colors.grey),
-                                    onPressed: () {
-                                      _searchController.clear();
-                                      setState(() => _busqueda = '');
-                                      _filtrar('');
-                                    },
-                                  )
-                                : null,
-                            filled: true,
-                            fillColor: Colors.white,
-                            contentPadding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(20),
-                              borderSide: BorderSide.none,
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(20),
-                              borderSide: BorderSide.none,
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(20),
-                              borderSide: BorderSide(color: Colors.blue[400]!, width: 2),
-                            ),
-                          ),
-                        ),
-                      ),
+              : null,
+        ),
+      ),
+    );
+  }
 
-                      // Contador de resultados
-                      if (_filteredItems.isNotEmpty)
-                        Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 16),
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Row(
-                            children: [
-                              Text(
-                                '${_filteredItems.length} ${tipo}${_filteredItems.length != 1 ? 's' : ''} encontrado${_filteredItems.length != 1 ? 's' : ''}',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey[600],
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+  Widget _buildResultCounter(String tipo) {
+    return Container(
+      margin: const EdgeInsets.symmetric(
+        horizontal: SelectorVisualConstants.screenPadding,
+      ),
+      padding: const EdgeInsets.only(bottom: SelectorVisualConstants.spacingMedium),
+      child: Row(
+        children: [
+          Text(
+            '${_filteredItems.length} ${tipo}${_filteredItems.length != 1 ? 's' : ''} encontrado${_filteredItems.length != 1 ? 's' : ''}',
+            style: SelectorVisualTextStyles.counterText,
+          ),
+        ],
+      ),
+    );
+  }
 
-                      Expanded(
-                        child: _filteredItems.isEmpty
-                            ? Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(20),
-                                      decoration: BoxDecoration(
-                                        color: Colors.orange.withOpacity(0.1),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(
-                                        Icons.search_off,
-                                        size: 48,
-                                        color: Colors.orange,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 16),
-                                    const Text(
-                                      'No se encontraron resultados',
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.black87,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      'Intenta con otros términos de búsqueda',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: Colors.grey[600],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              )
-                            : GridView.builder(
-                                controller: _scrollController,
-                                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                                itemCount: _filteredItems.length,
-                                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: MediaQuery.of(context).size.width > 600 ? 3 : 2,
-                                  childAspectRatio: 0.75,
-                                  crossAxisSpacing: 16,
-                                  mainAxisSpacing: 16,
-                                ),
-                                itemBuilder: (context, index) {
-                                  final item = _filteredItems[index];
-                                  final nombre = item['nombre'] ?? 'Sin nombre';
-                                  final imagen = item['imagen'] ?? '';
+  Widget _buildNoResultsState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(SelectorVisualConstants.noResultsContainerPadding),
+            decoration: SelectorVisualDecorations.noResultsContainer,
+            child: const Icon(
+              Icons.search_off,
+              size: SelectorVisualConstants.noResultsIconSize,
+              color: SelectorVisualColors.noResultsIcon,
+            ),
+          ),
+          const SizedBox(height: SelectorVisualConstants.spacingLarge),
+          const Text(
+            'No se encontraron resultados',
+            style: SelectorVisualTextStyles.noResultsTitle,
+          ),
+          const SizedBox(height: SelectorVisualConstants.spacingMedium),
+          Text(
+            'Intenta con otros términos de búsqueda',
+            style: SelectorVisualTextStyles.noResultsSubtitle,
+          ),
+        ],
+      ),
+    );
+  }
 
-                                  return AnimatedContainer(
-                                    duration: Duration(milliseconds: 300 + (index * 50)),
-                                    curve: Curves.easeOutBack,
-                                    child: Material(
-                                      color: Colors.transparent,
-                                      child: InkWell(
-                                        borderRadius: BorderRadius.circular(24),
-                                        onTap: () => Navigator.pop(context, item),
-                                        child: Container(
-                                          decoration: BoxDecoration(
-                                            color: Colors.white,
-                                            borderRadius: BorderRadius.circular(24),
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: Colors.black.withOpacity(0.08),
-                                                blurRadius: 20,
-                                                offset: const Offset(0, 8),
-                                              ),
-                                            ],
-                                          ),
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                                            children: [
-                                              Expanded(
-                                                flex: 3,
-                                                child: ClipRRect(
-                                                  borderRadius: const BorderRadius.vertical(
-                                                    top: Radius.circular(24),
-                                                  ),
-                                                  child: imagen.isNotEmpty
-                                                      ? Image.network(
-                                                          imagen,
-                                                          fit: BoxFit.cover,
-                                                          width: double.infinity,
-                                                          height: double.infinity,
-                                                          loadingBuilder: (context, child, loadingProgress) {
-                                                            if (loadingProgress == null) return child;
-                                                            return Container(
-                                                              color: Colors.grey[100],
-                                                              child: Center(
-                                                                child: SizedBox(
-                                                                  width: 24,
-                                                                  height: 24,
-                                                                  child: CircularProgressIndicator(
-                                                                    strokeWidth: 2,
-                                                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.blue[400]!),
-                                                                    value: loadingProgress.expectedTotalBytes != null
-                                                                        ? loadingProgress.cumulativeBytesLoaded /
-                                                                            loadingProgress.expectedTotalBytes!
-                                                                        : null,
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                            );
-                                                          },
-                                                          errorBuilder: (context, error, stackTrace) => Container(
-                                                            color: Colors.grey[100],
-                                                            child: Column(
-                                                              mainAxisAlignment: MainAxisAlignment.center,
-                                                              children: [
-                                                                Icon(
-                                                                  Icons.broken_image_rounded,
-                                                                  size: 32,
-                                                                  color: Colors.grey[400],
-                                                                ),
-                                                                const SizedBox(height: 4),
-                                                                Text(
-                                                                  'Error al cargar',
-                                                                  style: TextStyle(
-                                                                    fontSize: 10,
-                                                                    color: Colors.grey[400],
-                                                                  ),
-                                                                ),
-                                                              ],
-                                                            ),
-                                                          ),
-                                                        )
-                                                      : Container(
-                                                          color: Colors.grey[100],
-                                                          child: Column(
-                                                            mainAxisAlignment: MainAxisAlignment.center,
-                                                            children: [
-                                                              Icon(
-                                                                widget.esProducto
-                                                                    ? Icons.inventory_2_outlined
-                                                                    : Icons.category_outlined,
-                                                                size: 32,
-                                                                color: Colors.grey[400],
-                                                              ),
-                                                              const SizedBox(height: 4),
-                                                              Text(
-                                                                'Sin imagen',
-                                                                style: TextStyle(
-                                                                  fontSize: 10,
-                                                                  color: Colors.grey[400],
-                                                                ),
-                                                              ),
-                                                            ],
-                                                          ),
-                                                        ),
-                                                ),
-                                              ),
-                                              Expanded(
-                                                flex: 1,
-                                                child: Padding(
-                                                  padding: const EdgeInsets.all(12.0),
-                                                  child: Column(
-                                                    mainAxisAlignment: MainAxisAlignment.center,
-                                                    children: [
-                                                      Text(
-                                                        nombre,
-                                                        textAlign: TextAlign.center,
-                                                        maxLines: 2,
-                                                        overflow: TextOverflow.ellipsis,
-                                                        style: const TextStyle(
-                                                          fontWeight: FontWeight.w700,
-                                                          fontSize: 14,
-                                                          color: Colors.black87,
-                                                          height: 1.2,
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                      ),
-                    ],
-                  ),
+  Widget _buildGridView() {
+    return GridView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.fromLTRB(
+        SelectorVisualConstants.screenPadding,
+        0,
+        SelectorVisualConstants.screenPadding,
+        SelectorVisualConstants.screenPadding,
+      ),
+      itemCount: _filteredItems.length,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: MediaQuery.of(context).size.width > SelectorVisualConstants.gridBreakpoint
+            ? SelectorVisualConstants.gridCrossAxisCountTablet
+            : SelectorVisualConstants.gridCrossAxisCountMobile,
+        childAspectRatio: SelectorVisualConstants.gridChildAspectRatio,
+        crossAxisSpacing: SelectorVisualConstants.gridCrossAxisSpacing,
+        mainAxisSpacing: SelectorVisualConstants.gridMainAxisSpacing,
+      ),
+      itemBuilder: (context, index) => _buildGridItem(index),
+    );
+  }
+
+  Widget _buildGridItem(int index) {
+    final item = _filteredItems[index];
+    final nombre = item['nombre'] ?? 'Sin nombre';
+    final imagen = item['imagen'] ?? '';
+
+    return AnimatedContainer(
+      duration: Duration(
+        milliseconds: SelectorVisualConstants.cardAnimationBase +
+            (index * SelectorVisualConstants.cardAnimationIncrement),
+      ),
+      curve: Curves.easeOutBack,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(SelectorVisualConstants.cardBorderRadius),
+          onTap: () => Navigator.pop(context, item),
+          child: Container(
+            decoration: SelectorVisualDecorations.cardDecoration,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  flex: SelectorVisualConstants.cardImageFlex,
+                  child: _buildCardImage(imagen),
                 ),
+                Expanded(
+                  flex: SelectorVisualConstants.cardContentFlex,
+                  child: _buildCardTitle(nombre),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCardImage(String imagen) {
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(
+        top: Radius.circular(SelectorVisualConstants.cardBorderRadius),
+      ),
+      child: imagen.isNotEmpty
+          ? Image.network(
+              imagen,
+              fit: BoxFit.cover,
+              width: double.infinity,
+              height: double.infinity,
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return Container(
+                  color: SelectorVisualColors.cardImagePlaceholder,
+                  child: Center(
+                    child: SizedBox(
+                      width: SelectorVisualConstants.cardLoadingIndicatorSize,
+                      height: SelectorVisualConstants.cardLoadingIndicatorSize,
+                      child: CircularProgressIndicator(
+                        strokeWidth: SelectorVisualConstants.cardLoadingIndicatorStroke,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          SelectorVisualColors.cardImageLoadingIndicator,
+                        ),
+                        value: loadingProgress.expectedTotalBytes != null
+                            ? loadingProgress.cumulativeBytesLoaded /
+                                loadingProgress.expectedTotalBytes!
+                            : null,
+                      ),
+                    ),
+                  ),
+                );
+              },
+              errorBuilder: (context, error, stackTrace) => _buildImageError(),
+            )
+          : _buildImagePlaceholder(),
+    );
+  }
+
+  Widget _buildImageError() {
+    return Container(
+      color: SelectorVisualColors.cardImagePlaceholder,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.broken_image_rounded,
+            size: SelectorVisualConstants.cardIconSize,
+            color: SelectorVisualColors.cardIconColor,
+          ),
+          const SizedBox(height: SelectorVisualConstants.spacingSmall),
+          Text(
+            'Error al cargar',
+            style: SelectorVisualTextStyles.cardImageError,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildImagePlaceholder() {
+    return Container(
+      color: SelectorVisualColors.cardImagePlaceholder,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            widget.esProducto
+                ? Icons.inventory_2_outlined
+                : Icons.category_outlined,
+            size: SelectorVisualConstants.cardIconSize,
+            color: SelectorVisualColors.cardIconColor,
+          ),
+          const SizedBox(height: SelectorVisualConstants.spacingSmall),
+          Text(
+            'Sin imagen',
+            style: SelectorVisualTextStyles.cardNoImage,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCardTitle(String nombre) {
+    return Padding(
+      padding: const EdgeInsets.all(SelectorVisualConstants.cardPadding),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            nombre,
+            textAlign: TextAlign.center,
+            maxLines: SelectorVisualConstants.cardTitleMaxLines,
+            overflow: TextOverflow.ellipsis,
+            style: SelectorVisualTextStyles.cardTitle,
+          ),
+        ],
+      ),
     );
   }
 }

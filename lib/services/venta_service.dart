@@ -41,6 +41,7 @@ class ProductoVenta {
   final dynamic color; // Puede ser String o Map
   final int cantidad;
   final double precioUnitario;
+  final String? imagen;
 
   ProductoVenta({
     required this.productoId,
@@ -50,17 +51,26 @@ class ProductoVenta {
     this.color,
     required this.cantidad,
     required this.precioUnitario,
+    this.imagen,
   });
 
   Map<String, dynamic> toJson() {
     return {
       'productoId': productoId,
       if (variacionId != null) 'variacionId': variacionId,
-      'nombreProducto': nombreProducto,
+      'nombre': nombreProducto, // Cambio: usar 'nombre' como en el backend
+      'nombreProducto': nombreProducto, // Mantener compatibilidad
       if (talla != null) 'talla': talla,
       if (color != null) 'color': color,
       'cantidad': cantidad,
-      'precioUnitario': precioUnitario,
+      'precio': precioUnitario, // Cambio: usar 'precio' como en el backend
+      'precioUnitario': precioUnitario, // Mantener compatibilidad
+      if (imagen != null) 'imagen': imagen,
+      if (talla != null || color != null || imagen != null) 'atributos': {
+        if (talla != null) 'tallaLetra': talla,
+        if (color != null) 'color': color,
+        if (imagen != null) 'imagen': imagen,
+      },
     };
   }
 
@@ -68,11 +78,12 @@ class ProductoVenta {
     return ProductoVenta(
       productoId: json['productoId'] ?? '',
       variacionId: json['variacionId'],
-      nombreProducto: json['nombreProducto'] ?? 'Producto eliminado',
-      talla: json['talla'],
-      color: json['color'], // Puede venir como String o como {hex, nombre}
+      nombreProducto: json['nombreProducto'] ?? json['nombre'] ?? 'Producto eliminado',
+      talla: json['talla'] ?? json['atributos']?['tallaLetra'],
+      color: json['color'] ?? json['atributos']?['color'],
       cantidad: json['cantidad'] ?? 0,
-      precioUnitario: (json['precioUnitario'] ?? 0).toDouble(),
+      precioUnitario: (json['precioUnitario'] ?? json['precio'] ?? 0).toDouble(),
+      imagen: json['imagen'] ?? json['atributos']?['imagen'],
     );
   }
 }
@@ -226,6 +237,8 @@ class VentaService {
       if (data.containsKey('ventas') && data['ventas'] is List) {
         return List<Map<String, dynamic>>.from(data['ventas']);
       }
+      // Si la respuesta es una sola venta, devolverla como lista
+      return [data];
     }
     return <Map<String, dynamic>>[];
   }
@@ -239,7 +252,6 @@ class VentaService {
       final token = await _obtenerTokenValido();
       print('🔑 [VentaService] Token obtenido para consulta de usuario');
       
-      // Intentar con el endpoint correcto que sabemos que funciona
       final url = '$_baseUrl/usuario/$usuarioId';
       print('🌐 [VentaService] URL de consulta: $url');
       
@@ -255,14 +267,12 @@ class VentaService {
         final data = jsonDecode(response.body);
         print('📊 [VentaService] Datos del usuario recibidos: $data');
         
-        // La respuesta viene como { usuario: { nombre: "..." } }
         if (data['usuario']?['nombre'] != null) {
           final nombre = data['usuario']['nombre'].toString().trim();
           print('✅ [VentaService] Nombre encontrado: $nombre');
           return nombre;
         } else {
           print('⚠️ [VentaService] No se encontró campo usuario.nombre');
-          print('📋 [VentaService] Campos disponibles: ${data.keys.toList()}');
           return 'Usuario ${usuarioId.substring(usuarioId.length - 8)}';
         }
       } else if (response.statusCode == 404) {
@@ -282,39 +292,81 @@ class VentaService {
   }
 
   // === MÉTODOS PÚBLICOS PRINCIPALES ===
-  Future<Map<String, dynamic>> crearVenta({
+
+  /// 🆕 Crear venta pendiente (nueva funcionalidad del backend)
+  Future<Map<String, dynamic>> crearVentaPendiente({
     required List<ProductoVenta> productos,
     required double total,
-    String? estadoPago,
-    String? referenciaPago,
+    required String referenciaPago,
   }) async {
     _validarDatosVenta(productos, total);
-    final token = await _obtenerTokenValido();
-
-    // ✅ Recuperar el usuarioId desde storage
+    
     final usuarioId = await _secureStorage.read(key: 'usuarioId');
-
     if (usuarioId == null || usuarioId.isEmpty) {
       throw VentaAuthException('No se encontró usuarioId en el dispositivo');
     }
 
+    // No usar token para esta ruta, usa API key del backend
     return _makeRequest(
       () => _httpClient.post(
-        Uri.parse('$_baseUrl/ventas'),
-        headers: _getHeaders(token),
+        Uri.parse('$_baseUrl/ventas/crear'),
+        headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'usuarioId': usuarioId, // 👈 agregado
+          'usuarioId': usuarioId,
           'productos': productos.map((p) => p.toJson()).toList(),
           'total': total,
-          if (estadoPago != null) 'estadoPago': estadoPago,
-          if (referenciaPago != null) 'referenciaPago': referenciaPago,
+          'referenciaPago': referenciaPago,
         }),
       ),
       (data) => data,
-      requiresAuth: true,
+      requiresAuth: false, // Esta ruta usa API key, no token de usuario
     );
   }
 
+  /// 🔍 Buscar venta por referencia de pago
+  Future<Map<String, dynamic>?> buscarVentaPorReferencia(String referenciaPago, {String? usuarioId}) async {
+    try {
+      final queryParams = <String, String>{};
+      if (usuarioId != null) queryParams['usuarioId'] = usuarioId;
+      
+      final uri = Uri.parse('$_baseUrl/ventas/referencia/$referenciaPago').replace(
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+
+      return _makeRequest(
+        () => _httpClient.get(uri, headers: {'Content-Type': 'application/json'}),
+        (data) => data,
+        requiresAuth: false, // Esta ruta usa API key
+      );
+    } catch (e) {
+      if (e is VentaException && e.statusCode == 404) {
+        return null; // Venta no encontrada
+      }
+      rethrow;
+    }
+  }
+
+  /// 💳 Confirmar pago de una venta (webhook interno)
+  /// Nota: Este método probablemente no se use desde Flutter, es para webhooks
+  Future<Map<String, dynamic>> confirmarPago({
+    required String referenciaPago,
+    required String estadoPagoBold,
+  }) async {
+    return _makeRequest(
+      () => _httpClient.post(
+        Uri.parse('$_baseUrl/ventas/confirmar-pago'), // Esta ruta no existe en las routes, sería necesario agregarla
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'referenciaPago': referenciaPago,
+          'estadoPagoBold': estadoPagoBold,
+        }),
+      ),
+      (data) => data,
+      requiresAuth: false,
+    );
+  }
+
+  /// 👤 Obtener ventas del usuario autenticado
   Future<List<Map<String, dynamic>>> obtenerVentasUsuario() async {
     final token = await _obtenerTokenValido();
     return _makeRequest(
@@ -327,6 +379,7 @@ class VentaService {
     );
   }
 
+  /// 📊 Obtener todas las ventas con filtros (Admin)
   Future<List<Map<String, dynamic>>> obtenerTodasLasVentas([FiltrosVenta? filtros]) async {
     final token = await _obtenerTokenValido();
     final queryParams = filtros?.toQueryParams() ?? <String, String>{};
@@ -344,22 +397,7 @@ class VentaService {
     );
   }
 
-  Future<Map<String, dynamic>> actualizarEstadoVenta({
-    required String ventaId,
-    required String estadoPago,
-  }) async {
-    final token = await _obtenerTokenValido();
-    return _makeRequest(
-      () => _httpClient.put(
-        Uri.parse('$_baseUrl/ventas/$ventaId'),
-        headers: _getHeaders(token),
-        body: jsonEncode({'estadoPago': estadoPago}),
-      ),
-      (data) => data,
-      requiresAuth: true,
-    );
-  }
-
+  /// 🗑️ Eliminar venta (Admin)
   Future<Map<String, dynamic>> eliminarVenta(String ventaId) async {
     final token = await _obtenerTokenValido();
     return _makeRequest(
@@ -372,37 +410,44 @@ class VentaService {
     );
   }
 
-  Future<List<int>> exportarVentasExcel({int? mes, int? anio}) async {
-    final token = await _obtenerTokenValido();
-    final queryParams = <String, String>{};
-    if (mes != null) queryParams['mes'] = mes.toString();
-    if (anio != null) queryParams['anio'] = anio.toString();
-    
-    final uri = Uri.parse('$_baseUrl/ventas/exportar-excel').replace(
-      queryParameters: queryParams.isNotEmpty ? queryParams : null,
-    );
+  // === MÉTODOS HEREDADOS (mantenemos compatibilidad) ===
 
-    try {
-      final response = await _httpClient.get(
-        uri,
-        headers: _getHeaders(token),
-      ).timeout(VentaConfig.timeout);
-
-      if (response.statusCode == 200) {
-        print('✅ Excel de ventas exportado exitosamente');
-        return response.bodyBytes;
-      } else {
-        final error = jsonDecode(response.body);
-        throw VentaException(
-          error['mensaje'] ?? 'Error al exportar Excel',
-          statusCode: response.statusCode,
-        );
-      }
-    } catch (e) {
-      if (e is VentaException) rethrow;
-      throw VentaException('Error al exportar Excel: $e');
+  /// ⚠️ DEPRECATED: Usar crearVentaPendiente en su lugar
+  @Deprecated('Usar crearVentaPendiente para el nuevo flujo de pagos')
+  Future<Map<String, dynamic>> crearVenta({
+    required List<ProductoVenta> productos,
+    required double total,
+    String? estadoPago,
+    String? referenciaPago,
+  }) async {
+    // Redirigir al nuevo método si se proporciona referenciaPago
+    if (referenciaPago != null) {
+      return crearVentaPendiente(
+        productos: productos,
+        total: total,
+        referenciaPago: referenciaPago,
+      );
     }
+    
+    throw VentaException('Este método está deprecado. Use crearVentaPendiente con referenciaPago.');
   }
+
+  /// ⚠️ DEPRECATED: El backend no soporta actualización directa de estado
+  @Deprecated('El flujo de pagos se maneja internamente por el backend')
+  Future<Map<String, dynamic>> actualizarEstadoVenta({
+    required String ventaId,
+    required String estadoPago,
+  }) async {
+    throw VentaException('Esta funcionalidad no está disponible. El estado se actualiza automáticamente por webhooks.');
+  }
+
+  /// ⚠️ DEPRECATED: El backend no soporta exportación de Excel
+  @Deprecated('Esta funcionalidad no está implementada en el backend')
+  Future<List<int>> exportarVentasExcel({int? mes, int? anio}) async {
+    throw VentaException('La exportación de Excel no está disponible.');
+  }
+
+  // === MÉTODOS DE BÚSQUEDA (usando la funcionalidad existente) ===
 
   Future<List<Map<String, dynamic>>> buscarVentas({
     DateTime? fechaInicio,
@@ -447,25 +492,33 @@ class VentaService {
         'montoTotal': 0.0,
         'promedioVenta': 0.0,
         'ventasPendientes': 0,
-        'ventasCompletadas': 0,
+        'ventasAprobadas': 0,
+        'ventasFallidas': 0,
         'productosVendidos': 0,
       };
     }
 
     double montoTotal = 0.0;
     int ventasPendientes = 0;
-    int ventasCompletadas = 0;
+    int ventasAprobadas = 0;
+    int ventasFallidas = 0;
     int productosVendidos = 0;
 
     for (final venta in ventas) {
       final total = _convertirADouble(venta['total']) ?? 0.0;
       montoTotal += total;
 
-      final estado = venta['estadoPago']?.toString().toLowerCase() ?? 'pendiente';
-      if (estado == 'pendiente') {
-        ventasPendientes++;
-      } else if (estado == 'completado' || estado == 'pagado' || estado == 'approved') {
-        ventasCompletadas++;
+      final estado = venta['estadoPago']?.toString().toLowerCase() ?? 'pending';
+      switch (estado) {
+        case 'pending':
+          ventasPendientes++;
+          break;
+        case 'approved':
+          ventasAprobadas++;
+          break;
+        case 'failed':
+          ventasFallidas++;
+          break;
       }
 
       if (venta['productos'] is List) {
@@ -482,7 +535,8 @@ class VentaService {
       'montoTotal': montoTotal,
       'promedioVenta': montoTotal / ventas.length,
       'ventasPendientes': ventasPendientes,
-      'ventasCompletadas': ventasCompletadas,
+      'ventasAprobadas': ventasAprobadas,
+      'ventasFallidas': ventasFallidas,
       'productosVendidos': productosVendidos,
     };
   }

@@ -3,16 +3,43 @@ import 'package:carousel_slider/carousel_slider.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import '../providers/anuncio_provider.dart';
 
-class BannerCarousel extends StatelessWidget {
+class BannerCarousel extends StatefulWidget {
   const BannerCarousel({Key? key}) : super(key: key);
 
+  @override
+  State<BannerCarousel> createState() => _BannerCarouselState();
+}
+
+class _BannerCarouselState extends State<BannerCarousel> {
   static const double aspectRatioML = 10 / 3;
   static const double maxBannerHeight = 240;
   static const double minBannerHeight = 120;
   static const EdgeInsets containerMargin =
       EdgeInsets.symmetric(horizontal: 16, vertical: 12);
+
+  bool _isConnected = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _monitorConnectivity();
+  }
+
+  void _monitorConnectivity() {
+    Connectivity().onConnectivityChanged.listen((status) {
+      final conectado = status != ConnectivityResult.none;
+      if (mounted) {
+        setState(() => _isConnected = conectado);
+      }
+    });
+  }
+
+  bool _shouldShowErrors() {
+    return _isConnected;
+  }
 
   double _calculateBannerHeight(double screenWidth, double screenHeight) {
     double height = (screenWidth - 32) / aspectRatioML;
@@ -148,6 +175,10 @@ class BannerCarousel extends StatelessWidget {
   }
 
   Widget _buildErrorState(BuildContext context, double height) {
+    if (!_shouldShowErrors()) {
+      return const SizedBox.shrink();
+    }
+
     return Container(
       height: height,
       margin: containerMargin,
@@ -160,12 +191,12 @@ class BannerCarousel extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.wifi_off_rounded, color: Colors.grey.shade400, size: 32),
+            Icon(Icons.error_outline, color: Colors.red.shade400, size: 32),
             const SizedBox(height: 8),
             Text(
-              'Error de conexión',
+              'Error al cargar anuncios',
               style: TextStyle(
-                color: Colors.grey.shade600,
+                color: Colors.red.shade600,
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
               ),
@@ -259,12 +290,12 @@ class BannerCarousel extends StatelessWidget {
 
         return Consumer<AnuncioProvider>(
           builder: (context, provider, child) {
-            // 🔹 Mostrar shimmer solo al iniciar la app y antes de que el provider tenga datos
+            // Mostrar shimmer solo al iniciar la app y antes de que el provider tenga datos
             if (provider.anuncios.isEmpty && provider.state == AnuncioState.loading) {
               return _buildLoadingState(screenWidth, bannerHeight, viewportFraction);
             }
 
-            // 🔹 Si hay anuncios, mostrar carousel
+            // Si hay anuncios, mostrar carousel
             if (provider.anuncios.isNotEmpty) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 provider.prefetchImages(context);
@@ -272,11 +303,12 @@ class BannerCarousel extends StatelessWidget {
               return _buildCarousel(context, provider, screenWidth, bannerHeight, viewportFraction);
             }
 
-            // 🔹 Si hay error o está vacío, mostrar estado correspondiente
-            if (provider.state == AnuncioState.error) {
+            // Si hay error Y conexión, mostrar estado de error
+            if (provider.state == AnuncioState.error && _shouldShowErrors()) {
               return _buildErrorState(context, bannerHeight);
             }
 
+            // Para cualquier otro caso (sin anuncios, sin conexión, empty), ocultar completamente
             return const SizedBox.shrink();
           },
         );

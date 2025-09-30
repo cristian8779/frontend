@@ -1,5 +1,7 @@
 import '../../screens/usuario/bienvenida_usuario_screen.dart';
 import '../../widgets/settings_button.dart';
+import '../../theme/profile/profile_theme.dart';
+
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -17,9 +19,12 @@ class _ProfilePageState extends State<ProfilePage> {
   final PerfilService _perfilService = PerfilService();
   final ImagePicker _picker = ImagePicker();
   
-  // Controllers para los campos de texto
+  // Controllers para los campos de texto - SIN BARRIO
   final TextEditingController _nombreController = TextEditingController();
-  final TextEditingController _direccionController = TextEditingController();
+  final TextEditingController _departamentoController = TextEditingController();
+  final TextEditingController _municipioController = TextEditingController();
+  final TextEditingController _calleController = TextEditingController();
+  final TextEditingController _codigoPostalController = TextEditingController();
   final TextEditingController _telefonoController = TextEditingController();
   
   // Estados
@@ -27,6 +32,7 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _isEditing = false;
   bool _hasProfile = false;
   bool _isUploadingImage = false;
+  bool _hasConnectionError = false; // NUEVO: Estado para error de conexión
   Map<String, dynamic>? _profileData;
   File? _selectedImage;
   String? _currentImageUrl;
@@ -40,68 +46,117 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   void dispose() {
     _nombreController.dispose();
-    _direccionController.dispose();
+    _departamentoController.dispose();
+    _municipioController.dispose();
+    _calleController.dispose();
+    _codigoPostalController.dispose();
     _telefonoController.dispose();
     super.dispose();
-  }
-
-  // Enhanced responsive helper methods
-  double _getScreenWidth(BuildContext context) => MediaQuery.of(context).size.width;
-  double _getScreenHeight(BuildContext context) => MediaQuery.of(context).size.height;
-  
-  bool _isMobile(BuildContext context) => _getScreenWidth(context) < 600;
-  bool _isTablet(BuildContext context) => _getScreenWidth(context) >= 600 && _getScreenWidth(context) < 900;
-  bool _isDesktop(BuildContext context) => _getScreenWidth(context) >= 900;
-  
-  double _getMaxWidth(BuildContext context) {
-    if (_isDesktop(context)) return 700;
-    if (_isTablet(context)) return 600;
-    return double.infinity;
-  }
-
-  EdgeInsets _getHorizontalPadding(BuildContext context) {
-    if (_isDesktop(context)) return const EdgeInsets.symmetric(horizontal: 48);
-    if (_isTablet(context)) return const EdgeInsets.symmetric(horizontal: 32);
-    return const EdgeInsets.symmetric(horizontal: 16);
-  }
-
-  EdgeInsets _getContentPadding(BuildContext context) {
-    if (_isDesktop(context)) return const EdgeInsets.all(32);
-    if (_isTablet(context)) return const EdgeInsets.all(24);
-    return const EdgeInsets.all(16);
-  }
-
-  double _getAvatarRadius(BuildContext context) {
-    if (_isDesktop(context)) return 70;
-    if (_isTablet(context)) return 60;
-    return 50;
-  }
-
-  double _getFontSize(BuildContext context, double mobile, double tablet, double desktop) {
-    if (_isDesktop(context)) return desktop;
-    if (_isTablet(context)) return tablet;
-    return mobile;
-  }
-
-  double _getSpacing(BuildContext context, double mobile, double tablet, double desktop) {
-    if (_isDesktop(context)) return desktop;
-    if (_isTablet(context)) return tablet;
-    return mobile;
   }
 
   // Función para manejar logout
   void _handleLogout() {
     Navigator.of(context).pushNamedAndRemoveUntil(
-      '/login', // Asume que tienes una ruta de login definida
+      '/login',
       (Route<dynamic> route) => false,
     );
   }
 
   // -------------------------------
-  // CARGAR PERFIL EXISTENTE
+  // HELPERS PARA MANEJO DE DIRECCIÓN - FORMATO MERCADOLIBRE
+  // -------------------------------
+  String _formatearDireccionCompleta() {
+    final calle = _calleController.text.trim();
+    final municipio = _municipioController.text.trim();
+    final departamento = _departamentoController.text.trim();
+    final codigoPostal = _codigoPostalController.text.trim();
+    
+    // Formato estilo MercadoLibre: "Carrera 45 #67-89, Medellín, Antioquia 050001"
+    List<String> partes = [];
+    
+    if (calle.isNotEmpty) partes.add(calle);
+    if (municipio.isNotEmpty) partes.add(municipio);
+    
+    // Departamento y código postal juntos al final (sin duplicar departamento)
+    if (departamento.isNotEmpty && codigoPostal.isNotEmpty) {
+      partes.add('$departamento $codigoPostal');
+    } else if (departamento.isNotEmpty) {
+      partes.add(departamento);
+    } else if (codigoPostal.isNotEmpty) {
+      partes.add(codigoPostal);
+    }
+    
+    return partes.join(', ');
+  }
+
+  // FORMATO ESPECIAL PARA MOSTRAR EN EL PERFIL (estilo MercadoLibre)
+  String _formatearDireccionParaPerfil() {
+    final calle = _calleController.text.trim();
+    final municipio = _municipioController.text.trim();
+    final departamento = _departamentoController.text.trim();
+    final codigoPostal = _codigoPostalController.text.trim();
+    
+    if (calle.isEmpty && municipio.isEmpty && departamento.isEmpty && codigoPostal.isEmpty) {
+      return "";
+    }
+    
+    // Línea principal con dirección
+    String lineaPrincipal = "";
+    if (calle.isNotEmpty) {
+      lineaPrincipal = calle;
+    }
+    
+    // Línea secundaria con ubicación
+    List<String> ubicacion = [];
+    if (municipio.isNotEmpty) ubicacion.add(municipio);
+    if (departamento.isNotEmpty) ubicacion.add(departamento);
+    if (codigoPostal.isNotEmpty) ubicacion.add(codigoPostal);
+    
+    String lineaSecundaria = ubicacion.join(', ');
+    
+    // Combinar las líneas
+    if (lineaPrincipal.isNotEmpty && lineaSecundaria.isNotEmpty) {
+      return '$lineaPrincipal\n$lineaSecundaria';
+    } else if (lineaPrincipal.isNotEmpty) {
+      return lineaPrincipal;
+    } else {
+      return lineaSecundaria;
+    }
+  }
+
+  void _llenarControllersDireccion(dynamic direccionData) {
+    if (direccionData is Map<String, dynamic>) {
+      _departamentoController.text = direccionData['departamento']?.toString() ?? '';
+      _municipioController.text = direccionData['municipio']?.toString() ?? '';
+      _calleController.text = direccionData['calle']?.toString() ?? '';
+      _codigoPostalController.text = direccionData['codigoPostal']?.toString() ?? '';
+    } else if (direccionData is String) {
+      // Fallback para direcciones que aún vengan como string
+      _calleController.text = direccionData;
+      _departamentoController.text = '';
+      _municipioController.text = '';
+      _codigoPostalController.text = '';
+    }
+  }
+
+  // MÉTODO SIN BARRIO - Estructura limpia
+  Map<String, String> _construirObjetoDireccion() {
+    return {
+      'departamento': _departamentoController.text.trim(),
+      'municipio': _municipioController.text.trim(),
+      'calle': _calleController.text.trim(),
+      'codigoPostal': _codigoPostalController.text.trim(),
+    };
+  }
+
+  // -------------------------------
+  // CARGAR PERFIL EXISTENTE - MEJORADO PARA MANEJAR SIN CONEXIÓN
   // -------------------------------
   Future<void> _cargarPerfil() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _hasConnectionError = false; // Reset del estado de error
+    });
     
     try {
       final perfil = await _perfilService.obtenerPerfil();
@@ -110,21 +165,35 @@ class _ProfilePageState extends State<ProfilePage> {
         print("Datos del perfil recibidos: $perfil");
         setState(() {
           _hasProfile = true;
+          _hasConnectionError = false;
           _profileData = perfil;
           _nombreController.text = perfil['nombre']?.toString() ?? '';
-          _direccionController.text = perfil['direccion']?.toString() ?? '';
           _telefonoController.text = perfil['telefono']?.toString() ?? '';
           _currentImageUrl = perfil['imagenPerfil']?.toString();
+          
+          // Manejo especial para la dirección
+          _llenarControllersDireccion(perfil['direccion']);
         });
       } else {
         if (_perfilService.message == "sin_conexion") {
+          setState(() {
+            _hasConnectionError = true;
+            _hasProfile = false;
+          });
           _mostrarToast("Sin conexión a internet", isError: true);
         } else {
-          setState(() => _hasProfile = false);
+          setState(() {
+            _hasProfile = false;
+            _hasConnectionError = false;
+          });
         }
       }
     } catch (e) {
       print("Error al cargar perfil: $e");
+      setState(() {
+        _hasConnectionError = true;
+        _hasProfile = false;
+      });
       _mostrarToast("Error al cargar perfil: $e", isError: true);
     } finally {
       setState(() => _isLoading = false);
@@ -132,7 +201,7 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   // -------------------------------
-  // CREAR NUEVO PERFIL
+  // CREAR NUEVO PERFIL - CORREGIDO
   // -------------------------------
   Future<void> _crearPerfil() async {
     if (_nombreController.text.trim().isEmpty) {
@@ -143,18 +212,35 @@ class _ProfilePageState extends State<ProfilePage> {
     setState(() => _isLoading = true);
 
     try {
-      String? imagenPath;
-      if (_selectedImage != null) {
-        imagenPath = _selectedImage!.path;
-      }
-
+      // CORREGIDO: El método crearPerfil del service solo acepta nombre, credenciales e imagenPerfil
+      // No acepta otros parámetros como direccionData o telefono
+      
+      // Primer paso: crear el perfil básico
       final success = await _perfilService.crearPerfil(
         _nombreController.text.trim(),
-        "user_credentials",
-        imagenPerfil: imagenPath,
+        "user_credentials", // Este parámetro puede necesitar ser dinámico según tu lógica
+        imagenPerfil: _selectedImage?.path,
       );
 
       if (success) {
+        // Segundo paso: actualizar con datos adicionales si es necesario
+        final direccionData = _construirObjetoDireccion();
+        final hasAdditionalData = _telefonoController.text.trim().isNotEmpty ||
+            direccionData.values.any((value) => value.isNotEmpty);
+
+        if (hasAdditionalData) {
+          final updateSuccess = await _perfilService.actualizarPerfil(
+            telefono: _telefonoController.text.trim().isNotEmpty 
+                ? _telefonoController.text.trim() : null,
+            direccion: direccionData.values.any((value) => value.isNotEmpty) 
+                ? direccionData : null,
+          );
+
+          if (!updateSuccess) {
+            _mostrarToast("Perfil creado, pero no se pudieron actualizar algunos datos", isError: true);
+          }
+        }
+
         _mostrarToast("Perfil creado exitosamente");
         _cargarPerfil();
       } else {
@@ -169,17 +255,21 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   // -------------------------------
-  // ACTUALIZAR PERFIL EXISTENTE
+  // ACTUALIZAR PERFIL EXISTENTE - CORREGIDO
   // -------------------------------
   Future<void> _actualizarPerfil() async {
     setState(() => _isLoading = true);
 
     try {
+      // CORREGIDO: Usar los parámetros correctos del service
+      final direccionData = _construirObjetoDireccion();
+      
       final success = await _perfilService.actualizarPerfil(
         nombre: _nombreController.text.trim().isNotEmpty 
             ? _nombreController.text.trim() : null,
-        direccion: _direccionController.text.trim().isNotEmpty 
-            ? _direccionController.text.trim() : null,
+        // CORREGIDO: El parámetro es 'direccion' y espera un Map<String, dynamic>
+        direccion: direccionData.values.any((value) => value.isNotEmpty) 
+            ? direccionData.cast<String, dynamic>() : null,
         telefono: _telefonoController.text.trim().isNotEmpty 
             ? _telefonoController.text.trim() : null,
       );
@@ -208,13 +298,7 @@ class _ProfilePageState extends State<ProfilePage> {
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (context) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(20),
-            topRight: Radius.circular(20),
-          ),
-        ),
+        decoration: ProfileDecorations.getModalDecoration(),
         child: SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -223,38 +307,27 @@ class _ProfilePageState extends State<ProfilePage> {
                 width: 40,
                 height: 4,
                 margin: const EdgeInsets.only(top: 12),
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
-                ),
+                decoration: ProfileDecorations.getModalHandleDecoration(),
               ),
-              SizedBox(height: _getSpacing(context, 16, 20, 24)),
+              SizedBox(height: ProfileDimensions.getSmallSpacing(context)),
               Text(
                 "Opciones de imagen",
-                style: TextStyle(
-                  fontSize: _getFontSize(context, 16, 18, 20),
-                  fontWeight: FontWeight.w600,
-                ),
+                style: ProfileTextStyles.getSectionTitleStyle(context),
               ),
-              SizedBox(height: _getSpacing(context, 16, 20, 24)),
+              SizedBox(height: ProfileDimensions.getSmallSpacing(context)),
               ListTile(
                 contentPadding: EdgeInsets.symmetric(
-                  horizontal: _getSpacing(context, 16, 20, 24),
+                  horizontal: ProfileDimensions.getSmallSpacing(context),
                   vertical: 8,
                 ),
                 leading: Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.blue[50],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(Icons.photo_library, color: Colors.blue[600]),
+                  decoration: ProfileDecorations.getIconContainerDecoration(ProfileColors.primary),
+                  child: Icon(Icons.photo_library, color: ProfileColors.primary),
                 ),
                 title: Text(
                   "Seleccionar desde galería",
-                  style: TextStyle(
-                    fontSize: _getFontSize(context, 14, 16, 16),
-                  ),
+                  style: ProfileTextStyles.getLabelStyle(context),
                 ),
                 onTap: () {
                   Navigator.pop(context);
@@ -264,22 +337,17 @@ class _ProfilePageState extends State<ProfilePage> {
               if (_selectedImage != null) ...[
                 ListTile(
                   contentPadding: EdgeInsets.symmetric(
-                    horizontal: _getSpacing(context, 16, 20, 24),
+                    horizontal: ProfileDimensions.getSmallSpacing(context),
                     vertical: 8,
                   ),
                   leading: Container(
                     padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.green[50],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(Icons.cloud_upload, color: Colors.green[600]),
+                    decoration: ProfileDecorations.getIconContainerDecoration(ProfileColors.green),
+                    child: Icon(Icons.cloud_upload, color: ProfileColors.green),
                   ),
                   title: Text(
                     "Subir imagen seleccionada",
-                    style: TextStyle(
-                      fontSize: _getFontSize(context, 14, 16, 16),
-                    ),
+                    style: ProfileTextStyles.getLabelStyle(context),
                   ),
                   onTap: () {
                     Navigator.pop(context);
@@ -288,22 +356,17 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 ListTile(
                   contentPadding: EdgeInsets.symmetric(
-                    horizontal: _getSpacing(context, 16, 20, 24),
+                    horizontal: ProfileDimensions.getSmallSpacing(context),
                     vertical: 8,
                   ),
                   leading: Container(
                     padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(Icons.cancel, color: Colors.grey[600]),
+                    decoration: ProfileDecorations.getIconContainerDecoration(ProfileColors.textSecondary),
+                    child: Icon(Icons.cancel, color: ProfileColors.textSecondary),
                   ),
                   title: Text(
                     "Cancelar selección",
-                    style: TextStyle(
-                      fontSize: _getFontSize(context, 14, 16, 16),
-                    ),
+                    style: ProfileTextStyles.getLabelStyle(context),
                   ),
                   onTap: () {
                     Navigator.pop(context);
@@ -314,22 +377,17 @@ class _ProfilePageState extends State<ProfilePage> {
               if (_currentImageUrl != null && _currentImageUrl!.isNotEmpty) ...[
                 ListTile(
                   contentPadding: EdgeInsets.symmetric(
-                    horizontal: _getSpacing(context, 16, 20, 24),
+                    horizontal: ProfileDimensions.getSmallSpacing(context),
                     vertical: 8,
                   ),
                   leading: Container(
                     padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.red[50],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(Icons.delete, color: Colors.red[600]),
+                    decoration: ProfileDecorations.getIconContainerDecoration(ProfileColors.red),
+                    child: Icon(Icons.delete, color: ProfileColors.red),
                   ),
                   title: Text(
                     "Eliminar imagen actual",
-                    style: TextStyle(
-                      fontSize: _getFontSize(context, 14, 16, 16),
-                    ),
+                    style: ProfileTextStyles.getLabelStyle(context),
                   ),
                   onTap: () {
                     Navigator.pop(context);
@@ -337,7 +395,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   },
                 ),
               ],
-              SizedBox(height: _getSpacing(context, 16, 20, 24)),
+              SizedBox(height: ProfileDimensions.getSmallSpacing(context)),
             ],
           ),
         ),
@@ -424,12 +482,122 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   // -------------------------------
+  // NUEVO WIDGET PARA SIN CONEXIÓN
+  // -------------------------------
+  Widget _buildNoConnectionWidget() {
+    return Center(
+      child: Container(
+        padding: ProfileDimensions.getContentPadding(context),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Icono de sin WiFi con diseño atractivo
+            Container(
+              padding: EdgeInsets.all(ProfileDimensions.getLargeSpacing(context)),
+              decoration: BoxDecoration(
+                color: ProfileColors.surfaceContainer,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Icon(
+                Icons.wifi_off_rounded,
+                size: ProfileDimensions.getFontSize(context, 60, 80, 100),
+                color: ProfileColors.textSecondary,
+              ),
+            ),
+            
+            SizedBox(height: ProfileDimensions.getLargeSpacing(context)),
+            
+            // Título principal
+            Text(
+              "Sin conexión",
+              style: ProfileTextStyles.getMainTitleStyle(context).copyWith(
+                color: ProfileColors.textPrimary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            
+            SizedBox(height: ProfileDimensions.getSmallSpacing(context)),
+            
+            // Mensaje descriptivo
+            Text(
+              "Verifica tu conexión a internet\npara cargar tu perfil",
+              style: ProfileTextStyles.getSubtitleStyle(context),
+              textAlign: TextAlign.center,
+            ),
+            
+            SizedBox(height: ProfileDimensions.getLargeSpacing(context) * 1.5),
+            
+            // Botón de reintento
+            Container(
+              width: ProfileDimensions.getSpacing(context, 200, 250, 300),
+              height: ProfileDimensions.getButtonHeight(context),
+              child: ElevatedButton.icon(
+                onPressed: _isLoading ? null : _cargarPerfil,
+                style: ProfileButtonStyles.getPrimaryButtonStyle(),
+                icon: _isLoading 
+                  ? SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : Icon(
+                      Icons.refresh_rounded,
+                      color: Colors.white,
+                      size: ProfileDimensions.iconSizeMedium,
+                    ),
+                label: Text(
+                  _isLoading ? "Reintentando..." : "Reintentar",
+                  style: ProfileTextStyles.getButtonTextStyle(context),
+                ),
+              ),
+            ),
+            
+            SizedBox(height: ProfileDimensions.getMediumSpacing(context)),
+            
+            // Botón secundario para ir atrás
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (context) => const BienvenidaUsuarioScreen()),
+                  (Route<dynamic> route) => false,
+                );
+              },
+              style: ProfileButtonStyles.getTextButtonStyle(),
+              child: Text(
+                "Volver al inicio",
+                style: ProfileTextStyles.getActionButtonStyle(
+                  context, 
+                  color: ProfileColors.primary
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // -------------------------------
   // HELPERS
   // -------------------------------
   String _obtenerMensajeError(String mensaje) {
     switch (mensaje) {
       case "sin_conexion":
         return "Sin conexión a internet";
+      case "no_autorizado":
+        return "Sesión expirada. Por favor inicia sesión nuevamente";
+      case "timeout":
+        return "La operación tomó demasiado tiempo. Inténtalo de nuevo";
       default:
         return mensaje;
     }
@@ -441,9 +609,9 @@ class _ProfilePageState extends State<ProfilePage> {
       toastLength: Toast.LENGTH_LONG,
       gravity: ToastGravity.BOTTOM,
       timeInSecForIosWeb: 3,
-      backgroundColor: isError ? Colors.red[600] : Colors.green[600],
+      backgroundColor: isError ? ProfileColors.red : ProfileColors.green,
       textColor: Colors.white,
-      fontSize: _getFontSize(context, 14, 16, 16),
+      fontSize: ProfileTextStyles.getToastFontSize(context),
     );
   }
 
@@ -451,37 +619,30 @@ class _ProfilePageState extends State<ProfilePage> {
     final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: ProfileDecorations.getDialogShape(),
         title: Text(
           titulo,
-          style: TextStyle(
-            fontSize: _getFontSize(context, 16, 18, 20),
-          ),
+          style: ProfileTextStyles.getDialogTitleStyle(context),
         ),
         content: Text(
           mensaje,
-          style: TextStyle(
-            fontSize: _getFontSize(context, 14, 16, 16),
-          ),
+          style: ProfileTextStyles.getDialogContentStyle(context),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
+            style: ProfileButtonStyles.getTextButtonStyle(),
             child: Text(
               "Cancelar",
-              style: TextStyle(
-                fontSize: _getFontSize(context, 14, 16, 16),
-              ),
+              style: ProfileTextStyles.getDialogActionStyle(context),
             ),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            style: ProfileButtonStyles.getCancelTextButtonStyle(),
             child: Text(
               "Eliminar",
-              style: TextStyle(
-                fontSize: _getFontSize(context, 14, 16, 16),
-              ),
+              style: ProfileTextStyles.getDialogActionStyle(context),
             ),
           ),
         ],
@@ -496,29 +657,20 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget _buildProfileHeader() {
     return Container(
       width: double.infinity,
-      padding: _getContentPadding(context),
-      decoration: BoxDecoration(
-        color: Colors.grey[50],
-        borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(24),
-          bottomRight: Radius.circular(24),
-        ),
-      ),
+      padding: ProfileDimensions.getContentPadding(context),
+      decoration: ProfileDecorations.getHeaderDecoration(),
       child: Column(
         children: [
           Stack(
             children: [
               Container(
                 padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.grey[300]!, width: 2),
-                ),
+                decoration: ProfileDecorations.getAvatarBorderDecoration(),
                 child: Stack(
                   children: [
                     CircleAvatar(
-                      radius: _getAvatarRadius(context),
-                      backgroundColor: Colors.grey[200],
+                      radius: ProfileDimensions.getAvatarRadius(context),
+                      backgroundColor: ProfileColors.surfaceContainer,
                       backgroundImage: _selectedImage != null
                           ? FileImage(_selectedImage!)
                           : _currentImageUrl != null && _currentImageUrl!.isNotEmpty
@@ -528,26 +680,13 @@ class _ProfilePageState extends State<ProfilePage> {
                              (_currentImageUrl == null || _currentImageUrl!.isEmpty))
                           ? Icon(
                               Icons.person, 
-                              size: _getAvatarRadius(context) * 0.8, 
-                              color: Colors.grey
+                              size: ProfileDimensions.getAvatarIconSize(context), 
+                              color: ProfileColors.textHint
                             )
                           : null,
                     ),
                     if (_isUploadingImage)
-                      Positioned.fill(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.5),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Center(
-                            child: CircularProgressIndicator(
-                              strokeWidth: 3,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                          ),
-                        ),
-                      ),
+                      ProfileButtonStyles.getImageLoadingOverlay(),
                   ],
                 ),
               ),
@@ -557,83 +696,55 @@ class _ProfilePageState extends State<ProfilePage> {
                 child: GestureDetector(
                   onTap: _mostrarOpcionesImagen,
                   child: Container(
-                    padding: EdgeInsets.all(_isMobile(context) ? 8 : 10),
+                    padding: EdgeInsets.all(ProfileDimensions.getCameraIconPadding(context)),
                     decoration: BoxDecoration(
-                      color: _selectedImage != null ? Colors.orange : Colors.blue,
+                      gradient: _selectedImage != null 
+                          ? ProfileColors.orangeGradient
+                          : ProfileColors.primaryGradient,
                       shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
-                          spreadRadius: 1,
-                          blurRadius: 3,
-                          offset: const Offset(0, 1),
-                        ),
-                      ],
+                      boxShadow: _selectedImage != null 
+                          ? ProfileColors.orangeShadow 
+                          : ProfileColors.blueShadow,
                     ),
                     child: Icon(
                       _selectedImage != null ? Icons.photo : Icons.camera_alt,
                       color: Colors.white,
-                      size: _isMobile(context) ? 18 : 22,
+                      size: ProfileDimensions.getCameraIconSize(context),
                     ),
                   ),
                 ),
               ),
             ],
           ),
-          SizedBox(height: _getSpacing(context, 16, 20, 24)),
+          SizedBox(height: ProfileDimensions.getMediumSpacing(context)),
           Text(
             _nombreController.text.isNotEmpty ? _nombreController.text : "Usuario",
-            style: TextStyle(
-              fontSize: _getFontSize(context, 24, 28, 32),
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
+            style: ProfileTextStyles.getMainTitleStyle(context),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
           Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: _getSpacing(context, 12, 16, 18),
-              vertical: 4,
-            ),
-            decoration: BoxDecoration(
-              color: Colors.grey[600],
-              borderRadius: BorderRadius.circular(12),
-            ),
+            padding: ProfileDimensions.getBadgePadding(context),
+            decoration: ProfileDecorations.getBadgeDecoration(),
             child: Text(
               "Mi Perfil",
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: _getFontSize(context, 12, 14, 14),
-                fontWeight: FontWeight.w500,
-              ),
+              style: ProfileTextStyles.getBadgeStyle(context),
             ),
           ),
           if (_selectedImage != null) ...[
-            SizedBox(height: _getSpacing(context, 12, 16, 20)),
+            SizedBox(height: ProfileDimensions.getSmallSpacing(context)),
             Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: _getSpacing(context, 16, 18, 20),
-                vertical: 8,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.orange[50],
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.orange[200]!),
-              ),
+              padding: ProfileDimensions.getNotificationPadding(context),
+              decoration: ProfileDecorations.getNotificationDecoration(),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.info_outline, color: Colors.orange[700], size: 16),
+                  Icon(Icons.info_outline, color: ProfileColors.orange, size: ProfileDimensions.iconSizeSmall),
                   const SizedBox(width: 8),
                   Flexible(
                     child: Text(
                       "Imagen seleccionada - Toca el ícono para subir",
-                      style: TextStyle(
-                        color: Colors.orange[700],
-                        fontSize: _getFontSize(context, 11, 12, 13),
-                        fontWeight: FontWeight.w500,
-                      ),
+                      style: ProfileTextStyles.getNotificationStyle(context),
                       textAlign: TextAlign.center,
                     ),
                   ),
@@ -641,6 +752,121 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  // INPUT FIELD MEJORADO - ESTILO MERCADOLIBRE
+  Widget _buildModernInputField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    String? hint,
+    TextInputType keyboardType = TextInputType.text,
+    bool isRequired = false,
+    int maxLines = 1,
+  }) {
+    return Container(
+      margin: EdgeInsets.only(bottom: ProfileDimensions.getFieldSpacing(context)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Label con icono
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                Icon(
+                  icon,
+                  size: ProfileDimensions.iconSizeMedium,
+                  color: ProfileColors.textSecondary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: ProfileTextStyles.getLabelStyle(context),
+                ),
+                if (isRequired) ...[
+                  const SizedBox(width: 4),
+                  Text(
+                    '*',
+                    style: ProfileTextStyles.getRequiredLabelStyle(),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          // Campo de texto
+          Container(
+            decoration: ProfileDecorations.getInputFieldDecoration(),
+            child: TextFormField(
+              controller: controller,
+              keyboardType: keyboardType,
+              maxLines: maxLines,
+              style: ProfileTextStyles.getInputStyle(context),
+              decoration: InputDecoration(
+                hintText: hint ?? "Ingresa tu $label",
+                hintStyle: ProfileTextStyles.getHintStyle(context),
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                errorBorder: InputBorder.none,
+                focusedErrorBorder: InputBorder.none,
+                contentPadding: ProfileDimensions.getInputContentPadding(context),
+                filled: false,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // WIDGET DE INFORMACIÓN EN MODO VISTA
+  Widget _buildInfoDisplayCard({
+    required IconData icon,
+    required String label,
+    required String value,
+    Color? iconColor,
+  }) {
+    return Container(
+      margin: EdgeInsets.only(bottom: ProfileDimensions.getCardSpacing(context)),
+      padding: ProfileDimensions.getCardPadding(context),
+      decoration: ProfileDecorations.getCardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: ProfileDecorations.getLargeIconContainerDecoration(
+                  iconColor ?? ProfileColors.primary
+                ),
+                child: Icon(
+                  icon,
+                  color: iconColor ?? ProfileColors.primary,
+                  size: ProfileDimensions.iconSizeLarge,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                label,
+                style: ProfileTextStyles.getLabelStyle(context),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.only(left: 42),
+            child: Text(
+              value.isEmpty ? "No especificado" : value,
+              style: value.isEmpty 
+                  ? ProfileTextStyles.getEmptyValueStyle(context)
+                  : ProfileTextStyles.getDisplayValueStyle(context),
+            ),
+          ),
         ],
       ),
     );
@@ -654,155 +880,152 @@ class _ProfilePageState extends State<ProfilePage> {
     TextInputType keyboardType = TextInputType.text,
     bool isRequired = false,
   }) {
-    return Container(
-      margin: EdgeInsets.only(bottom: _getSpacing(context, 16, 20, 24)),
-      padding: _getContentPadding(context).copyWith(
-        top: _getSpacing(context, 16, 20, 24),
-        bottom: _getSpacing(context, 16, 20, 24),
-      ),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.05),
-            spreadRadius: 1,
-            blurRadius: 3,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, color: Colors.grey[600], size: 20),
-              ),
-              SizedBox(width: _getSpacing(context, 12, 14, 16)),
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: _getFontSize(context, 14, 16, 18),
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey[600],
+    if (_isEditing || !_hasProfile) {
+      return _buildModernInputField(
+        controller: controller,
+        label: label,
+        icon: icon,
+        keyboardType: keyboardType,
+        isRequired: isRequired,
+      );
+    } else {
+      return _buildInfoDisplayCard(
+        icon: icon,
+        label: label,
+        value: value,
+      );
+    }
+  }
+
+  // WIDGET MEJORADO PARA LA DIRECCIÓN
+  Widget _buildDireccionCard() {
+    final direccionCompleta = _formatearDireccionCompleta();
+    
+    if (_isEditing || !_hasProfile) {
+      return Container(
+        margin: EdgeInsets.only(bottom: ProfileDimensions.getFieldSpacing(context)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header de la sección
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: ProfileDecorations.getLargeIconContainerDecoration(ProfileColors.green),
+                    child: Icon(
+                      Icons.location_on,
+                      color: ProfileColors.green,
+                      size: ProfileDimensions.iconSizeLarge,
+                    ),
                   ),
-                ),
-              ),
-              if (isRequired) ...[
-                const SizedBox(width: 4),
-                const Text(
-                  '*',
-                  style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ],
-          ),
-          SizedBox(height: _getSpacing(context, 12, 16, 18)),
-          if (_isEditing || !_hasProfile) ...[
-            TextFormField(
-              controller: controller,
-              keyboardType: keyboardType,
-              style: TextStyle(
-                fontSize: _getFontSize(context, 16, 18, 20),
-                color: Colors.black87,
-              ),
-              decoration: InputDecoration(
-                hintText: value.isEmpty ? "Agregar $label" : null,
-                hintStyle: TextStyle(
-                  fontSize: _getFontSize(context, 16, 18, 20),
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: Colors.grey[300]!),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Colors.blue, width: 2),
-                ),
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: _getSpacing(context, 12, 16, 18),
-                  vertical: _getSpacing(context, 12, 16, 18),
-                ),
-                filled: true,
-                fillColor: Colors.grey[50],
+                  const SizedBox(width: 12),
+                  Text(
+                    "Dirección",
+                    style: ProfileTextStyles.getSectionTitleStyle(context),
+                  ),
+                ],
               ),
             ),
-          ] else ...[
-            Padding(
-              padding: EdgeInsets.symmetric(vertical: _getSpacing(context, 8, 12, 14)),
-              child: Text(
-                value.isEmpty ? "Agregar $label" : value,
-                style: TextStyle(
-                  fontSize: _getFontSize(context, 16, 18, 20),
-                  color: value.isEmpty ? Colors.grey[500] : Colors.black87,
-                  fontWeight: FontWeight.w400,
-                ),
+            // Campos de dirección
+            Container(
+              padding: ProfileDimensions.getCardPadding(context),
+              decoration: ProfileDecorations.getAddressContainerDecoration(),
+              child: Column(
+                children: [
+                  // Fila superior: Departamento y Ciudad
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildModernInputField(
+                          controller: _departamentoController,
+                          label: "Departamento",
+                          icon: Icons.map,
+                          hint: "Ej: Antioquia",
+                        ),
+                      ),
+                      SizedBox(width: ProfileDimensions.getSpacing(context, 12, 16, 20)),
+                      Expanded(
+                        child: _buildModernInputField(
+                          controller: _municipioController,
+                          label: "Ciudad",
+                          icon: Icons.location_city,
+                          hint: "Ej: Medellín",
+                        ),
+                      ),
+                    ],
+                  ),
+                  // Dirección completa
+                  _buildModernInputField(
+                    controller: _calleController,
+                    label: "Dirección",
+                    icon: Icons.home,
+                    hint: "Ej: Carrera 45 #67-89",
+                  ),
+                  // Código postal
+                  _buildModernInputField(
+                    controller: _codigoPostalController,
+                    label: "Código Postal",
+                    icon: Icons.markunread_mailbox,
+                    hint: "Ej: 050001",
+                    keyboardType: TextInputType.number,
+                  ),
+                ],
               ),
             ),
           ],
-        ],
-      ),
-    );
+        ),
+      );
+    } else {
+      return _buildInfoDisplayCard(
+        icon: Icons.location_on,
+        label: "Dirección",
+        value: direccionCompleta,
+        iconColor: ProfileColors.green,
+      );
+    }
   }
 
   Widget _buildCreateProfileForm() {
     return Center(
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: _getMaxWidth(context)),
+        constraints: BoxConstraints(maxWidth: ProfileDimensions.getMaxWidth(context)),
         child: Column(
           children: [
             Container(
-              padding: _getContentPadding(context),
+              padding: ProfileDimensions.getContentPadding(context),
               child: Column(
                 children: [
                   Text(
                     "Crear Perfil",
-                    style: TextStyle(
-                      fontSize: _getFontSize(context, 28, 32, 36),
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: ProfileTextStyles.getCreateTitleStyle(context),
                     textAlign: TextAlign.center,
                   ),
-                  SizedBox(height: _getSpacing(context, 8, 12, 16)),
+                  SizedBox(height: ProfileDimensions.getFontSize(context, 8, 12, 16)),
                   Text(
                     "Completa tu información personal",
-                    style: TextStyle(
-                      fontSize: _getFontSize(context, 16, 18, 20),
-                      color: Colors.grey[600],
-                    ),
+                    style: ProfileTextStyles.getSubtitleStyle(context),
                     textAlign: TextAlign.center,
                   ),
                 ],
               ),
             ),
             _buildProfileHeader(),
-            SizedBox(height: _getSpacing(context, 24, 32, 40)),
+            SizedBox(height: ProfileDimensions.getLargeSpacing(context)),
             Padding(
-              padding: _getHorizontalPadding(context),
+              padding: ProfileDimensions.getHorizontalPadding(context),
               child: Column(
                 children: [
                   _buildInfoCard(
                     icon: Icons.person,
-                    label: "Nombre",
+                    label: "Nombre completo",
                     value: _nombreController.text,
                     controller: _nombreController,
                     isRequired: true,
                   ),
-                  _buildInfoCard(
-                    icon: Icons.location_on,
-                    label: "Dirección",
-                    value: _direccionController.text,
-                    controller: _direccionController,
-                  ),
+                  _buildDireccionCard(),
                   _buildInfoCard(
                     icon: Icons.phone,
                     label: "Teléfono",
@@ -810,39 +1033,22 @@ class _ProfilePageState extends State<ProfilePage> {
                     controller: _telefonoController,
                     keyboardType: TextInputType.phone,
                   ),
-                  SizedBox(height: _getSpacing(context, 24, 32, 40)),
+                  SizedBox(height: ProfileDimensions.getLargeSpacing(context)),
                   SizedBox(
                     width: double.infinity,
-                    height: _getSpacing(context, 52, 60, 64),
+                    height: ProfileDimensions.getButtonHeight(context),
                     child: ElevatedButton(
                       onPressed: _isLoading ? null : _crearPerfil,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        elevation: 2,
-                      ),
+                      style: ProfileButtonStyles.getPrimaryButtonStyle(),
                       child: _isLoading
-                          ? SizedBox(
-                              height: _getSpacing(context, 20, 24, 26),
-                              width: _getSpacing(context, 20, 24, 26),
-                              child: const CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            )
+                          ? ProfileButtonStyles.getButtonProgressIndicator(context)
                           : Text(
                               "Crear Perfil",
-                              style: TextStyle(
-                                fontSize: _getFontSize(context, 16, 18, 20),
-                                fontWeight: FontWeight.w600,
-                              ),
+                              style: ProfileTextStyles.getButtonTextStyle(context),
                             ),
                     ),
                   ),
-                  SizedBox(height: _getSpacing(context, 24, 32, 40)),
+                  SizedBox(height: ProfileDimensions.getLargeSpacing(context)),
                 ],
               ),
             ),
@@ -855,28 +1061,23 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget _buildViewProfileForm() {
     return Center(
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: _getMaxWidth(context)),
+        constraints: BoxConstraints(maxWidth: ProfileDimensions.getMaxWidth(context)),
         child: Column(
           children: [
             _buildProfileHeader(),
-            SizedBox(height: _getSpacing(context, 24, 32, 40)),
+            SizedBox(height: ProfileDimensions.getLargeSpacing(context)),
             Padding(
-              padding: _getHorizontalPadding(context),
+              padding: ProfileDimensions.getHorizontalPadding(context),
               child: Column(
                 children: [
                   _buildInfoCard(
                     icon: Icons.person,
-                    label: "Nombre",
+                    label: "Nombre completo",
                     value: _nombreController.text,
                     controller: _nombreController,
                     isRequired: true,
                   ),
-                  _buildInfoCard(
-                    icon: Icons.location_on,
-                    label: "Dirección",
-                    value: _direccionController.text,
-                    controller: _direccionController,
-                  ),
+                  _buildDireccionCard(),
                   _buildInfoCard(
                     icon: Icons.phone,
                     label: "Teléfono",
@@ -885,10 +1086,10 @@ class _ProfilePageState extends State<ProfilePage> {
                     keyboardType: TextInputType.phone,
                   ),
                   if (_isEditing) ...[
-                    SizedBox(height: _getSpacing(context, 24, 32, 40)),
+                    SizedBox(height: ProfileDimensions.getLargeSpacing(context)),
                     _buildEditButtons(),
                   ],
-                  SizedBox(height: _getSpacing(context, 24, 32, 40)),
+                  SizedBox(height: ProfileDimensions.getLargeSpacing(context)),
                 ],
               ),
             ),
@@ -899,60 +1100,35 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Widget _buildEditButtons() {
-    if (_isDesktop(context) || _isTablet(context)) {
+    if (ProfileDimensions.isDesktop(context) || ProfileDimensions.isTablet(context)) {
       return Row(
         children: [
           Expanded(
             child: SizedBox(
-              height: _getSpacing(context, 52, 60, 64),
+              height: ProfileDimensions.getButtonHeight(context),
               child: OutlinedButton(
                 onPressed: () => setState(() => _isEditing = false),
-                style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: Colors.grey[400]!),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
+                style: ProfileButtonStyles.getSecondaryButtonStyle(),
                 child: Text(
                   "Cancelar",
-                  style: TextStyle(
-                    fontSize: _getFontSize(context, 16, 18, 20),
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: ProfileTextStyles.getSecondaryButtonTextStyle(context),
                 ),
               ),
             ),
           ),
-          SizedBox(width: _getSpacing(context, 16, 20, 24)),
+          SizedBox(width: ProfileDimensions.getSmallSpacing(context)),
           Expanded(
             flex: 2,
             child: SizedBox(
-              height: _getSpacing(context, 52, 60, 64),
+              height: ProfileDimensions.getButtonHeight(context),
               child: ElevatedButton(
                 onPressed: _isLoading ? null : _actualizarPerfil,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 2,
-                ),
+                style: ProfileButtonStyles.getPrimaryButtonStyle(),
                 child: _isLoading
-                    ? SizedBox(
-                        height: _getSpacing(context, 20, 24, 26),
-                        width: _getSpacing(context, 20, 24, 26),
-                        child: const CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
+                    ? ProfileButtonStyles.getButtonProgressIndicator(context)
                     : Text(
                         "Guardar Cambios",
-                        style: TextStyle(
-                          fontSize: _getFontSize(context, 16, 18, 20),
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: ProfileTextStyles.getButtonTextStyle(context),
                       ),
               ),
             ),
@@ -964,53 +1140,28 @@ class _ProfilePageState extends State<ProfilePage> {
         children: [
           SizedBox(
             width: double.infinity,
-            height: _getSpacing(context, 52, 60, 64),
+            height: ProfileDimensions.getButtonHeight(context),
             child: ElevatedButton(
               onPressed: _isLoading ? null : _actualizarPerfil,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 2,
-              ),
+              style: ProfileButtonStyles.getPrimaryButtonStyle(),
               child: _isLoading
-                  ? SizedBox(
-                      height: _getSpacing(context, 20, 24, 26),
-                      width: _getSpacing(context, 20, 24, 26),
-                      child: const CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    )
+                  ? ProfileButtonStyles.getButtonProgressIndicator(context)
                   : Text(
                       "Guardar Cambios",
-                      style: TextStyle(
-                        fontSize: _getFontSize(context, 16, 18, 20),
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: ProfileTextStyles.getButtonTextStyle(context),
                     ),
             ),
           ),
-          SizedBox(height: _getSpacing(context, 12, 16, 20)),
+          SizedBox(height: ProfileDimensions.getSmallSpacing(context)),
           SizedBox(
             width: double.infinity,
-            height: _getSpacing(context, 52, 60, 64),
+            height: ProfileDimensions.getButtonHeight(context),
             child: OutlinedButton(
               onPressed: () => setState(() => _isEditing = false),
-              style: OutlinedButton.styleFrom(
-                side: BorderSide(color: Colors.grey[400]!),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
+              style: ProfileButtonStyles.getSecondaryButtonStyle(),
               child: Text(
                 "Cancelar",
-                style: TextStyle(
-                  fontSize: _getFontSize(context, 16, 18, 20),
-                  fontWeight: FontWeight.w600,
-                ),
+                style: ProfileTextStyles.getSecondaryButtonTextStyle(context),
               ),
             ),
           ),
@@ -1022,9 +1173,9 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: ProfileColors.surfaceVariant,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: ProfileColors.surface,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, color: Colors.black87),
@@ -1036,29 +1187,29 @@ class _ProfilePageState extends State<ProfilePage> {
           },
         ),
         title: Text(
-          _hasProfile ? "Mi Perfil" : "Crear Perfil",
-          style: TextStyle(
-            color: Colors.black87,
-            fontWeight: FontWeight.w600,
-            fontSize: _getFontSize(context, 18, 20, 22),
-          ),
+          _hasConnectionError 
+              ? "Perfil" 
+              : (_hasProfile ? "Mi Perfil" : "Crear Perfil"),
+          style: ProfileTextStyles.getAppBarTitleStyle(context),
         ),
         centerTitle: true,
         actions: [
-          if (_hasProfile) ...[
+          // Solo mostrar acciones si no hay error de conexión y se ha cargado el perfil
+          if (_hasProfile && !_hasConnectionError) ...[
             if (!_isEditing) ...[
               const SettingsButton(),
-
               const SizedBox(width: 8),
             ],
             TextButton(
               onPressed: () => setState(() => _isEditing = !_isEditing),
+              style: _isEditing 
+                  ? ProfileButtonStyles.getCancelTextButtonStyle()
+                  : ProfileButtonStyles.getTextButtonStyle(),
               child: Text(
                 _isEditing ? "Cancelar" : "Editar",
-                style: TextStyle(
-                  color: _isEditing ? Colors.red : Colors.blue,
-                  fontWeight: FontWeight.w600,
-                  fontSize: _getFontSize(context, 14, 16, 16),
+                style: ProfileTextStyles.getActionButtonStyle(
+                  context, 
+                  color: _isEditing ? Colors.red : ProfileColors.primary
                 ),
               ),
             ),
@@ -1066,15 +1217,15 @@ class _ProfilePageState extends State<ProfilePage> {
         ],
       ),
       body: _isLoading && _profileData == null
-          ? const Center(
-              child: CircularProgressIndicator(),
-            )
-          : SingleChildScrollView(
-              physics: const ClampingScrollPhysics(),
-              child: _hasProfile 
-                  ? _buildViewProfileForm() 
-                  : _buildCreateProfileForm(),
-            ),
+          ? ProfileButtonStyles.getModalProgressIndicator()
+          : _hasConnectionError
+              ? _buildNoConnectionWidget() // Mostrar widget de sin conexión
+              : SingleChildScrollView(
+                  physics: const ClampingScrollPhysics(),
+                  child: _hasProfile 
+                      ? _buildViewProfileForm() 
+                      : _buildCreateProfileForm(),
+                ),
     );
   }
 }

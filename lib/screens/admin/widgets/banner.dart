@@ -1,6 +1,6 @@
 // banner_widget.dart
 import 'package:flutter/material.dart';
-import '../styles/banner_styles.dart';
+import '../styles/banner/banner_styles.dart';
 
 class BannerWidget extends StatelessWidget {
   final MediaQueryData media;

@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
-import '../screens/admin/styles/configuracion_styles.dart';
+import '../screens/admin/styles/configuracion/configuracion_styles.dart';
 
 void mostrarOpcionesDeConfiguracion({
   required BuildContext context,
@@ -284,7 +284,6 @@ class _PasswordOption extends StatelessWidget {
       ),
       title: ConfiguracionConstants.changePasswordTitle,
       subtitle: ConfiguracionConstants.changePasswordSubtitle,
-      hasNewBadge: false,
       dimensions: dimensions,
       onTap: () => Navigator.pushNamed(context, ConfiguracionConstants.forgotPasswordRoute),
     );
@@ -308,7 +307,6 @@ class _AdvancedOptions extends StatelessWidget {
           ),
           title: ConfiguracionConstants.viewAdminsTitle,
           subtitle: ConfiguracionConstants.viewAdminsSubtitle,
-          hasNewBadge: false,
           dimensions: dimensions,
           onTap: () => Navigator.pushNamed(context, ConfiguracionConstants.viewAdminsRoute),
         ),
@@ -321,37 +319,11 @@ class _AdvancedOptions extends StatelessWidget {
           ),
           title: ConfiguracionConstants.inviteUsersTitle,
           subtitle: ConfiguracionConstants.inviteUsersSubtitle,
-          hasNewBadge: true,
           dimensions: dimensions,
           onTap: () => Navigator.pushNamed(context, ConfiguracionConstants.invitationsRoute),
         ),
-        SizedBox(height: ConfiguracionDimensions.mediumSpacing - 4),
-        // ✅ NUEVA OPCIÓN DE TRANSFERENCIA
-        _ModernOption(
-          icon: ConfiguracionTheme.transferIcon,
-          iconColor: ConfiguracionTheme.transferOptionColor,
-          iconBg: ConfiguracionTheme.transferOptionColor.withOpacity(
-            ConfiguracionTheme.optionIconOpacity
-          ),
-          title: ConfiguracionConstants.transferRoleTitle,
-          subtitle: ConfiguracionConstants.transferRoleSubtitle,
-          hasNewBadge: false,
-          isDangerous: true, // Marcar como peligrosa
-          dimensions: dimensions,
-          onTap: () => _handleTransferRole(context, dimensions),
-        ),
       ],
     );
-  }
-
-  // ✅ Método para manejar la transferencia
-  Future<void> _handleTransferRole(BuildContext context, Map<String, double> dimensions) async {
-    final shouldTransfer = await _TransferRoleConfirmationDialog.show(context, dimensions);
-
-    if (shouldTransfer == true) {
-      // Navegar a la pantalla de transferencia o mostrar formulario
-      Navigator.pushNamed(context, ConfiguracionConstants.transferRoleRoute);
-    }
   }
 }
 
@@ -370,7 +342,6 @@ class _LogoutOption extends StatelessWidget {
       ),
       title: ConfiguracionConstants.logoutTitle,
       subtitle: ConfiguracionConstants.logoutSubtitle,
-      hasNewBadge: false,
       isDangerous: true,
       dimensions: dimensions,
       onTap: () => _handleLogout(context, dimensions),
@@ -443,7 +414,6 @@ class _ModernOption extends StatelessWidget {
   final Color iconBg;
   final String title;
   final String subtitle;
-  final bool hasNewBadge;
   final Map<String, double> dimensions;
   final bool isDangerous;
   final VoidCallback onTap;
@@ -454,7 +424,6 @@ class _ModernOption extends StatelessWidget {
     required this.iconBg,
     required this.title,
     required this.subtitle,
-    required this.hasNewBadge,
     required this.dimensions,
     this.isDangerous = false,
     required this.onTap,
@@ -499,26 +468,9 @@ class _ModernOption extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Flexible(
-              child: Text(
-                title,
-                style: ConfiguracionTextStyles.getOptionTitleStyle(dimensions),
-              ),
-            ),
-            if (hasNewBadge) ...[
-              SizedBox(width: ConfiguracionLayout.optionBadgeSpacing),
-              Container(
-                padding: ConfiguracionLayout.newBadgePadding,
-                decoration: ConfiguracionDecorations.getNewBadgeDecoration(),
-                child: const Text(
-                  ConfiguracionConstants.newBadgeText,
-                  style: ConfiguracionTextStyles.newBadgeStyle,
-                ),
-              ),
-            ],
-          ],
+        Text(
+          title,
+          style: ConfiguracionTextStyles.getOptionTitleStyle(dimensions),
         ),
         SizedBox(height: ConfiguracionLayout.optionTitleSpacing),
         Text(
@@ -605,81 +557,6 @@ class _LogoutConfirmationDialog {
             ),
             child: Text(
               ConfiguracionConstants.logoutButtonText,
-              style: ConfiguracionTextStyles.getDialogButtonStyle(dimensions),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ✅ NUEVO DIÁLOGO DE CONFIRMACIÓN PARA TRANSFERENCIA
-class _TransferRoleConfirmationDialog {
-  static Future<bool?> show(BuildContext context, Map<String, double> dimensions) {
-    return showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(ConfiguracionDimensions.extraLargeBorderRadius)
-        ),
-        elevation: 8,
-        backgroundColor: ConfiguracionTheme.surfaceColor,
-        title: Row(
-          children: [
-            Container(
-              padding: ConfiguracionLayout.backButtonPadding,
-              decoration: ConfiguracionDecorations.getTransferDialogIconDecoration(),
-              child: const Icon(
-                Icons.warning_amber_rounded,
-                color: ConfiguracionTheme.transferOptionColor,
-                size: ConfiguracionLayout.dialogIconSize,
-              ),
-            ),
-            SizedBox(width: ConfiguracionLayout.versionInfoSpacing),
-            Flexible(
-              child: Text(
-                ConfiguracionConstants.transferDialogTitle,
-                style: ConfiguracionTextStyles.getDialogTitleStyle(dimensions).copyWith(
-                  color: ConfiguracionTheme.transferOptionColor,
-                ),
-              ),
-            ),
-          ],
-        ),
-        content: Text(
-          ConfiguracionConstants.transferDialogContent,
-          style: ConfiguracionTextStyles.getDialogContentStyle(dimensions),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            style: TextButton.styleFrom(
-              padding: ConfiguracionLayout.dialogButtonPadding,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10)
-              ),
-            ),
-            child: Text(
-              ConfiguracionConstants.cancelButtonText,
-              style: ConfiguracionTextStyles.getDialogButtonStyle(dimensions).copyWith(
-                color: ConfiguracionTheme.textSecondary,
-              ),
-            ),
-          ),
-          SizedBox(width: ConfiguracionLayout.dialogActionSpacing),
-          ElevatedButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: ConfiguracionTheme.transferOptionColor,
-              foregroundColor: ConfiguracionTheme.surfaceColor,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              elevation: 0,
-              padding: ConfiguracionLayout.dialogButtonPadding,
-            ),
-            child: Text(
-              ConfiguracionConstants.transferButtonText,
               style: ConfiguracionTextStyles.getDialogButtonStyle(dimensions),
             ),
           ),

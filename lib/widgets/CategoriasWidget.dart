@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../../providers/categoria_provider.dart';
 import '../screens/usuario/todas_categorias_screen.dart';
@@ -8,11 +9,13 @@ import '../screens/usuario/todas_categorias_screen.dart';
 class CategoriasWidget extends StatefulWidget {
   final VoidCallback onVerMas;
   final Function(String) onCategoriaSeleccionada;
+  final bool showNoConnectionScreen; // 🔹 NUEVO: Parámetro para controlar visibilidad
 
   const CategoriasWidget({
     Key? key,
     required this.onVerMas,
     required this.onCategoriaSeleccionada,
+    this.showNoConnectionScreen = false, // 🔹 NUEVO: Por defecto false
   }) : super(key: key);
 
   @override
@@ -24,21 +27,93 @@ class _CategoriasWidgetState extends State<CategoriasWidget>
   @override
   bool get wantKeepAlive => true;
 
+  bool _isConnected = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _monitorConnectivity();
+  }
+
+  void _monitorConnectivity() {
+    Connectivity().onConnectivityChanged.listen((status) {
+      final conectado = status != ConnectivityResult.none;
+      if (mounted) {
+        setState(() => _isConnected = conectado);
+      }
+    });
+  }
+
+  bool _shouldShowContent() {
+    // 🔹 CAMBIO PRINCIPAL: No mostrar nada si estamos en pantalla sin conexión
+    return !widget.showNoConnectionScreen;
+  }
+
+  bool _shouldShowErrors() {
+    return _isConnected && !widget.showNoConnectionScreen;
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
 
+    // 🔹 OCULTAR COMPLETAMENTE si estamos en modo sin conexión
+    if (!_shouldShowContent()) {
+      return const SizedBox.shrink();
+    }
+
     final categoriaProvider = Provider.of<CategoriaProvider>(context);
     final categorias = categoriaProvider.categorias;
     final isLoading = categoriaProvider.isLoading;
+    final hasError = categoriaProvider.error != null;
 
     final size = MediaQuery.of(context).size;
     final double avatarSize = size.width * 0.14;
     final double fontSize = size.width * 0.03;
     final double iconSize = size.width * 0.085;
 
-    // 🚀 Mostrar shimmer solo si está cargando y no hay categorías aún
-    if (isLoading && categorias.isEmpty) {
+    // 🔹 No mostrar error si no hay conexión O si no debería mostrar errores
+    if (hasError && categorias.isEmpty && !_shouldShowErrors()) {
+      return const SizedBox.shrink();
+    }
+
+    // 🔹 Si hay error Y conexión, mostrar mensaje de error
+    if (hasError && categorias.isEmpty && _shouldShowErrors()) {
+      return Container(
+        height: avatarSize * 1.8,
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: iconSize, color: Colors.red.shade400),
+            const SizedBox(height: 8),
+            Text(
+              "Error al cargar categorías",
+              style: TextStyle(
+                color: Colors.red.shade600,
+                fontSize: fontSize,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: () {
+                Provider.of<CategoriaProvider>(context, listen: false)
+                    .cargarCategorias(forceRefresh: true);
+              },
+              icon: Icon(Icons.refresh, size: fontSize + 2, color: Colors.red),
+              label: Text(
+                "Reintentar",
+                style: TextStyle(fontSize: fontSize, color: Colors.red),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 🔹 Mostrar shimmer solo si está cargando, hay conexión y no hay categorías aún
+    if (isLoading && categorias.isEmpty && _isConnected) {
       return SizedBox(
         height: avatarSize * 1.8,
         child: ListView.separated(
@@ -107,8 +182,6 @@ class _CategoriasWidgetState extends State<CategoriasWidget>
     return InkWell(
       borderRadius: BorderRadius.circular(100),
       onTap: () {
-        // 🔥 USAR EL CALLBACK DEL PADRE - No navegar directamente
-        // Esto permite que BienvenidaUsuarioScreen maneje la navegación
         widget.onCategoriaSeleccionada(categoria['_id']);
       },
       child: Container(
@@ -158,7 +231,6 @@ class _CategoriasWidgetState extends State<CategoriasWidget>
     return InkWell(
       borderRadius: BorderRadius.circular(100),
       onTap: () {
-        // 🔥 USAR EL CALLBACK DEL PADRE
         widget.onVerMas();
       },
       child: Container(

@@ -5,6 +5,9 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../../providers/auth_provider.dart';
 import '../../services/admin_service.dart';
+import '../admin/styles/ver_admin/ver_admins_colors.dart';
+import '../admin/styles/ver_admin/ver_admins_dimensions.dart';
+import '../admin/styles/ver_admin/ver_admins_styles.dart';
 
 class VerAdminsPage extends StatefulWidget {
   const VerAdminsPage({super.key});
@@ -103,7 +106,8 @@ class _VerAdminsPageState extends State<VerAdminsPage>
   void _mostrarSnack(String mensaje, {bool esError = false}) {
     if (!mounted) return;
     
-    final screenWidth = MediaQuery.of(context).size.width;
+    final dimensions = VerAdminsDimensions(MediaQuery.of(context).size.width);
+    final styles = VerAdminsStyles(dimensions);
     
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -112,21 +116,21 @@ class _VerAdminsPageState extends State<VerAdminsPage>
             Icon(
               esError ? Icons.error_outline : Icons.check_circle_outline,
               color: Colors.white,
-              size: screenWidth > 600 ? 24 : 20,
+              size: dimensions.snackBarIconSize,
             ),
-            SizedBox(width: screenWidth > 600 ? 16 : 12),
+            SizedBox(width: dimensions.snackBarIconSpacing),
             Expanded(
               child: Text(
                 mensaje,
-                style: TextStyle(fontSize: screenWidth > 600 ? 16 : 15),
+                style: styles.snackBarTextStyle,
               ),
             ),
           ],
         ),
-        backgroundColor: esError ? Colors.red[600] : Colors.green[600],
+        backgroundColor: esError ? VerAdminsColors.errorRed : VerAdminsColors.successGreen,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: EdgeInsets.all(screenWidth > 600 ? 24 : 16),
+        shape: styles.snackBarShape,
+        margin: EdgeInsets.all(dimensions.snackBarMargin),
         duration: Duration(seconds: esError ? 4 : 3),
       ),
     );
@@ -141,25 +145,26 @@ class _VerAdminsPageState extends State<VerAdminsPage>
 
     if (result != true) return;
 
+    final dimensions = VerAdminsDimensions(MediaQuery.of(context).size.width);
+    final styles = VerAdminsStyles(dimensions);
+
     // Mostrar loading mientras se elimina
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => Center(
         child: Card(
-          margin: EdgeInsets.all(MediaQuery.of(context).size.width > 600 ? 48 : 24),
+          margin: EdgeInsets.all(dimensions.loadingDialogMargin),
           child: Padding(
-            padding: EdgeInsets.all(MediaQuery.of(context).size.width > 600 ? 32 : 24),
+            padding: EdgeInsets.all(dimensions.loadingDialogPadding),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 const CircularProgressIndicator(),
-                SizedBox(height: MediaQuery.of(context).size.width > 600 ? 24 : 16),
+                SizedBox(height: dimensions.loadingDialogSpacing),
                 Text(
                   'Eliminando administrador...',
-                  style: TextStyle(
-                    fontSize: MediaQuery.of(context).size.width > 600 ? 18 : 16,
-                  ),
+                  style: styles.loadingTextStyle,
                 ),
               ],
             ),
@@ -194,121 +199,82 @@ class _VerAdminsPageState extends State<VerAdminsPage>
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
     final esSuperAdmin = auth.rol == 'superAdmin';
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isTablet = screenWidth > 600;
-    final isDesktop = screenWidth > 1200;
+    final dimensions = VerAdminsDimensions(MediaQuery.of(context).size.width);
 
     return Scaffold(
-      backgroundColor: Colors.grey[50],
-      body: CustomScrollView(
-        slivers: [
-          _buildSliverAppBar(isTablet, isDesktop),
-          SliverToBoxAdapter(
-            child: _buildStatsCard(isTablet, isDesktop),
-          ),
-          _buildContent(esSuperAdmin, isTablet, isDesktop),
-        ],
+      backgroundColor: VerAdminsColors.backgroundGrey,
+      body: RefreshIndicator(
+        onRefresh: cargarAdmins,
+        color: VerAdminsColors.primaryBlue,
+        backgroundColor: Colors.white,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            _buildSliverAppBar(dimensions),
+            SliverToBoxAdapter(
+              child: _buildStatsCard(dimensions),
+            ),
+            _buildContent(esSuperAdmin, dimensions),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildSliverAppBar(bool isTablet, bool isDesktop) {
+  Widget _buildSliverAppBar(VerAdminsDimensions dimensions) {
+    final styles = VerAdminsStyles(dimensions);
+    
     return SliverAppBar(
-      expandedHeight: isDesktop ? 160 : (isTablet ? 140 : 120),
+      expandedHeight: dimensions.appBarHeight,
       floating: false,
       pinned: true,
       elevation: 0,
-      backgroundColor: Colors.blue[600],
+      backgroundColor: VerAdminsColors.primaryBlue,
       iconTheme: const IconThemeData(color: Colors.white),
       flexibleSpace: FlexibleSpaceBar(
         title: Text(
           'Administradores',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: isDesktop ? 24 : (isTablet ? 22 : 20),
-          ),
+          style: styles.appBarTitleStyle,
         ),
         background: Container(
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Colors.blue[600]!,
-                Colors.blue[800]!,
-              ],
-            ),
+            gradient: styles.appBarGradient,
           ),
         ),
       ),
-      actions: [
-        IconButton(
-          icon: Icon(
-            Icons.refresh, 
-            color: Colors.white,
-            size: isTablet ? 28 : 24,
-          ),
-          onPressed: cargando ? null : cargarAdmins,
-          tooltip: 'Actualizar',
-        ),
-        if (isTablet) const SizedBox(width: 8),
-      ],
     );
   }
 
-  Widget _buildStatsCard(bool isTablet, bool isDesktop) {
-    final margin = isDesktop ? 32.0 : (isTablet ? 24.0 : 16.0);
-    final padding = isDesktop ? 32.0 : (isTablet ? 24.0 : 20.0);
+  Widget _buildStatsCard(VerAdminsDimensions dimensions) {
+    final styles = VerAdminsStyles(dimensions);
 
     return Container(
-      margin: EdgeInsets.all(margin),
-      padding: EdgeInsets.all(padding),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(isTablet ? 20 : 16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: isTablet ? 15 : 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+      margin: EdgeInsets.all(dimensions.statsMargin),
+      padding: EdgeInsets.all(dimensions.statsPadding),
+      decoration: styles.statsCardDecoration,
       child: Row(
         children: [
           Container(
-            padding: EdgeInsets.all(isTablet ? 16 : 12),
-            decoration: BoxDecoration(
-              color: Colors.blue[100],
-              borderRadius: BorderRadius.circular(isTablet ? 16 : 12),
-            ),
+            padding: EdgeInsets.all(dimensions.statsIconPadding),
+            decoration: styles.statsIconDecoration,
             child: Icon(
               Icons.admin_panel_settings,
-              color: Colors.blue[600],
-              size: isDesktop ? 32 : (isTablet ? 28 : 24),
+              color: VerAdminsColors.primaryBlue,
+              size: dimensions.statsIconSize,
             ),
           ),
-          SizedBox(width: isTablet ? 20 : 16),
+          SizedBox(width: dimensions.statsSpacing),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 'Total de administradores',
-                style: TextStyle(
-                  fontSize: isDesktop ? 18 : (isTablet ? 16 : 14),
-                  color: Colors.grey[600],
-                  fontWeight: FontWeight.w500,
-                ),
+                style: styles.statsTitleStyle,
               ),
-              SizedBox(height: isTablet ? 8 : 4),
+              SizedBox(height: dimensions.cardSubtitleSpacing),
               Text(
                 cargando ? '...' : '${admins.length}',
-                style: TextStyle(
-                  fontSize: isDesktop ? 32 : (isTablet ? 28 : 24),
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
+                style: styles.statsCountStyle,
               ),
             ],
           ),
@@ -317,11 +283,11 @@ class _VerAdminsPageState extends State<VerAdminsPage>
     );
   }
 
-  Widget _buildContent(bool esSuperAdmin, bool isTablet, bool isDesktop) {
+  Widget _buildContent(bool esSuperAdmin, VerAdminsDimensions dimensions) {
     if (cargando) {
       return SliverList(
         delegate: SliverChildBuilderDelegate(
-          (_, index) => _buildSkeletonCard(isTablet, isDesktop),
+          (_, index) => _buildSkeletonCard(dimensions),
           childCount: 5,
         ),
       );
@@ -329,27 +295,29 @@ class _VerAdminsPageState extends State<VerAdminsPage>
 
     if (error != null) {
       return SliverFillRemaining(
-        child: _buildErrorState(isTablet, isDesktop),
+        hasScrollBody: false,
+        child: _buildErrorState(dimensions),
       );
     }
 
     if (admins.isEmpty) {
       return SliverFillRemaining(
-        child: _buildEmptyState(isTablet, isDesktop),
+        hasScrollBody: false,
+        child: _buildEmptyState(dimensions),
       );
     }
 
     // Para desktop, usar grid si hay muchos admins
-    if (isDesktop && admins.length > 3) {
-      return _buildGridContent(esSuperAdmin, isDesktop);
+    if (dimensions.isDesktop && admins.length > 3) {
+      return _buildGridContent(esSuperAdmin, dimensions);
     }
 
     return SliverPadding(
       padding: EdgeInsets.fromLTRB(
-        isDesktop ? 32 : (isTablet ? 24 : 16), 
+        dimensions.contentHorizontalPadding, 
         0, 
-        isDesktop ? 32 : (isTablet ? 24 : 16), 
-        isDesktop ? 32 : (isTablet ? 24 : 16)
+        dimensions.contentHorizontalPadding, 
+        dimensions.contentBottomPadding
       ),
       sliver: SliverList(
         delegate: SliverChildBuilderDelegate(
@@ -369,7 +337,7 @@ class _VerAdminsPageState extends State<VerAdminsPage>
                     curve: Curves.easeOut,
                   ),
                 )),
-                child: _buildAdminCard(admin, esSuperAdmin, index, isTablet, isDesktop),
+                child: _buildAdminCard(admin, esSuperAdmin, index, dimensions),
               ),
             );
           },
@@ -379,17 +347,15 @@ class _VerAdminsPageState extends State<VerAdminsPage>
     );
   }
 
-  Widget _buildGridContent(bool esSuperAdmin, bool isDesktop) {
-    final crossAxisCount = isDesktop ? 2 : 1;
-    
+  Widget _buildGridContent(bool esSuperAdmin, VerAdminsDimensions dimensions) {
     return SliverPadding(
       padding: const EdgeInsets.fromLTRB(32, 0, 32, 32),
       sliver: SliverGrid(
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: crossAxisCount,
-          childAspectRatio: 3.5,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 12,
+          crossAxisCount: dimensions.gridCrossAxisCount,
+          childAspectRatio: dimensions.gridChildAspectRatio,
+          crossAxisSpacing: dimensions.gridCrossAxisSpacing,
+          mainAxisSpacing: dimensions.gridMainAxisSpacing,
         ),
         delegate: SliverChildBuilderDelegate(
           (context, index) {
@@ -408,7 +374,7 @@ class _VerAdminsPageState extends State<VerAdminsPage>
                     curve: Curves.easeOut,
                   ),
                 )),
-                child: _buildAdminCard(admin, esSuperAdmin, index, true, isDesktop),
+                child: _buildAdminCard(admin, esSuperAdmin, index, dimensions),
               ),
             );
           },
@@ -418,42 +384,44 @@ class _VerAdminsPageState extends State<VerAdminsPage>
     );
   }
 
-  Widget _buildSkeletonCard(bool isTablet, bool isDesktop) {
-    final margin = isDesktop ? 32.0 : (isTablet ? 24.0 : 16.0);
-    final padding = isDesktop ? 24.0 : (isTablet ? 22.0 : 20.0);
-    final avatarRadius = isDesktop ? 35.0 : (isTablet ? 32.0 : 30.0);
-
+  Widget _buildSkeletonCard(VerAdminsDimensions dimensions) {
     return Container(
-      margin: EdgeInsets.symmetric(horizontal: margin, vertical: 8),
+      margin: EdgeInsets.symmetric(
+        horizontal: dimensions.skeletonMargin, 
+        vertical: 8
+      ),
       child: Shimmer.fromColors(
         baseColor: Colors.grey[200]!,
         highlightColor: Colors.grey[50]!,
         child: Container(
-          padding: EdgeInsets.all(padding),
+          padding: EdgeInsets.all(dimensions.skeletonPadding),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(isTablet ? 20 : 16),
+            borderRadius: BorderRadius.circular(dimensions.cardRadius),
           ),
           child: Row(
             children: [
-              CircleAvatar(radius: avatarRadius, backgroundColor: Colors.white),
-              SizedBox(width: isTablet ? 20 : 16),
+              CircleAvatar(
+                radius: dimensions.skeletonAvatarRadius, 
+                backgroundColor: Colors.white
+              ),
+              SizedBox(width: dimensions.statsSpacing),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
-                      height: isDesktop ? 20 : (isTablet ? 18 : 16),
+                      height: dimensions.skeletonTitleHeight,
                       width: double.infinity,
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),
-                    SizedBox(height: isTablet ? 12 : 8),
+                    SizedBox(height: dimensions.skeletonSpacing),
                     Container(
-                      height: isDesktop ? 18 : (isTablet ? 16 : 14),
-                      width: isTablet ? 180 : 150,
+                      height: dimensions.skeletonSubtitleHeight,
+                      width: dimensions.skeletonSubtitleWidth,
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(4),
@@ -469,112 +437,70 @@ class _VerAdminsPageState extends State<VerAdminsPage>
     );
   }
 
-  Widget _buildAdminCard(dynamic admin, bool esSuperAdmin, int index, bool isTablet, bool isDesktop) {
-    final colores = [
-      Colors.blue,
-      Colors.green,
-      Colors.orange,
-      Colors.purple,
-      Colors.teal,
-      Colors.indigo,
-    ];
-    final color = colores[index % colores.length];
-    final avatarSize = isDesktop ? 64.0 : (isTablet ? 60.0 : 56.0);
-    final padding = isDesktop ? 24.0 : (isTablet ? 22.0 : 20.0);
+  Widget _buildAdminCard(
+    dynamic admin, 
+    bool esSuperAdmin, 
+    int index, 
+    VerAdminsDimensions dimensions
+  ) {
+    final styles = VerAdminsStyles(dimensions);
+    final color = VerAdminsColors.getAvatarColor(index);
 
     return Container(
-      margin: EdgeInsets.only(bottom: isTablet ? 16 : 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(isTablet ? 20 : 16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: isTablet ? 15 : 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+      margin: EdgeInsets.only(bottom: dimensions.cardMarginBottom),
+      decoration: styles.cardDecoration,
       child: ListTile(
-        contentPadding: EdgeInsets.all(padding),
+        contentPadding: EdgeInsets.all(dimensions.cardPadding),
         leading: Hero(
           tag: 'admin_${admin['_id']}',
           child: Container(
-            width: avatarSize,
-            height: avatarSize,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  color[400]!,
-                  color[600]!,
-                ],
-              ),
-              borderRadius: BorderRadius.circular(isTablet ? 20 : 16),
-            ),
+            width: dimensions.avatarSize,
+            height: dimensions.avatarSize,
+            decoration: styles.avatarDecoration(color),
             child: Center(
               child: Text(
                 (admin['nombre'] ?? '?').substring(0, 1).toUpperCase(),
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: isDesktop ? 28 : (isTablet ? 26 : 24),
-                  fontWeight: FontWeight.bold,
-                ),
+                style: styles.avatarTextStyle,
               ),
             ),
           ),
         ),
         title: Text(
           admin['nombre'] ?? 'Sin nombre',
-          style: TextStyle(
-            fontSize: isDesktop ? 20 : (isTablet ? 19 : 18),
-            fontWeight: FontWeight.w600,
-            color: Colors.black87,
-          ),
+          style: styles.cardTitleStyle,
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(height: isTablet ? 8 : 4),
+            SizedBox(height: dimensions.cardSubtitleSpacing),
             Row(
               children: [
                 Icon(
                   Icons.email_outlined, 
-                  size: isDesktop ? 20 : (isTablet ? 18 : 16), 
-                  color: Colors.grey[600]
+                  size: dimensions.cardIconSize, 
+                  color: VerAdminsColors.textSecondary
                 ),
-                SizedBox(width: isTablet ? 8 : 6),
+                SizedBox(width: dimensions.cardIconSpacing),
                 Expanded(
                   child: Text(
                     admin['email'] ?? 'Sin correo',
-                    style: TextStyle(
-                      fontSize: isDesktop ? 16 : (isTablet ? 15 : 14),
-                      color: Colors.grey[600],
-                    ),
+                    style: styles.cardSubtitleStyle,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
             ),
             if (admin['rol'] != null) ...[
-              SizedBox(height: isTablet ? 12 : 8),
+              SizedBox(height: dimensions.cardRolSpacing),
               Container(
                 padding: EdgeInsets.symmetric(
-                  horizontal: isTablet ? 12 : 8, 
-                  vertical: isTablet ? 6 : 4
+                  horizontal: dimensions.cardRolPaddingH, 
+                  vertical: dimensions.cardRolPaddingV
                 ),
-                decoration: BoxDecoration(
-                  color: color[100],
-                  borderRadius: BorderRadius.circular(isTablet ? 10 : 8),
-                ),
+                decoration: styles.rolBadgeDecoration(color),
                 child: Text(
                   admin['rol'].toString().toUpperCase(),
-                  style: TextStyle(
-                    fontSize: isDesktop ? 14 : (isTablet ? 13 : 12),
-                    fontWeight: FontWeight.w600,
-                    color: color[700],
-                  ),
+                  style: styles.cardRolStyle(color[700]!),
                 ),
               ),
             ],
@@ -583,19 +509,19 @@ class _VerAdminsPageState extends State<VerAdminsPage>
         trailing: esSuperAdmin
             ? Material(
                 color: Colors.transparent,
-                borderRadius: BorderRadius.circular(isTablet ? 16 : 12),
+                borderRadius: BorderRadius.circular(dimensions.deleteIconRadius),
                 child: InkWell(
-                  borderRadius: BorderRadius.circular(isTablet ? 16 : 12),
+                  borderRadius: BorderRadius.circular(dimensions.deleteIconRadius),
                   onTap: () => eliminarAdmin(
                     admin['_id'],
                     admin['nombre'] ?? 'Admin',
                   ),
                   child: Container(
-                    padding: EdgeInsets.all(isTablet ? 12 : 8),
+                    padding: EdgeInsets.all(dimensions.deleteIconPadding),
                     child: Icon(
                       Icons.delete_outline,
-                      color: Colors.red[400],
-                      size: isDesktop ? 28 : (isTablet ? 26 : 24),
+                      color: VerAdminsColors.redButton,
+                      size: dimensions.deleteIconSize,
                     ),
                   ),
                 ),
@@ -606,33 +532,31 @@ class _VerAdminsPageState extends State<VerAdminsPage>
   }
 
   Widget _buildConfirmDialog(String nombre) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isTablet = screenWidth > 600;
+    final dimensions = VerAdminsDimensions(MediaQuery.of(context).size.width);
+    final styles = VerAdminsStyles(dimensions);
     
     return AlertDialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(isTablet ? 20 : 16)
-      ),
-      insetPadding: EdgeInsets.all(isTablet ? 32 : 16),
+      shape: styles.dialogShape,
+      insetPadding: EdgeInsets.all(dimensions.dialogPadding),
       title: Row(
         children: [
           Icon(
             Icons.warning, 
-            color: Colors.orange[600],
-            size: isTablet ? 28 : 24,
+            color: VerAdminsColors.warningOrange,
+            size: dimensions.dialogIconSize,
           ),
-          SizedBox(width: isTablet ? 16 : 12),
+          SizedBox(width: dimensions.dialogIconSpacing),
           Expanded(
             child: Text(
               'Confirmar eliminación',
-              style: TextStyle(fontSize: isTablet ? 20 : 18),
+              style: styles.dialogTitleStyle,
             ),
           ),
         ],
       ),
       content: ConstrainedBox(
         constraints: BoxConstraints(
-          maxWidth: isTablet ? 500 : double.infinity,
+          maxWidth: dimensions.dialogMaxWidth,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -640,23 +564,17 @@ class _VerAdminsPageState extends State<VerAdminsPage>
           children: [
             Text(
               '¿Estás seguro de que deseas eliminar a:',
-              style: TextStyle(fontSize: isTablet ? 16 : 14),
+              style: styles.dialogContentStyle,
             ),
-            SizedBox(height: isTablet ? 12 : 8),
+            SizedBox(height: dimensions.dialogSpacingSmall),
             Text(
               nombre,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: isTablet ? 18 : 16,
-              ),
+              style: styles.dialogNameStyle,
             ),
-            SizedBox(height: isTablet ? 16 : 12),
+            SizedBox(height: dimensions.dialogSpacingMedium),
             Text(
               'Esta acción no se puede deshacer.',
-              style: TextStyle(
-                color: Colors.grey[600],
-                fontSize: isTablet ? 15 : 14,
-              ),
+              style: styles.dialogWarningStyle,
             ),
           ],
         ),
@@ -666,97 +584,56 @@ class _VerAdminsPageState extends State<VerAdminsPage>
           onPressed: () => Navigator.pop(context, false),
           child: Text(
             'Cancelar',
-            style: TextStyle(
-              color: Colors.grey[600],
-              fontSize: isTablet ? 16 : 14,
-            ),
+            style: styles.dialogCancelStyle,
           ),
         ),
         ElevatedButton(
           onPressed: () => Navigator.pop(context, true),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.red[600],
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(isTablet ? 12 : 8),
-            ),
-            padding: EdgeInsets.symmetric(
-              horizontal: isTablet ? 24 : 16,
-              vertical: isTablet ? 12 : 8,
-            ),
-          ),
+          style: styles.dialogDeleteButtonStyle,
           child: Text(
             'Eliminar',
-            style: TextStyle(fontSize: isTablet ? 16 : 14),
+            style: styles.dialogDeleteStyle,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildErrorState(bool isTablet, bool isDesktop) {
-    final padding = isDesktop ? 48.0 : (isTablet ? 32.0 : 24.0);
-    final iconSize = isDesktop ? 80.0 : (isTablet ? 72.0 : 64.0);
+  Widget _buildErrorState(VerAdminsDimensions dimensions) {
+    final styles = VerAdminsStyles(dimensions);
 
     return Center(
       child: Padding(
-        padding: EdgeInsets.all(padding),
+        padding: EdgeInsets.all(dimensions.statePadding),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: EdgeInsets.all(isDesktop ? 32 : (isTablet ? 28 : 24)),
-              decoration: BoxDecoration(
-                color: Colors.red[50],
-                borderRadius: BorderRadius.circular(isTablet ? 24 : 16),
-              ),
+              padding: EdgeInsets.all(dimensions.errorIconPadding),
+              decoration: styles.errorIconDecoration,
               child: Icon(
                 Icons.error_outline,
-                size: iconSize,
-                color: Colors.red[400],
+                size: dimensions.errorIconSize,
+                color: VerAdminsColors.redButton,
               ),
             ),
-            SizedBox(height: isDesktop ? 32 : (isTablet ? 28 : 24)),
+            SizedBox(height: dimensions.stateSpacingMedium),
             Text(
               'Oops! Algo salió mal',
-              style: TextStyle(
-                fontSize: isDesktop ? 28 : (isTablet ? 24 : 20),
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[800],
-              ),
+              style: styles.errorTitleStyle,
               textAlign: TextAlign.center,
             ),
-            SizedBox(height: isTablet ? 12 : 8),
+            SizedBox(height: dimensions.stateSpacingSmall),
             Text(
               error!,
-              style: TextStyle(
-                fontSize: isDesktop ? 18 : (isTablet ? 17 : 16),
-                color: Colors.grey[600],
-              ),
+              style: styles.errorMessageStyle,
               textAlign: TextAlign.center,
             ),
-            SizedBox(height: isDesktop ? 32 : (isTablet ? 28 : 24)),
-            ElevatedButton.icon(
-              onPressed: cargarAdmins,
-              icon: Icon(
-                Icons.refresh,
-                size: isTablet ? 24 : 20,
-              ),
-              label: Text(
-                'Intentar nuevamente',
-                style: TextStyle(fontSize: isTablet ? 18 : 16),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue[600],
-                foregroundColor: Colors.white,
-                padding: EdgeInsets.symmetric(
-                  horizontal: isDesktop ? 32 : (isTablet ? 28 : 24),
-                  vertical: isDesktop ? 16 : (isTablet ? 14 : 12),
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(isTablet ? 16 : 12),
-                ),
-              ),
+            SizedBox(height: dimensions.stateSpacingMedium),
+            Text(
+              'Desliza hacia abajo para reintentar',
+              style: styles.emptyHintStyle,
+              textAlign: TextAlign.center,
             ),
           ],
         ),
@@ -764,70 +641,41 @@ class _VerAdminsPageState extends State<VerAdminsPage>
     );
   }
 
-  Widget _buildEmptyState(bool isTablet, bool isDesktop) {
-    final padding = isDesktop ? 48.0 : (isTablet ? 32.0 : 24.0);
-    final iconSize = isDesktop ? 100.0 : (isTablet ? 90.0 : 80.0);
+  Widget _buildEmptyState(VerAdminsDimensions dimensions) {
+    final styles = VerAdminsStyles(dimensions);
 
     return Center(
       child: Padding(
-        padding: EdgeInsets.all(padding),
+        padding: EdgeInsets.all(dimensions.statePadding),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: EdgeInsets.all(isDesktop ? 40 : (isTablet ? 36 : 32)),
-              decoration: BoxDecoration(
-                color: Colors.blue[50],
-                borderRadius: BorderRadius.circular(isDesktop ? 32 : (isTablet ? 28 : 24)),
-              ),
+              padding: EdgeInsets.all(dimensions.stateIconPadding),
+              decoration: styles.emptyIconDecoration,
               child: Icon(
                 Icons.admin_panel_settings_outlined,
-                size: iconSize,
+                size: dimensions.stateIconSize,
                 color: Colors.blue[300],
               ),
             ),
-            SizedBox(height: isDesktop ? 40 : (isTablet ? 36 : 32)),
+            SizedBox(height: dimensions.stateSpacingLarge),
             Text(
               'No hay administradores',
-              style: TextStyle(
-                fontSize: isDesktop ? 32 : (isTablet ? 28 : 24),
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[800],
-              ),
+              style: styles.emptyTitleStyle,
               textAlign: TextAlign.center,
             ),
-            SizedBox(height: isTablet ? 16 : 12),
+            SizedBox(height: dimensions.stateSpacingSmall),
             Text(
               'Cuando se registre un administrador,\nlo verás aquí.',
-              style: TextStyle(
-                fontSize: isDesktop ? 18 : (isTablet ? 17 : 16),
-                color: Colors.grey[600],
-                height: 1.5,
-              ),
+              style: styles.emptySubtitleStyle,
               textAlign: TextAlign.center,
             ),
-            SizedBox(height: isDesktop ? 40 : (isTablet ? 36 : 32)),
-            ElevatedButton.icon(
-              onPressed: cargarAdmins,
-              icon: Icon(
-                Icons.refresh,
-                size: isTablet ? 24 : 20,
-              ),
-              label: Text(
-                'Actualizar',
-                style: TextStyle(fontSize: isTablet ? 18 : 16),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue[600],
-                foregroundColor: Colors.white,
-                padding: EdgeInsets.symmetric(
-                  horizontal: isDesktop ? 32 : (isTablet ? 28 : 24),
-                  vertical: isDesktop ? 16 : (isTablet ? 14 : 12),
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(isTablet ? 16 : 12),
-                ),
-              ),
+            SizedBox(height: dimensions.stateSpacingMedium),
+            Text(
+              'Desliza hacia abajo para actualizar',
+              style: styles.emptyHintStyle,
+              textAlign: TextAlign.center,
             ),
           ],
         ),

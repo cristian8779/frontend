@@ -12,6 +12,7 @@ import '../../services/Carrito_Service.dart';
 import '../../services/HistorialService.dart';  // 📝 NUEVA IMPORTACIÓN
 import '../../models/request_models.dart';
 import '/utils/colores.dart';
+import '../../widgets/resena.dart';  // 📝 IMPORTAR WIDGET DE RESEÑAS
 
 class ProductoScreen extends StatefulWidget {
   final String productId;
@@ -80,6 +81,15 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
   void dispose() {
     _animationController.dispose();
     super.dispose();
+  }
+
+  // 📝 NUEVO MÉTODO para mostrar imagen en pantalla completa con zoom
+  void _mostrarImagenCompleta(String imageUrl) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ImagenZoomScreen(imageUrl: imageUrl),
+      ),
+    );
   }
 
   // 📝 NUEVO MÉTODO para agregar al historial
@@ -909,52 +919,72 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
       child: Stack(
         children: [
           Center(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300),
-              child: Image.network(
-                imagenMostrar,
-                key: ValueKey(imagenMostrar),
-                fit: BoxFit.contain,
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) {
-                    return child;
-                  }
-                  return Container(
-                    height: imageHeight,
-                    child: const Center(
-                      child: CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3483FA)),
-                        strokeWidth: 2,
+            child: GestureDetector(
+              onTap: () => _mostrarImagenCompleta(imagenMostrar),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                child: Image.network(
+                  imagenMostrar,
+                  key: ValueKey(imagenMostrar),
+                  fit: BoxFit.contain,
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) {
+                      return child;
+                    }
+                    return Container(
+                      height: imageHeight,
+                      child: const Center(
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3483FA)),
+                          strokeWidth: 2,
+                        ),
                       ),
-                    ),
-                  );
-                },
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    height: imageHeight,
-                    color: const Color(0xFFF5F5F5),
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.image_not_supported_outlined,
-                            size: _isDesktop ? 64 : 48,
-                            color: const Color(0xFFCCCCCC),
-                          ),
-                          SizedBox(height: _isDesktop ? 12 : 8),
-                          Text(
-                            'Imagen no disponible',
-                            style: TextStyle(
-                              color: const Color(0xFF999999),
-                              fontSize: _isDesktop ? 16 : 14,
+                    );
+                  },
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      height: imageHeight,
+                      color: const Color(0xFFF5F5F5),
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.image_not_supported_outlined,
+                              size: _isDesktop ? 64 : 48,
+                              color: const Color(0xFFCCCCCC),
                             ),
-                          ),
-                        ],
+                            SizedBox(height: _isDesktop ? 12 : 8),
+                            Text(
+                              'Imagen no disponible',
+                              style: TextStyle(
+                                color: const Color(0xFF999999),
+                                fontSize: _isDesktop ? 16 : 14,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+          // Indicador de tap para zoom
+          Positioned(
+            top: 16,
+            right: 16,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.6),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Icon(
+                Icons.zoom_in,
+                color: Colors.white,
+                size: _isDesktop ? 20 : 16,
               ),
             ),
           ),
@@ -1344,6 +1374,35 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
               ),
             ),
           ),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() => currentTab = 'resenas'),
+              child: Container(
+                padding: EdgeInsets.symmetric(vertical: _isDesktop ? 20 : 16),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                      color: currentTab == 'resenas' 
+                          ? const Color(0xFF3483FA) 
+                          : Colors.transparent,
+                      width: 2,
+                    ),
+                  ),
+                ),
+                child: Text(
+                  'Reseñas',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: _isDesktop ? 16 : 14,
+                    fontWeight: FontWeight.w600,
+                    color: currentTab == 'resenas' 
+                        ? const Color(0xFF3483FA) 
+                        : const Color(0xFF666666),
+                  ),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -1354,7 +1413,9 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
       duration: const Duration(milliseconds: 200),
       child: currentTab == 'descripcion'
           ? _buildDescription(productData)
-          : _buildSpecifications(productData, variations),
+          : currentTab == 'especificaciones'
+              ? _buildSpecifications(productData, variations)
+              : _buildResenas(productData),
     );
   }
 
@@ -1381,6 +1442,95 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
               fontSize: _isDesktop ? 16 : 14,
               height: 1.5,
               color: const Color(0xFF666666),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildResenas(Map<String, dynamic> productData) {
+    return Container(
+      key: const ValueKey('resenas'),
+      width: double.infinity,
+      height: 400, // Altura fija para el contenedor de reseñas
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: EdgeInsets.all(_horizontalPadding),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Reseñas del producto',
+                  style: TextStyle(
+                    fontSize: _isDesktop ? 20 : 18,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF333333),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ResenaWidget(
+                          productoId: widget.productId,
+                          nombreProducto: productData['nombre'] ?? 'Producto',
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(
+                    Icons.open_in_new,
+                    size: 16,
+                    color: Color(0xFF3483FA),
+                  ),
+                  label: const Text(
+                    'Ver todas',
+                    style: TextStyle(
+                      color: Color(0xFF3483FA),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: _horizontalPadding),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.rate_review_outlined,
+                      size: _isDesktop ? 48 : 40,
+                      color: const Color(0xFF3483FA),
+                    ),
+                    SizedBox(height: _isDesktop ? 16 : 12),
+                    Text(
+                      'Ver reseñas completas',
+                      style: TextStyle(
+                        fontSize: _isDesktop ? 16 : 14,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF333333),
+                      ),
+                    ),
+                    SizedBox(height: _isDesktop ? 8 : 6),
+                    Text(
+                      'Toca "Ver todas" para leer y escribir reseñas',
+                      style: TextStyle(
+                        fontSize: _isDesktop ? 14 : 12,
+                        color: const Color(0xFF666666),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ],
@@ -1544,6 +1694,201 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// 📝 NUEVA CLASE PARA LA PANTALLA DE ZOOM DE IMAGEN
+class ImagenZoomScreen extends StatefulWidget {
+  final String imageUrl;
+  
+  const ImagenZoomScreen({
+    required this.imageUrl, 
+    Key? key
+  }) : super(key: key);
+
+  @override
+  State<ImagenZoomScreen> createState() => _ImagenZoomScreenState();
+}
+
+class _ImagenZoomScreenState extends State<ImagenZoomScreen> 
+    with SingleTickerProviderStateMixin {
+  
+  late TransformationController _transformationController;
+  late AnimationController _animationController;
+  Animation<Matrix4>? _animation;
+  
+  @override
+  void initState() {
+    super.initState();
+    _transformationController = TransformationController();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+  }
+
+  @override
+  void dispose() {
+    _transformationController.dispose();
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  void _onAnimationComplete() {
+    _transformationController.value = _animation!.value;
+    if (!_animationController.isAnimating) {
+      _animation?.removeListener(_onAnimationComplete);
+      _animation = null;
+      _animationController.reset();
+    }
+  }
+
+  void _resetZoom() {
+    _animation = Matrix4Tween(
+      begin: _transformationController.value,
+      end: Matrix4.identity(),
+    ).animate(
+      CurvedAnimation(
+        parent: _animationController, 
+        curve: Curves.ease
+      ),
+    );
+    _animation!.addListener(_onAnimationComplete);
+    _animationController.forward();
+  }
+
+  void _onDoubleTap() {
+    Matrix4 endMatrix;
+    Offset position = Offset.zero;
+    
+    if (_transformationController.value != Matrix4.identity()) {
+      endMatrix = Matrix4.identity();
+    } else {
+      endMatrix = Matrix4.identity()
+        ..translate(-100.0, -100.0)
+        ..scale(2.5);
+    }
+    
+    _animation = Matrix4Tween(
+      begin: _transformationController.value,
+      end: endMatrix,
+    ).animate(
+      CurvedAnimation(
+        parent: _animationController, 
+        curve: Curves.ease
+      ),
+    );
+    _animation!.addListener(_onAnimationComplete);
+    _animationController.forward();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.close, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh, color: Colors.white),
+            onPressed: _resetZoom,
+            tooltip: 'Restablecer zoom',
+          ),
+        ],
+      ),
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        child: InteractiveViewer(
+          transformationController: _transformationController,
+          minScale: 0.5,
+          maxScale: 4.0,
+          child: GestureDetector(
+            onDoubleTap: _onDoubleTap,
+            child: Center(
+              child: Hero(
+                tag: 'product-image-${widget.imageUrl}',
+                child: Image.network(
+                  widget.imageUrl,
+                  fit: BoxFit.contain,
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) {
+                      return child;
+                    }
+                    return Container(
+                      width: double.infinity,
+                      height: double.infinity,
+                      child: const Center(
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          strokeWidth: 2,
+                        ),
+                      ),
+                    );
+                  },
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      width: double.infinity,
+                      height: double.infinity,
+                      child: const Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.image_not_supported_outlined,
+                              size: 64,
+                              color: Colors.white54,
+                            ),
+                            SizedBox(height: 16),
+                            Text(
+                              'Imagen no disponible',
+                              style: TextStyle(
+                                color: Colors.white54,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+      bottomNavigationBar: Container(
+        color: Colors.black,
+        padding: const EdgeInsets.all(16),
+        child: SafeArea(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text(
+                  'Pellizca para zoom • Doble tap para acercar/alejar',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

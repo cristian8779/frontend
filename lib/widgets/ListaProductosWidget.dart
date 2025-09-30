@@ -3,9 +3,9 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:shimmer/shimmer.dart';
 import '../providers/producto_provider.dart';
+import '../providers/FavoritoProvider.dart';
 import '../screens/producto/producto_screen.dart';
-import '../services/FavoritoService.dart';
-import '../services/carrito_service.dart';
+import '../screens/auth/login_screen.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ListaProductosWidget extends StatefulWidget {
@@ -24,13 +24,7 @@ class _ListaProductosWidgetState extends State<ListaProductosWidget>
     decimalDigits: 0,
   );
 
-  // Servicios
-  final FavoritoService _favoritoService = FavoritoService();
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
-
-  // Estados para favoritos
-  Set<String> _favoritos = {};
-  bool _loadingFavoritos = false;
 
   // Controladores de animación
   late AnimationController _animationController;
@@ -46,11 +40,13 @@ class _ListaProductosWidgetState extends State<ListaProductosWidget>
       vsync: this,
     );
 
-    // Cargar productos al iniciar
+    // Cargar productos y verificar sesión
     Future.microtask(() {
-      final provider = Provider.of<ProductosProvider>(context, listen: false);
-      provider.cargarProductos();
-      _cargarFavoritos();
+      final productProvider = Provider.of<ProductosProvider>(context, listen: false);
+      final favoritoProvider = Provider.of<FavoritoProvider>(context, listen: false);
+      
+      productProvider.cargarProductos();
+      _verificarSesionYCargarFavoritos(favoritoProvider);
     });
 
     // Detectar cuando llegamos al final del scroll
@@ -76,56 +72,140 @@ class _ListaProductosWidgetState extends State<ListaProductosWidget>
     super.dispose();
   }
 
-  // Cargar favoritos del usuario
-  Future<void> _cargarFavoritos() async {
+  // Verificar autenticación y cargar favoritos
+  Future<void> _verificarSesionYCargarFavoritos(FavoritoProvider favoritoProvider) async {
     try {
-      setState(() => _loadingFavoritos = true);
-      
       final token = await _secureStorage.read(key: 'accessToken');
-      if (token != null) {
-        final favoritos = await _favoritoService.obtenerFavoritos();
-        final favoritosIds = favoritos
-            .map((f) => f['producto']?['_id'] ?? f['productoId'])
-            .where((id) => id != null)
-            .cast<String>()
-            .toSet();
-        
-        if (mounted) {
-          setState(() {
-            _favoritos = favoritosIds;
-            _loadingFavoritos = false;
-          });
-        }
+      if (token != null && token.isNotEmpty) {
+        // Usuario logueado: cargar favoritos
+        await favoritoProvider.cargarFavoritos();
+      } else {
+        // Usuario NO logueado: limpiar favoritos
+        favoritoProvider.limpiarFavoritos();
       }
     } catch (e) {
-      print('Error cargando favoritos: $e');
-      if (mounted) {
-        setState(() => _loadingFavoritos = false);
-      }
+      print('Error verificando autenticación: $e');
+      // En caso de error, limpiar favoritos por seguridad
+      favoritoProvider.limpiarFavoritos();
     }
   }
 
-  // Toggle favorito
+  // Verificar si el usuario está logueado
+  Future<bool> _estaLogueado() async {
+    try {
+      final token = await _secureStorage.read(key: 'accessToken');
+      return token != null && token.isNotEmpty;
+    } catch (e) {
+      print('Error verificando login: $e');
+      return false;
+    }
+  }
+
+  // Manejar toggle de favorito con verificación de login
   Future<void> _toggleFavorito(String productoId) async {
     try {
-      final esFavorito = _favoritos.contains(productoId);
+      // Verificar si el usuario está logueado
+      final estaLogueado = await _estaLogueado();
+      
+      if (!estaLogueado) {
+        // Redireccionar al login
+        _mostrarDialogoLogin();
+        return;
+      }
+
+      final favoritoProvider = Provider.of<FavoritoProvider>(context, listen: false);
+      final esFavorito = favoritoProvider.esFavorito(productoId);
       
       if (esFavorito) {
-        await _favoritoService.eliminarFavorito(productoId);
+        await favoritoProvider.eliminarFavorito(productoId);
         if (mounted) {
-          setState(() => _favoritos.remove(productoId));
           _mostrarSnackbar('Eliminado de favoritos', Icons.heart_broken);
         }
       } else {
-        await _favoritoService.agregarFavorito(productoId);
+        await favoritoProvider.agregarFavorito(productoId);
         if (mounted) {
-          setState(() => _favoritos.add(productoId));
           _mostrarSnackbar('Agregado a favoritos', Icons.favorite, Colors.red);
         }
       }
     } catch (e) {
       _mostrarSnackbar('Error: ${e.toString()}', Icons.error, Colors.red);
     }
+  }
+
+  // Mostrar diálogo para ir al login
+  void _mostrarDialogoLogin() {
+    if (!mounted) return;
+    
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.favorite,
+                color: Colors.red,
+                size: 24,
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Inicia sesión',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          content: const Text(
+            'Para agregar productos a favoritos necesitas iniciar sesión.',
+            style: TextStyle(fontSize: 14),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                'Cancelar',
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                // Navegar a la pantalla de login
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const LoginScreen(),
+                  ),
+                ).then((_) {
+                  // Cuando regrese del login, verificar sesión nuevamente
+                  final favoritoProvider = Provider.of<FavoritoProvider>(context, listen: false);
+                  _verificarSesionYCargarFavoritos(favoritoProvider);
+                });
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF3483FA),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text(
+                'Iniciar sesión',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   // Mostrar snackbar con mensaje
@@ -276,9 +356,9 @@ class _ListaProductosWidgetState extends State<ListaProductosWidget>
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
 
-    return Consumer<ProductosProvider>(
-      builder: (context, provider, _) {
-        if (provider.isLoading && provider.productos.isEmpty) {
+    return Consumer2<ProductosProvider, FavoritoProvider>(
+      builder: (context, productProvider, favoritoProvider, _) {
+        if (productProvider.isLoading && productProvider.productos.isEmpty) {
           // Mostrar shimmer effect durante la carga inicial
           return Container(
             decoration: BoxDecoration(
@@ -308,7 +388,7 @@ class _ListaProductosWidgetState extends State<ListaProductosWidget>
           );
         }
 
-        if (provider.error != null) {
+        if (productProvider.error != null) {
           return Center(
             child: Container(
               margin: const EdgeInsets.all(24),
@@ -351,7 +431,7 @@ class _ListaProductosWidgetState extends State<ListaProductosWidget>
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    provider.error!,
+                    productProvider.error!,
                     style: TextStyle(
                       color: Colors.grey[600],
                       fontSize: 14,
@@ -364,7 +444,7 @@ class _ListaProductosWidgetState extends State<ListaProductosWidget>
           );
         }
 
-        if (provider.productos.isEmpty) {
+        if (productProvider.productos.isEmpty) {
           return Center(
             child: Container(
               margin: const EdgeInsets.all(24),
@@ -442,9 +522,9 @@ class _ListaProductosWidgetState extends State<ListaProductosWidget>
               crossAxisSpacing: 12,
               childAspectRatio: 0.65,
             ),
-            itemCount: provider.productos.length + (provider.hasMore ? 1 : 0),
+            itemCount: productProvider.productos.length + (productProvider.hasMore ? 1 : 0),
             itemBuilder: (context, index) {
-              if (index >= provider.productos.length) {
+              if (index >= productProvider.productos.length) {
                 return Container(
                   margin: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
@@ -467,7 +547,7 @@ class _ListaProductosWidgetState extends State<ListaProductosWidget>
                 );
               }
 
-              final producto = provider.productos[index];
+              final producto = productProvider.productos[index];
               final nombre = producto['nombre'] ?? 'Producto sin nombre';
               final imagen = producto['imagen'] ?? producto['imagenUrl'] ?? '';
               final precio = producto['precio'];
@@ -506,8 +586,8 @@ class _ListaProductosWidgetState extends State<ListaProductosWidget>
                         stock: stock,
                         formatPrice: _formatPrice,
                         onTap: () => _navigateToProductDetail(context, producto),
-                        // Funcionalidad de favoritos
-                        esFavorito: productoId != null && _favoritos.contains(productoId),
+                        // Funcionalidad de favoritos usando provider
+                        esFavorito: productoId != null && favoritoProvider.esFavorito(productoId),
                         onToggleFavorito: productoId != null 
                             ? () => _toggleFavorito(productoId)
                             : null,

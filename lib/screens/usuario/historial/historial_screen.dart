@@ -1,10 +1,13 @@
 // screens/historial_screen.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../../services/HistorialService.dart';
-import '../../../services/FavoritoService.dart';
+import '../../../providers/FavoritoProvider.dart';
 import 'package:shimmer/shimmer.dart';
 import '../../producto/producto_screen.dart';
+// Importaciones de tema
+import '../../../theme/historial/historial_theme.dart';
 
 class HistorialScreen extends StatefulWidget {
   const HistorialScreen({super.key});
@@ -15,7 +18,6 @@ class HistorialScreen extends StatefulWidget {
 
 class _HistorialScreenState extends State<HistorialScreen> {
   final HistorialService _historialService = HistorialService();
-  final FavoritoService _favoritoService = FavoritoService();
   final NumberFormat _formatoPesos = NumberFormat.currency(
     locale: 'es_CO',
     symbol: '\$',
@@ -23,7 +25,6 @@ class _HistorialScreenState extends State<HistorialScreen> {
   );
   
   Map<String, dynamic> _historial = {};
-  Set<String> _productosFavoritos = {};
   bool _loading = true;
   String? _error;
 
@@ -31,7 +32,9 @@ class _HistorialScreenState extends State<HistorialScreen> {
   void initState() {
     super.initState();
     _cargarHistorial();
-    _cargarFavoritos();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<FavoritoProvider>().cargarFavoritos();
+    });
   }
 
   Future<void> _cargarHistorial() async {
@@ -55,54 +58,23 @@ class _HistorialScreenState extends State<HistorialScreen> {
     }
   }
 
-  Future<void> _cargarFavoritos() async {
+  Future<void> _toggleFavorito(String productoId, String nombreProducto) async {
     try {
-      final favoritos = await _favoritoService.obtenerFavoritos();
-      setState(() {
-        _productosFavoritos = favoritos
-            .map((fav) => fav['producto']['_id'] as String)
-            .toSet();
-      });
+      final favoritoProvider = context.read<FavoritoProvider>();
+      
+      if (favoritoProvider.esFavorito(productoId)) {
+        await favoritoProvider.eliminarFavorito(productoId);
+      } else {
+        await favoritoProvider.agregarFavorito(productoId);
+      }
     } catch (e) {
-      print('Error al cargar favoritos: $e');
-      // No mostramos error en UI para favoritos, solo lo logueamos
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          HistorialWidgets.buildErrorSnackBar('Error: $e'),
+        );
+      }
     }
   }
-
- Future<void> _toggleFavorito(String productoId, String nombreProducto) async {
-  try {
-    if (_productosFavoritos.contains(productoId)) {
-      // Eliminar de favoritos
-      await _favoritoService.eliminarFavorito(productoId);
-      setState(() {
-        _productosFavoritos.remove(productoId);
-      });
-    } else {
-      // Agregar a favoritos
-      await _favoritoService.agregarFavorito(productoId);
-      setState(() {
-        _productosFavoritos.add(productoId);
-      });
-    }
-  } catch (e) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.error, color: Colors.white, size: 20),
-              const SizedBox(width: 8),
-              Expanded(child: Text('Error: $e')),
-            ],
-          ),
-          backgroundColor: Colors.red.shade600,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-      );
-    }
-  }
-}
 
   Future<void> _eliminarItem(String id) async {
     try {
@@ -111,36 +83,13 @@ class _HistorialScreenState extends State<HistorialScreen> {
       
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.white, size: 20),
-                SizedBox(width: 8),
-                Flexible(child: Text('Producto eliminado del historial')),
-              ],
-            ),
-            backgroundColor: const Color(0xFF00A650),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            duration: const Duration(seconds: 2),
-          ),
+          HistorialWidgets.buildSuccessSnackBar('Producto eliminado del historial'),
         );
       }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.error, color: Colors.white, size: 20),
-                const SizedBox(width: 8),
-                Expanded(child: Text('Error: $e')),
-              ],
-            ),
-            backgroundColor: Colors.red.shade600,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          ),
+          HistorialWidgets.buildErrorSnackBar('Error: $e'),
         );
       }
     }
@@ -153,36 +102,13 @@ class _HistorialScreenState extends State<HistorialScreen> {
       
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.white, size: 20),
-                SizedBox(width: 8),
-                Flexible(child: Text('Historial borrado completamente')),
-              ],
-            ),
-            backgroundColor: const Color(0xFF00A650),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            duration: const Duration(seconds: 3),
-          ),
+          HistorialWidgets.buildSuccessSnackBar('Historial borrado completamente', seconds: 3),
         );
       }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.error, color: Colors.white, size: 20),
-                const SizedBox(width: 8),
-                Expanded(child: Text('Error: $e')),
-              ],
-            ),
-            backgroundColor: Colors.red.shade600,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          ),
+          HistorialWidgets.buildErrorSnackBar('Error: $e'),
         );
       }
     }
@@ -191,59 +117,15 @@ class _HistorialScreenState extends State<HistorialScreen> {
   void _mostrarDialogoBorrarTodo() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, 
-                 color: Colors.orange.shade600, size: 24),
-            const SizedBox(width: 8),
-            const Flexible(
-              child: Text(
-                "Borrar historial",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
-        ),
-        content: const Text(
-          "¿Seguro que quieres borrar todo el historial? Esta acción no se puede deshacer.",
-          style: TextStyle(fontSize: 15, height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.grey[600],
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            ),
-            child: const Text("Cancelar", style: TextStyle(fontWeight: FontWeight.w500)),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _borrarTodo();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red.shade600,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            child: const Text("Borrar todo", style: TextStyle(fontWeight: FontWeight.w600)),
-          ),
-        ],
-      ),
+      builder: (context) => HistorialWidgets.buildDeleteDialog(context, _borrarTodo),
     );
   }
 
-  // Función para navegar al detalle del producto
   void _navegarADetalleProducto(String productoId) {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => ProductoScreen(productId: productoId),
-
       ),
     );
   }
@@ -251,134 +133,44 @@ class _HistorialScreenState extends State<HistorialScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F0F0),
+      backgroundColor: HistorialColors.backgroundColor,
       appBar: AppBar(
         title: const Text(
           "Historial",
-          style: TextStyle(
-            color: Colors.black87,
-            fontSize: 20,
-            fontWeight: FontWeight.w500,
-          ),
+          style: HistorialTextStyles.appBarTitle,
         ),
-        backgroundColor: const Color(0xFFFFFFFF),
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black87),
+        backgroundColor: HistorialColors.appBarColor,
+        elevation: HistorialDimensions.elevationLow,
+        iconTheme: const IconThemeData(color: HistorialColors.textPrimary),
         actions: [
           if (!_loading && _historial.isNotEmpty)
             IconButton(
-              icon: const Icon(Icons.settings, color: Colors.black87),
+              icon: const Icon(Icons.settings, color: HistorialColors.textPrimary),
               onPressed: _mostrarDialogoBorrarTodo,
             ),
         ],
       ),
       body: _loading
-          ? _buildLoadingState()
+          ? HistorialWidgets.loading
           : _error != null
-              ? _buildErrorState()
+              ? HistorialWidgets.buildError(_error!, _cargarHistorial)
               : _historial.isEmpty
-                  ? _buildEmptyState()
+                  ? HistorialWidgets.emptyState
                   : _buildHistorialContent(),
-    );
-  }
-
-  Widget _buildLoadingState() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3483FA)),
-          ),
-          SizedBox(height: 16),
-          Text(
-            "Cargando historial...",
-            style: TextStyle(color: Colors.grey),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildErrorState() {
-    return Center(
-      child: Container(
-        margin: const EdgeInsets.all(24),
-        padding: const EdgeInsets.all(32),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.red),
-            const SizedBox(height: 16),
-            const Text(
-              "Error al cargar",
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _error!,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.grey),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _cargarHistorial,
-              child: const Text("Reintentar"),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Container(
-        margin: const EdgeInsets.all(24),
-        padding: const EdgeInsets.all(32),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.history, size: 80, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            const Text(
-              "No hay productos en el historial",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              "Los productos que veas aparecerán aquí",
-              style: TextStyle(color: Colors.grey),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
   Widget _buildHistorialContent() {
     return RefreshIndicator(
-      onRefresh: _cargarHistorial,
-      color: const Color(0xFF3483FA),
+      onRefresh: () async {
+        await _cargarHistorial();
+        await context.read<FavoritoProvider>().cargarFavoritos();
+      },
+      color: HistorialColors.primaryBlue,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final isTablet = constraints.maxWidth > 600;
-          final crossAxisCount = isTablet ? 2 : 1;
+          final isTablet = constraints.maxWidth > HistorialDimensions.tabletBreakpoint;
+          final crossAxisCount = isTablet ? HistorialDimensions.tabletColumns : HistorialDimensions.mobileColumns;
           
           if (isTablet) {
             return _buildGridView(crossAxisCount);
@@ -395,7 +187,6 @@ class _HistorialScreenState extends State<HistorialScreen> {
     
     _historial.forEach((fecha, items) {
       for (var item in items) {
-        // Filtrar items con producto null
         if (item['producto'] != null) {
           allItems.add({
             ...item,
@@ -406,12 +197,12 @@ class _HistorialScreenState extends State<HistorialScreen> {
     });
 
     return GridView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(HistorialDimensions.paddingMedium),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: crossAxisCount,
-        childAspectRatio: 0.75,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
+        childAspectRatio: HistorialDimensions.gridAspectRatio,
+        crossAxisSpacing: HistorialDimensions.gridSpacing,
+        mainAxisSpacing: HistorialDimensions.gridSpacing,
       ),
       itemCount: allItems.length,
       itemBuilder: (context, index) {
@@ -427,10 +218,9 @@ class _HistorialScreenState extends State<HistorialScreen> {
       itemBuilder: (context, index) {
         final entry = _historial.entries.elementAt(index);
         final items = (entry.value as List<dynamic>)
-            .where((item) => item['producto'] != null) // Filtrar productos null
+            .where((item) => item['producto'] != null)
             .toList();
         
-        // Solo mostrar la sección si tiene items válidos
         if (items.isNotEmpty) {
           return _buildDateSection(entry.key, items);
         } else {
@@ -444,23 +234,9 @@ class _HistorialScreenState extends State<HistorialScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Header de fecha
+        HistorialWidgets.buildDateHeader(fecha),
         Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          color: const Color(0xFFE5E5E5),
-          child: Text(
-            fecha,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-              color: Colors.black87,
-            ),
-          ),
-        ),
-        // Lista de productos
-        Container(
-          color: Colors.white,
+          color: HistorialColors.cardBackground,
           child: Column(
             children: items.map((item) => _buildProductItem(item)).toList(),
           ),
@@ -471,7 +247,6 @@ class _HistorialScreenState extends State<HistorialScreen> {
 
   Widget _buildProductCard(dynamic item) {
     final producto = item['producto'];
-    // Verificaciones de null safety
     if (producto == null) return const SizedBox.shrink();
     
     final nombre = producto['nombre'] ?? "Producto sin nombre";
@@ -487,124 +262,40 @@ class _HistorialScreenState extends State<HistorialScreen> {
         }
       },
       child: Card(
-        elevation: 2,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        elevation: HistorialDimensions.elevationMedium,
+        shape: HistorialDecorations.cardShape,
         child: Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(HistorialDimensions.paddingMedium),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Fecha y favorito
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    fecha,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  if (productoId != null)
-                    GestureDetector(
-                      onTap: () => _toggleFavorito(productoId, nombre),
-                      child: Icon(
-                        _productosFavoritos.contains(productoId)
-                            ? Icons.favorite
-                            : Icons.favorite_border,
-                        color: _productosFavoritos.contains(productoId)
-                            ? Colors.red
-                            : Colors.grey[400],
-                        size: 20,
-                      ),
-                    ),
+                  Text(fecha, style: HistorialTextStyles.dateCard),
+                  if (productoId != null) _buildFavoriteIcon(productoId, nombre),
                 ],
               ),
-              const SizedBox(height: 12),
-              // Imagen del producto
-              Expanded(
-                child: Container(
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8),
-                    color: Colors.grey[100],
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: imagen != null
-                        ? Image.network(
-                            imagen,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Icon(
-                                Icons.image_not_supported,
-                                color: Colors.grey[400],
-                                size: 40,
-                              );
-                            },
-                            loadingBuilder: (context, child, loadingProgress) {
-                              if (loadingProgress == null) return child;
-                              return Shimmer.fromColors(
-                                baseColor: Colors.grey.shade300,
-                                highlightColor: Colors.grey.shade100,
-                                child: Container(color: Colors.white),
-                              );
-                            },
-                          )
-                        : Icon(
-                            Icons.image_not_supported,
-                            color: Colors.grey[400],
-                            size: 40,
-                          ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              // Nombre del producto
+              const SizedBox(height: HistorialDimensions.paddingMedium),
+              Expanded(child: _buildProductImage(imagen, true)),
+              const SizedBox(height: HistorialDimensions.paddingMedium),
               Text(
                 nombre,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Colors.black87,
-                  height: 1.3,
-                ),
-                maxLines: 2,
+                style: HistorialTextStyles.productNameCard,
+                maxLines: HistorialDimensions.maxLinesCard,
                 overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 8),
-              // Precio
+              const SizedBox(height: HistorialDimensions.paddingSmall),
               if (precio != null) ...[
                 Text(
                   _formatoPesos.format(precio),
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black87,
-                  ),
+                  style: HistorialTextStyles.productPriceCard,
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: HistorialDimensions.paddingMedium),
               ],
-              // Botón eliminar
               Align(
                 alignment: Alignment.centerLeft,
-                child: TextButton(
-                  onPressed: () => _eliminarItem(item['_id']),
-                  style: TextButton.styleFrom(
-                    foregroundColor: const Color(0xFF3483FA),
-                    padding: EdgeInsets.zero,
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  child: const Text(
-                    "Eliminar",
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
+                child: _buildDeleteButton(() => _eliminarItem(item['_id']), true),
               ),
             ],
           ),
@@ -615,7 +306,6 @@ class _HistorialScreenState extends State<HistorialScreen> {
 
   Widget _buildProductItem(dynamic item) {
     final producto = item['producto'];
-    // Verificaciones de null safety
     if (producto == null) return const SizedBox.shrink();
     
     final nombre = producto['nombre'] ?? "Producto sin nombre";
@@ -630,132 +320,129 @@ class _HistorialScreenState extends State<HistorialScreen> {
         }
       },
       child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          border: Border(
-            bottom: BorderSide(color: Color(0xFFE5E5E5), width: 1),
-          ),
-        ),
+        padding: const EdgeInsets.all(HistorialDimensions.paddingLarge),
+        decoration: HistorialDecorations.productBorder,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Imagen del producto - más grande
             Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                color: Colors.grey[100],
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: imagen != null
-                    ? Image.network(
-                        imagen,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Icon(
-                            Icons.image_not_supported,
-                            color: Colors.grey[400],
-                            size: 40,
-                          );
-                        },
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return Shimmer.fromColors(
-                            baseColor: Colors.grey.shade300,
-                            highlightColor: Colors.grey.shade100,
-                            child: Container(color: Colors.white),
-                          );
-                        },
-                      )
-                    : Icon(
-                        Icons.image_not_supported,
-                        color: Colors.grey[400],
-                        size: 40,
-                      ),
-              ),
+              width: HistorialDimensions.imageSize,
+              height: HistorialDimensions.imageSize,
+              decoration: HistorialDecorations.imageContainer,
+              child: _buildProductImage(imagen, false),
             ),
-            const SizedBox(width: 16),
-            // Información del producto
+            const SizedBox(width: HistorialDimensions.paddingMedium),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Icono de favorito
                   Row(
                     children: [
                       const Spacer(),
-                      if (productoId != null)
-                        GestureDetector(
-                          onTap: () => _toggleFavorito(productoId, nombre),
-                          child: Container(
-                            padding: const EdgeInsets.all(8),
-                            child: Icon(
-                              _productosFavoritos.contains(productoId)
-                                  ? Icons.favorite
-                                  : Icons.favorite_border,
-                              color: _productosFavoritos.contains(productoId)
-                                  ? Colors.red
-                                  : Colors.grey[400],
-                              size: 24,
-                            ),
-                          ),
-                        ),
+                      if (productoId != null) _buildFavoriteIcon(productoId, nombre),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  // Nombre del producto
+                  const SizedBox(height: HistorialDimensions.paddingSmall),
                   Text(
                     nombre,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      color: Colors.black87,
-                      height: 1.3,
-                    ),
-                    maxLines: 3,
+                    style: HistorialTextStyles.productName,
+                    maxLines: HistorialDimensions.maxLinesProduct,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 12),
-                  // Precio
+                  const SizedBox(height: HistorialDimensions.paddingMedium),
                   if (precio != null) ...[
                     Text(
                       _formatoPesos.format(precio),
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
-                      ),
+                      style: HistorialTextStyles.productPrice,
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: HistorialDimensions.paddingMedium),
                   ],
-                  // Botón eliminar
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: TextButton(
-                      onPressed: () => _eliminarItem(item['_id']),
-                      style: TextButton.styleFrom(
-                        foregroundColor: const Color(0xFF3483FA),
-                        padding: EdgeInsets.zero,
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      child: const Text(
-                        "Eliminar",
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
+                    child: _buildDeleteButton(() => _eliminarItem(item['_id']), false),
                   ),
                 ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildFavoriteIcon(String productoId, String nombre) {
+    return Consumer<FavoritoProvider>(
+      builder: (context, favoritoProvider, child) {
+        return GestureDetector(
+          onTap: () => _toggleFavorito(productoId, nombre),
+          child: Container(
+            padding: const EdgeInsets.all(HistorialDimensions.paddingSmall),
+            child: Icon(
+              favoritoProvider.esFavorito(productoId)
+                  ? Icons.favorite
+                  : Icons.favorite_border,
+              color: favoritoProvider.esFavorito(productoId)
+                  ? HistorialColors.favoriteActive
+                  : HistorialColors.favoriteInactive,
+              size: HistorialDimensions.iconSizeLarge,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildProductImage(String? imagen, bool isCard) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(
+        isCard ? HistorialDimensions.borderRadiusSmall : HistorialDimensions.borderRadiusMedium,
+      ),
+      child: imagen != null
+          ? Image.network(
+              imagen,
+              fit: BoxFit.cover,
+              width: double.infinity,
+              height: double.infinity,
+              errorBuilder: (context, error, stackTrace) {
+                return Icon(
+                  Icons.image_not_supported,
+                  color: HistorialColors.iconPrimary,
+                  size: HistorialDimensions.iconSizeXLarge,
+                );
+              },
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return Shimmer.fromColors(
+                  baseColor: Colors.grey.shade300,
+                  highlightColor: Colors.grey.shade100,
+                  child: Container(
+                    color: Colors.white,
+                    width: double.infinity,
+                    height: double.infinity,
+                  ),
+                );
+              },
+            )
+          : Icon(
+              Icons.image_not_supported,
+              color: HistorialColors.iconPrimary,
+              size: HistorialDimensions.iconSizeXLarge,
+            ),
+    );
+  }
+
+  Widget _buildDeleteButton(VoidCallback onPressed, bool isSmall) {
+    return TextButton(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        foregroundColor: HistorialColors.primaryBlue,
+        padding: EdgeInsets.zero,
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      child: Text(
+        "Eliminar",
+        style: isSmall ? HistorialTextStyles.buttonSmall : HistorialTextStyles.buttonPrimary,
       ),
     );
   }
