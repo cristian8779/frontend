@@ -79,7 +79,15 @@ class _HistorialScreenState extends State<HistorialScreen> {
   Future<void> _eliminarItem(String id) async {
     try {
       await _historialService.eliminarDelHistorial(id);
-      _cargarHistorial();
+      
+      // Actualizar el historial localmente sin recargar todo
+      setState(() {
+        _historial.forEach((fecha, items) {
+          (items as List).removeWhere((item) => item['_id'] == id);
+        });
+        // Eliminar fechas vacías
+        _historial.removeWhere((fecha, items) => (items as List).isEmpty);
+      });
       
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -145,7 +153,8 @@ class _HistorialScreenState extends State<HistorialScreen> {
         actions: [
           if (!_loading && _historial.isNotEmpty)
             IconButton(
-              icon: const Icon(Icons.settings, color: HistorialColors.textPrimary),
+              icon: const Icon(Icons.delete_sweep, color: HistorialColors.textPrimary),
+              tooltip: 'Borrar todo el historial',
               onPressed: _mostrarDialogoBorrarTodo,
             ),
         ],
@@ -200,7 +209,7 @@ class _HistorialScreenState extends State<HistorialScreen> {
       padding: const EdgeInsets.all(HistorialDimensions.paddingMedium),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: crossAxisCount,
-        childAspectRatio: HistorialDimensions.gridAspectRatio,
+        childAspectRatio: 0.75, // Ajustado para mejor visualización
         crossAxisSpacing: HistorialDimensions.gridSpacing,
         mainAxisSpacing: HistorialDimensions.gridSpacing,
       ),
@@ -254,6 +263,7 @@ class _HistorialScreenState extends State<HistorialScreen> {
     final imagen = producto['imagen'];
     final fecha = item['fecha'];
     final productoId = producto['_id'];
+    final itemId = item['_id'];
 
     return GestureDetector(
       onTap: () {
@@ -264,41 +274,75 @@ class _HistorialScreenState extends State<HistorialScreen> {
       child: Card(
         elevation: HistorialDimensions.elevationMedium,
         shape: HistorialDecorations.cardShape,
-        child: Container(
-          padding: const EdgeInsets.all(HistorialDimensions.paddingMedium),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Imagen del producto con aspect ratio
+            Expanded(
+              flex: 3,
+              child: Stack(
                 children: [
-                  Text(fecha, style: HistorialTextStyles.dateCard),
-                  if (productoId != null) _buildFavoriteIcon(productoId, nombre),
+                  _buildProductImage(imagen, true),
+                  // Botón de favorito sobre la imagen
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.9),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: productoId != null 
+                        ? _buildFavoriteIcon(productoId, nombre)
+                        : const SizedBox.shrink(),
+                    ),
+                  ),
                 ],
               ),
-              const SizedBox(height: HistorialDimensions.paddingMedium),
-              Expanded(child: _buildProductImage(imagen, true)),
-              const SizedBox(height: HistorialDimensions.paddingMedium),
-              Text(
-                nombre,
-                style: HistorialTextStyles.productNameCard,
-                maxLines: HistorialDimensions.maxLinesCard,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: HistorialDimensions.paddingSmall),
-              if (precio != null) ...[
-                Text(
-                  _formatoPesos.format(precio),
-                  style: HistorialTextStyles.productPriceCard,
+            ),
+            // Información del producto
+            Expanded(
+              flex: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      fecha,
+                      style: HistorialTextStyles.dateCard.copyWith(fontSize: 11),
+                    ),
+                    const SizedBox(height: 6),
+                    Expanded(
+                      child: Text(
+                        nombre,
+                        style: HistorialTextStyles.productNameCard,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (precio != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        _formatoPesos.format(precio),
+                        style: HistorialTextStyles.productPriceCard,
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    _buildDeleteButton(() => _eliminarItem(itemId), true),
+                  ],
                 ),
-                const SizedBox(height: HistorialDimensions.paddingMedium),
-              ],
-              Align(
-                alignment: Alignment.centerLeft,
-                child: _buildDeleteButton(() => _eliminarItem(item['_id']), true),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -312,55 +356,59 @@ class _HistorialScreenState extends State<HistorialScreen> {
     final precio = producto['precio'];
     final imagen = producto['imagen'];
     final productoId = producto['_id'];
+    final itemId = item['_id'];
 
-    return GestureDetector(
+    return InkWell(
       onTap: () {
         if (productoId != null) {
           _navegarADetalleProducto(productoId);
         }
       },
       child: Container(
-        padding: const EdgeInsets.all(HistorialDimensions.paddingLarge),
+        padding: const EdgeInsets.all(16),
         decoration: HistorialDecorations.productBorder,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Contenedor de imagen mejorado
             Container(
-              width: HistorialDimensions.imageSize,
-              height: HistorialDimensions.imageSize,
-              decoration: HistorialDecorations.imageContainer,
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              clipBehavior: Clip.antiAlias,
               child: _buildProductImage(imagen, false),
             ),
-            const SizedBox(width: HistorialDimensions.paddingMedium),
+            const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      const Spacer(),
+                      Expanded(
+                        child: Text(
+                          nombre,
+                          style: HistorialTextStyles.productName,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
                       if (productoId != null) _buildFavoriteIcon(productoId, nombre),
                     ],
                   ),
-                  const SizedBox(height: HistorialDimensions.paddingSmall),
-                  Text(
-                    nombre,
-                    style: HistorialTextStyles.productName,
-                    maxLines: HistorialDimensions.maxLinesProduct,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: HistorialDimensions.paddingMedium),
+                  const SizedBox(height: 8),
                   if (precio != null) ...[
                     Text(
                       _formatoPesos.format(precio),
                       style: HistorialTextStyles.productPrice,
                     ),
-                    const SizedBox(height: HistorialDimensions.paddingMedium),
+                    const SizedBox(height: 12),
                   ],
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: _buildDeleteButton(() => _eliminarItem(item['_id']), false),
-                  ),
+                  _buildDeleteButton(() => _eliminarItem(itemId), false),
                 ],
               ),
             ),
@@ -373,18 +421,17 @@ class _HistorialScreenState extends State<HistorialScreen> {
   Widget _buildFavoriteIcon(String productoId, String nombre) {
     return Consumer<FavoritoProvider>(
       builder: (context, favoritoProvider, child) {
+        final esFavorito = favoritoProvider.esFavorito(productoId);
         return GestureDetector(
           onTap: () => _toggleFavorito(productoId, nombre),
-          child: Container(
-            padding: const EdgeInsets.all(HistorialDimensions.paddingSmall),
+          child: Padding(
+            padding: const EdgeInsets.all(6),
             child: Icon(
-              favoritoProvider.esFavorito(productoId)
-                  ? Icons.favorite
-                  : Icons.favorite_border,
-              color: favoritoProvider.esFavorito(productoId)
+              esFavorito ? Icons.favorite : Icons.favorite_border,
+              color: esFavorito
                   ? HistorialColors.favoriteActive
                   : HistorialColors.favoriteInactive,
-              size: HistorialDimensions.iconSizeLarge,
+              size: 24,
             ),
           ),
         );
@@ -393,56 +440,74 @@ class _HistorialScreenState extends State<HistorialScreen> {
   }
 
   Widget _buildProductImage(String? imagen, bool isCard) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(
-        isCard ? HistorialDimensions.borderRadiusSmall : HistorialDimensions.borderRadiusMedium,
-      ),
-      child: imagen != null
-          ? Image.network(
-              imagen,
-              fit: BoxFit.cover,
-              width: double.infinity,
-              height: double.infinity,
-              errorBuilder: (context, error, stackTrace) {
-                return Icon(
-                  Icons.image_not_supported,
-                  color: HistorialColors.iconPrimary,
-                  size: HistorialDimensions.iconSizeXLarge,
-                );
-              },
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) return child;
-                return Shimmer.fromColors(
-                  baseColor: Colors.grey.shade300,
-                  highlightColor: Colors.grey.shade100,
-                  child: Container(
-                    color: Colors.white,
-                    width: double.infinity,
-                    height: double.infinity,
-                  ),
-                );
-              },
-            )
-          : Icon(
-              Icons.image_not_supported,
-              color: HistorialColors.iconPrimary,
-              size: HistorialDimensions.iconSizeXLarge,
-            ),
+    if (imagen == null) {
+      return Container(
+        width: double.infinity,
+        height: double.infinity,
+        color: Colors.grey.shade200,
+        child: Icon(
+          Icons.image_not_supported,
+          color: HistorialColors.iconPrimary,
+          size: isCard ? 48 : 40,
+        ),
+      );
+    }
+
+    return Image.network(
+      imagen,
+      fit: BoxFit.contain, // Cambiado de cover a contain para mostrar la imagen completa
+      width: double.infinity,
+      height: double.infinity,
+      errorBuilder: (context, error, stackTrace) {
+        return Container(
+          width: double.infinity,
+          height: double.infinity,
+          color: Colors.grey.shade200,
+          child: Icon(
+            Icons.broken_image,
+            color: HistorialColors.iconPrimary,
+            size: isCard ? 48 : 40,
+          ),
+        );
+      },
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return Shimmer.fromColors(
+          baseColor: Colors.grey.shade300,
+          highlightColor: Colors.grey.shade100,
+          child: Container(
+            color: Colors.white,
+            width: double.infinity,
+            height: double.infinity,
+          ),
+        );
+      },
     );
   }
 
   Widget _buildDeleteButton(VoidCallback onPressed, bool isSmall) {
-    return TextButton(
-      onPressed: onPressed,
-      style: TextButton.styleFrom(
-        foregroundColor: HistorialColors.primaryBlue,
-        padding: EdgeInsets.zero,
-        minimumSize: Size.zero,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      ),
-      child: Text(
-        "Eliminar",
-        style: isSmall ? HistorialTextStyles.buttonSmall : HistorialTextStyles.buttonPrimary,
+    return InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.delete_outline,
+              size: isSmall ? 14 : 16,
+              color: HistorialColors.primaryBlue,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              "Eliminar",
+              style: isSmall 
+                ? HistorialTextStyles.buttonSmall 
+                : HistorialTextStyles.buttonPrimary,
+            ),
+          ],
+        ),
       ),
     );
   }

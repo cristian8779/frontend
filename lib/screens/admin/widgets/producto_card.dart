@@ -5,11 +5,8 @@ import 'package:crud/providers/producto_admin_provider.dart';
 
 class ProductoCard extends StatefulWidget {
   final String id;
-  
-  // NUEVO: Parámetro para pasar el producto directamente (opcional)
   final Map<String, dynamic>? producto;
   
-  // Parámetros DEPRECATED - mantenidos por compatibilidad
   @deprecated
   final String? nombre;
   @deprecated
@@ -101,6 +98,13 @@ class _ProductoCardState extends State<ProductoCard>
 
   Map<String, dynamic>? _findProductoInProvider(ProductoProvider provider) {
     final idToSearch = _validId;
+    
+    // ⭐ NUEVO: Verificar si fue eliminado recientemente
+    if (provider.fueEliminadoRecientemente(idToSearch)) {
+      final segundos = provider.getSegundosDesdeEliminacion(idToSearch);
+      debugPrint('⚠️  ProductoCard: Producto eliminado hace ${segundos}s - ID: $idToSearch');
+      return null; // Retornar null para que no se renderice
+    }
     
     if (idToSearch.isEmpty || idToSearch.startsWith('unknown_')) {
       debugPrint('ID invalido para busqueda: $idToSearch');
@@ -195,6 +199,12 @@ class _ProductoCardState extends State<ProductoCard>
       builder: (context, provider, child) {
         final producto = _findProductoInProvider(provider);
         
+        // ⭐ NUEVO: Si el producto fue eliminado, no renderizar nada
+        if (producto == null && provider.fueEliminadoRecientemente(_validId)) {
+          debugPrint('🚫 ProductoCard: No renderizando producto eliminado - $_validId');
+          return const SizedBox.shrink();
+        }
+        
         if (producto == null && _validId.startsWith('unknown_')) {
           return _buildErrorCard('ID de producto invalido');
         }
@@ -274,45 +284,45 @@ class _ProductoCardState extends State<ProductoCard>
                                 child: Hero(
                                   tag: 'producto_$_validId',
                                   child: Image.network(
-                                    imagenUrl.isNotEmpty
-                                        ? imagenUrl
-                                        : 'https://via.placeholder.com/400x280/f5f5f5/cccccc?text=Sin+Imagen',
-                                    fit: BoxFit.cover,
-                                    width: double.infinity,
-                                    height: double.infinity,
-                                    loadingBuilder: (context, child, loadingProgress) {
-                                      if (loadingProgress == null) return child;
-                                      return Center(
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          valueColor: AlwaysStoppedAnimation<Color>(
-                                            Colors.blue[600]!,
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                    errorBuilder: (context, error, stackTrace) =>
-                                        Center(
-                                      child: Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          Icon(
-                                            Icons.image_not_supported_outlined,
-                                            size: 40,
-                                            color: Colors.grey[400],
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            'Sin imagen',
-                                            style: TextStyle(
-                                              color: Colors.grey[500],
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
+  imagenUrl.isNotEmpty
+      ? imagenUrl
+      : 'https://via.placeholder.com/400x280/f5f5f5/cccccc?text=Sin+Imagen',
+  fit: BoxFit.contain,  // ← CAMBIO: cover → contain
+  width: double.infinity,
+  height: double.infinity,
+  loadingBuilder: (context, child, loadingProgress) {
+    if (loadingProgress == null) return child;
+    return Center(
+      child: CircularProgressIndicator(
+        strokeWidth: 2,
+        valueColor: AlwaysStoppedAnimation<Color>(
+          Colors.blue[600]!,
+        ),
+      ),
+    );
+  },
+  errorBuilder: (context, error, stackTrace) =>
+      Center(
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(
+          Icons.image_not_supported_outlined,
+          size: 40,
+          color: Colors.grey[400],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Sin imagen',
+          style: TextStyle(
+            color: Colors.grey[500],
+            fontSize: 12,
+          ),
+        ),
+      ],
+    ),
+  ),
+),
                                 ),
                               ),
                             ),

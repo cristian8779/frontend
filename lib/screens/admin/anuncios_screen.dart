@@ -7,11 +7,9 @@ import 'package:shimmer/shimmer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 
-// Importaciones de servicios y pantallas
 import '../../services/anuncio_service.dart';
 import 'gestion_anuncios_screen.dart';
-
-// Importación de estilos (usando el archivo barrel)
+import 'anuncio_programados.dart';
 import 'styles/anuncio/styles_index.dart';
 
 class AnunciosScreen extends StatefulWidget {
@@ -21,11 +19,9 @@ class AnunciosScreen extends StatefulWidget {
   State<AnunciosScreen> createState() => _AnunciosScreenState();
 }
 
-class _AnunciosScreenState extends State<AnunciosScreen> 
-    with TickerProviderStateMixin {
+class _AnunciosScreenState extends State<AnunciosScreen> with TickerProviderStateMixin {
   final AnuncioService _anuncioService = AnuncioService();
   
-  // Estado de la pantalla
   List<Map<String, dynamic>> _anuncios = [];
   bool _isLoading = true;
   bool _hasError = false;
@@ -34,7 +30,6 @@ class _AnunciosScreenState extends State<AnunciosScreen>
   bool _isDeleting = false;
   bool _isRefreshing = false;
 
-  // Controllers de animación
   late AnimationController _fadeController;
   late AnimationController _slideController;
   late Animation<double> _fadeAnimation;
@@ -62,27 +57,22 @@ class _AnunciosScreenState extends State<AnunciosScreen>
     super.dispose();
   }
 
-  // 🔄 LÓGICA DE CARGA DE DATOS
   Future<void> _cargarAnuncios() async {
     if (!mounted) return;
     
-    if (!_isRefreshing) {
-      setState(() {
+    setState(() {
+      if (!_isRefreshing) {
         _isLoading = true;
-        _hasError = false;
-        _mensajeError = null;
-      });
-    }
+      }
+      _hasError = false;
+      _mensajeError = null;
+    });
 
-    // Reset animaciones
     _fadeController.reset();
     _slideController.reset();
 
     try {
-      // UX delay para mostrar loading shimmer (solo si no es refresh)
-      if (!_isRefreshing) {
-        await Future.delayed(const Duration(milliseconds: 300));
-      }
+      await Future.delayed(const Duration(milliseconds: 600));
       final anuncios = await _anuncioService.obtenerAnunciosActivosConId();
 
       if (!mounted) return;
@@ -92,24 +82,16 @@ class _AnunciosScreenState extends State<AnunciosScreen>
         _isLoading = false;
         _hasError = false;
         _isRefreshing = false;
+        if (_anuncios.isEmpty) {
+          _currentIndex = 0;
+        }
       });
       
-      // Iniciar animaciones
       _fadeController.forward();
       _slideController.forward();
       
-      // Precargar las primeras 3 imágenes
       if (mounted && _anuncios.isNotEmpty) {
         _prefetchImages();
-      }
-      
-      // Mostrar mensaje de éxito solo en refresh manual
-      if (_isRefreshing) {
-        StyleUtilities.showStyledSnackBar(
-          context, 
-          "Anuncios actualizados", 
-          isSuccess: true
-        );
       }
     } catch (e) {
       if (!mounted) return;
@@ -120,7 +102,7 @@ class _AnunciosScreenState extends State<AnunciosScreen>
         _isRefreshing = false;
         _mensajeError = StyleUtilities.determineErrorMessage(e);
       });
-      _fadeController.forward(); // Mostrar error con animación
+      _fadeController.forward();
     }
   }
 
@@ -146,14 +128,11 @@ class _AnunciosScreenState extends State<AnunciosScreen>
             CachedNetworkImageProvider(url),
             context,
           );
-        } catch (_) {
-          // Silently handle prefetch errors
-        }
+        } catch (_) {}
       }
     }
   }
 
-  // 🗑️ LÓGICA DE ELIMINACIÓN
   Future<void> _eliminarAnuncio(String id) async {
     if (_isDeleting) return;
     
@@ -162,25 +141,44 @@ class _AnunciosScreenState extends State<AnunciosScreen>
     final confirmar = await _mostrarDialogoConfirmacion();
     if (confirmar != true) return;
 
+    // ✅ Verificar mounted después del diálogo
+    if (!mounted) return;
+
     setState(() => _isDeleting = true);
 
     try {
       final eliminado = await _anuncioService.eliminarAnuncio(id);
+      
+      // ✅ Verificar mounted después de la operación asíncrona
       if (!mounted) return;
 
       if (eliminado) {
+        // ✅ Actualizar estado primero
+        setState(() {
+          _anuncios.removeWhere((a) => a['_id'] == id);
+          
+          if (_anuncios.isEmpty) {
+            _currentIndex = 0;
+          } else if (_currentIndex >= _anuncios.length) {
+            _currentIndex = _anuncios.length - 1;
+          }
+          _isDeleting = false;
+        });
+        
+        // ✅ Verificar mounted antes de mostrar SnackBar
+        if (!mounted) return;
+        
         StyleUtilities.showStyledSnackBar(
           context,
           "Anuncio eliminado exitosamente", 
           isSuccess: true
         );
-        setState(() {
-          _anuncios.removeWhere((a) => a['_id'] == id);
-          if (_currentIndex >= _anuncios.length && _anuncios.isNotEmpty) {
-            _currentIndex = _anuncios.length - 1;
-          }
-        });
       } else {
+        // ✅ Verificar mounted antes de mostrar SnackBar
+        if (!mounted) return;
+        
+        setState(() => _isDeleting = false);
+        
         StyleUtilities.showStyledSnackBar(
           context,
           _anuncioService.message ?? 'Error al eliminar el anuncio',
@@ -188,17 +186,16 @@ class _AnunciosScreenState extends State<AnunciosScreen>
         );
       }
     } catch (e) {
-      if (mounted) {
-        StyleUtilities.showStyledSnackBar(
-          context,
-          StyleUtilities.determineErrorMessage(e), 
-          isSuccess: false
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isDeleting = false);
-      }
+      // ✅ Verificar mounted antes de usar context
+      if (!mounted) return;
+      
+      setState(() => _isDeleting = false);
+      
+      StyleUtilities.showStyledSnackBar(
+        context,
+        StyleUtilities.determineErrorMessage(e), 
+        isSuccess: false
+      );
     }
   }
 
@@ -260,7 +257,6 @@ class _AnunciosScreenState extends State<AnunciosScreen>
     );
   }
 
-  // 🏗️ CONSTRUCCIÓN DE LA UI
   @override
   Widget build(BuildContext context) {
     final double screenWidth = MediaQuery.of(context).size.width;
@@ -282,38 +278,86 @@ class _AnunciosScreenState extends State<AnunciosScreen>
           slivers: [
             _buildSliverAppBar(),
             SliverToBoxAdapter(
-              child: FadeTransition(
-                opacity: _fadeAnimation,
-                child: SlideTransition(
-                  position: _slideAnimation,
-                  child: Column(
-                    children: [
-                      // Header con información del carrusel
-                      if (!_isLoading && _anuncios.isNotEmpty)
-                        _buildHeaderInfo(),
+              child: _isLoading || _isRefreshing
+                  ? _buildShimmerContent(screenWidth, bannerHeight, viewportFraction)
+                  : FadeTransition(
+                      opacity: _fadeAnimation,
+                      child: SlideTransition(
+                        position: _slideAnimation,
+                        child: Column(
+                          children: [
+                            if (!_hasError && _anuncios.isNotEmpty)
+                              _buildHeaderInfo(),
 
-                      // Contenido principal
-                      AnimatedSwitcher(
-                        duration: AppStyles.normalAnimation,
-                        switchInCurve: Curves.easeOutCubic,
-                        switchOutCurve: Curves.easeInCubic,
-                        child: _buildBodyContent(screenWidth, bannerHeight, viewportFraction),
+                            AnimatedSwitcher(
+                              duration: AppStyles.normalAnimation,
+                              switchInCurve: Curves.easeOutCubic,
+                              switchOutCurve: Curves.easeInCubic,
+                              child: _buildBodyContent(screenWidth, bannerHeight, viewportFraction),
+                            ),
+
+                            if (!_hasError && _anuncios.isNotEmpty)
+                              _buildAnuncioDetailCard(_anuncios[_currentIndex]),
+                          ],
+                        ),
                       ),
-
-                      // Información detallada del anuncio actual
-                      if (!_isLoading && !_hasError && _anuncios.isNotEmpty)
-                        _buildAnuncioDetailCard(_anuncios[_currentIndex]),
-                    ],
-                  ),
-                ),
-              ),
+                    ),
             ),
           ],
         ),
       ),
-      floatingActionButton: (!_isLoading && _anuncios.isEmpty)
+      floatingActionButton: (_isLoading || _isRefreshing || _anuncios.isEmpty)
           ? null
           : _buildFloatingActionButton(),
+    );
+  }
+
+  Widget _buildShimmerContent(double screenWidth, double bannerHeight, double viewportFraction) {
+    return Column(
+      children: [
+        Container(
+          margin: const EdgeInsets.fromLTRB(
+            AppStyles.spacingMedium,
+            AppStyles.spacingLarge,
+            AppStyles.spacingMedium,
+            AppStyles.spacingSmall,
+          ),
+          child: Shimmer.fromColors(
+            baseColor: Colors.grey.shade200,
+            highlightColor: Colors.grey.shade50,
+            child: Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
+              ),
+              child: Container(
+                height: 80,
+                padding: const EdgeInsets.all(AppStyles.spacingMedium),
+              ),
+            ),
+          ),
+        ),
+        
+        _buildLoadingState(screenWidth, bannerHeight, viewportFraction),
+        
+        Container(
+          margin: const EdgeInsets.all(AppStyles.spacingMedium),
+          child: Shimmer.fromColors(
+            baseColor: Colors.grey.shade200,
+            highlightColor: Colors.grey.shade50,
+            child: Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
+              ),
+              child: Container(
+                height: 250,
+                padding: const EdgeInsets.all(AppStyles.spacingLarge),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -325,6 +369,22 @@ class _AnunciosScreenState extends State<AnunciosScreen>
       elevation: 0,
       backgroundColor: AppStyles.primaryColor,
       foregroundColor: Colors.white,
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.schedule_rounded),
+          tooltip: 'Ver anuncios programados',
+          onPressed: () {
+            StyleUtilities.lightHaptic();
+            Navigator.push(
+              context,
+              StyleUtilities.slideRightTransition(
+                const AnunciosProgramadosScreen(),
+              ),
+            ).then((_) => _cargarAnuncios());
+          },
+        ),
+        const SizedBox(width: 8),
+      ],
       flexibleSpace: FlexibleSpaceBar(
         title: const Text(
           "Gestión de Anuncios",
@@ -477,7 +537,6 @@ class _AnunciosScreenState extends State<AnunciosScreen>
   }
 
   Widget _buildBodyContent(double screenWidth, double bannerHeight, double viewportFraction) {
-    if (_isLoading) return _buildLoadingState(screenWidth, bannerHeight, viewportFraction);
     if (_hasError) return _buildErrorState(bannerHeight);
     if (_anuncios.isEmpty) return _buildEmptyState();
     return _buildCarruselAnuncios(screenWidth, bannerHeight, viewportFraction);
@@ -489,7 +548,6 @@ class _AnunciosScreenState extends State<AnunciosScreen>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Carrusel principal con animación mejorada
           AnimatedContainer(
             duration: AppStyles.normalAnimation,
             width: screenWidth,
@@ -543,7 +601,6 @@ class _AnunciosScreenState extends State<AnunciosScreen>
         borderRadius: BorderRadius.circular(16),
         child: Stack(
           children: [
-            // Imagen principal
             CachedNetworkImage(
               imageUrl: imageUrl,
               fit: BoxFit.cover,
@@ -555,7 +612,6 @@ class _AnunciosScreenState extends State<AnunciosScreen>
               fadeOutDuration: const Duration(milliseconds: 100),
             ),
 
-            // Overlay degradado
             Positioned.fill(
               child: Container(
                 decoration: BoxDecoration(
@@ -564,21 +620,18 @@ class _AnunciosScreenState extends State<AnunciosScreen>
               ),
             ),
 
-            // Status badge
             Positioned(
               top: AppStyles.spacingMedium,
               left: AppStyles.spacingMedium,
               child: _buildEnhancedStatusBadge(anuncio),
             ),
 
-            // Botón de eliminación
             Positioned(
               top: AppStyles.spacingMedium,
               right: AppStyles.spacingMedium,
               child: _buildDeleteButton(anuncio['_id']),
             ),
 
-            // Información del anuncio
             Positioned(
               bottom: AppStyles.spacingMedium,
               left: AppStyles.spacingMedium,
@@ -709,7 +762,6 @@ class _AnunciosScreenState extends State<AnunciosScreen>
   }
 
   Widget _buildAnuncioDetailCard(Map<String, dynamic> anuncio) {
-    final DateFormat dateFormat = DateFormat('dd MMM yyyy', 'es');
     final DateTime fechaInicio = DateTime.tryParse(anuncio['fechaInicio'] ?? '') ?? DateTime.now();
     final DateTime fechaFin = DateTime.tryParse(anuncio['fechaFin'] ?? '') ?? DateTime.now();
     final Duration duracion = fechaFin.difference(fechaInicio);
@@ -732,7 +784,6 @@ class _AnunciosScreenState extends State<AnunciosScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header de la tarjeta
               Row(
                 children: [
                   Container(
@@ -756,7 +807,6 @@ class _AnunciosScreenState extends State<AnunciosScreen>
               
               const SizedBox(height: AppStyles.spacingLarge),
               
-              // Información de fechas en grid
               Row(
                 children: [
                   Expanded(
@@ -781,7 +831,6 @@ class _AnunciosScreenState extends State<AnunciosScreen>
               
               const SizedBox(height: AppStyles.spacingMedium),
               
-              // Información adicional
               Row(
                 children: [
                   Expanded(
@@ -889,12 +938,16 @@ class _AnunciosScreenState extends State<AnunciosScreen>
   }
 
   Widget _buildModernDotsIndicator() {
-    if (_anuncios.length <= 1) return const SizedBox.shrink();
+    if (_anuncios.isEmpty || _anuncios.length <= 1) {
+      return const SizedBox.shrink();
+    }
+
+    final safeCurrentIndex = _currentIndex.clamp(0, _anuncios.length - 1);
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: _anuncios.asMap().entries.map((entry) {
-        final isActive = entry.key == _currentIndex;
+        final isActive = entry.key == safeCurrentIndex;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOutCubic,
@@ -928,13 +981,11 @@ class _AnunciosScreenState extends State<AnunciosScreen>
             color: Colors.white,
             child: Stack(
               children: [
-                // Fondo base
                 Positioned.fill(
                   child: Container(
                     color: Colors.grey.shade300,
                   ),
                 ),
-                // Simular badges superiores
                 Positioned(
                   top: AppStyles.spacingMedium,
                   left: AppStyles.spacingMedium,
@@ -959,7 +1010,6 @@ class _AnunciosScreenState extends State<AnunciosScreen>
                     ),
                   ),
                 ),
-                // Simular contenido inferior
                 Positioned(
                   bottom: AppStyles.spacingMedium,
                   left: AppStyles.spacingMedium,
@@ -1026,7 +1076,6 @@ class _AnunciosScreenState extends State<AnunciosScreen>
             ),
           ),
           const SizedBox(height: 12),
-          // Shimmer para los dots
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: List.generate(
@@ -1116,7 +1165,6 @@ class _AnunciosScreenState extends State<AnunciosScreen>
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Ilustración animada - tamaño reducido
               TweenAnimationBuilder(
                 duration: AppStyles.slowAnimation,
                 tween: Tween<double>(begin: 0.8, end: 1.0),
@@ -1180,7 +1228,6 @@ class _AnunciosScreenState extends State<AnunciosScreen>
               
               const SizedBox(height: AppStyles.spacingXLarge),
               
-              // Botón call-to-action mejorado
               Container(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(AppStyles.radiusMax),

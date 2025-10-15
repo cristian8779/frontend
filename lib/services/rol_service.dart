@@ -9,6 +9,27 @@ class RolService {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   String? _token;
 
+  /// 🔒 Sanitizar información sensible
+  String _sanitize(String value, {int visibleChars = 3}) {
+    if (value.isEmpty) return '***';
+    if (value.length <= visibleChars) return '***';
+    return '${value.substring(0, visibleChars)}***';
+  }
+
+  /// 🔒 Sanitizar email
+  String _sanitizeEmail(String email) {
+    if (!email.contains('@')) return _sanitize(email);
+    final parts = email.split('@');
+    return '${_sanitize(parts[0], visibleChars: 2)}@${parts[1]}';
+  }
+
+  /// 🔒 Sanitizar token JWT
+  String _sanitizeToken(String? token) {
+    if (token == null || token.isEmpty) return '[NO_TOKEN]';
+    if (token.length < 20) return '***';
+    return '${token.substring(0, 10)}...${token.substring(token.length - 10)}';
+  }
+
   /// ✅ Headers base para peticiones
   Map<String, String> _getHeaders(String? token) {
     return {
@@ -28,8 +49,15 @@ class RolService {
   /// 🔄 Renovar token usando refresh token
   Future<bool> _renovarToken() async {
     try {
+      print("🔄 [RolService] Intentando renovar token");
+      
       final refreshToken = await _secureStorage.read(key: 'refreshToken');
-      if (refreshToken == null) return false;
+      if (refreshToken == null) {
+        print("❌ [RolService] No hay refresh token disponible");
+        return false;
+      }
+
+      print("📡 [RolService] Solicitando renovación de token");
 
       final response = await http.post(
         Uri.parse('${dotenv.env['API_URL']}/auth/refresh'),
@@ -37,15 +65,20 @@ class RolService {
         body: jsonEncode({"refreshToken": refreshToken}),
       );
 
+      print("📥 [RolService] Respuesta renovación - Status: ${response.statusCode}");
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         await _secureStorage.write(key: 'accessToken', value: data['accessToken']);
         _token = data['accessToken'];
+        print("✅ [RolService] Token renovado exitosamente");
         return true;
       } else {
+        print("❌ [RolService] Error al renovar token");
         return false;
       }
-    } catch (_) {
+    } catch (e) {
+      print("❌ [RolService] Excepción al renovar token: ${e.toString()}");
       return false;
     }
   }
@@ -68,6 +101,7 @@ class RolService {
 
       // Si el token está expirado (401), intentar renovarlo
       if (testResponse.statusCode == 401) {
+        print("⚠️ [RolService] Token expirado, renovando...");
         final renovado = await _renovarToken();
         if (renovado) {
           token = await _getAccessToken();
@@ -94,7 +128,9 @@ class RolService {
       final token = await _obtenerTokenValido();
       final url = Uri.parse('$_baseUrl/invitar');
 
-      print("📩 [RolService] Enviando invitación a $email para rol $nuevoRol");
+      print("📩 [RolService] Enviando invitación");
+      print("   • Email: ${_sanitizeEmail(email)}");
+      print("   • Nuevo rol: $nuevoRol");
 
       final response = await http.post(
         url,
@@ -105,11 +141,12 @@ class RolService {
         }),
       ).timeout(const Duration(seconds: 15));
 
-      print("📡 [RolService] Respuesta invitar ${response.statusCode}: ${response.body}");
+      print("📥 [RolService] Respuesta invitar - Status: ${response.statusCode}");
 
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
+        print("✅ [RolService] Invitación enviada exitosamente");
         return {
           "success": true, 
           "mensaje": data["mensaje"],
@@ -138,6 +175,7 @@ class RolService {
       if (e.toString().contains('Exception:')) {
         rethrow;
       }
+      print("❌ [RolService] Error en invitarCambioRol: ${e.toString()}");
       throw Exception("Error de conexión: $e");
     }
   }
@@ -148,7 +186,8 @@ class RolService {
       final token = await _obtenerTokenValido();
       final url = Uri.parse('$_baseUrl/confirmar');
 
-      print("🔑 [RolService] Confirmando código: $codigo");
+      print("🔑 [RolService] Confirmando código de invitación");
+      print("   • Código: ${_sanitize(codigo, visibleChars: 2)}");
 
       final response = await http.post(
         url,
@@ -156,11 +195,12 @@ class RolService {
         body: jsonEncode({"codigo": codigo}),
       ).timeout(const Duration(seconds: 15));
 
-      print("📡 [RolService] Respuesta confirmar ${response.statusCode}: ${response.body}");
+      print("📥 [RolService] Respuesta confirmar - Status: ${response.statusCode}");
 
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
+        print("✅ [RolService] Código confirmado exitosamente");
         return {"success": true, "mensaje": data["mensaje"]};
       } else if (response.statusCode == 401) {
         throw Exception("Sesión expirada. Por favor, inicia sesión nuevamente.");
@@ -181,6 +221,7 @@ class RolService {
       if (e.toString().contains('Exception:')) {
         rethrow;
       }
+      print("❌ [RolService] Error en confirmarCodigoRol: ${e.toString()}");
       throw Exception("Error de conexión: $e");
     }
   }
@@ -198,14 +239,19 @@ class RolService {
         headers: _getHeaders(token)
       ).timeout(const Duration(seconds: 15));
 
-      print("📡 [RolService] Respuesta pendiente ${response.statusCode}: ${response.body}");
+      print("📥 [RolService] Respuesta pendiente - Status: ${response.statusCode}");
 
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
+        final pendiente = data["pendiente"] ?? false;
+        print(pendiente 
+          ? "✅ [RolService] Invitación pendiente encontrada" 
+          : "ℹ️ [RolService] No hay invitaciones pendientes");
+        
         return {
           "success": true, 
-          "pendiente": data["pendiente"] ?? false,
+          "pendiente": pendiente,
           "email": data["email"], 
           "nuevoRol": data["nuevoRol"],
           "expiracion": data["expiracion"],
@@ -224,6 +270,7 @@ class RolService {
       if (e.toString().contains('Exception:')) {
         rethrow;
       }
+      print("❌ [RolService] Error en verificarInvitacionPendiente: ${e.toString()}");
       throw Exception("Error de conexión: $e");
     }
   }
@@ -241,11 +288,12 @@ class RolService {
         headers: _getHeaders(token)
       ).timeout(const Duration(seconds: 15));
 
-      print("📡 [RolService] Respuesta rechazar ${response.statusCode}: ${response.body}");
+      print("📥 [RolService] Respuesta rechazar - Status: ${response.statusCode}");
 
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
+        print("✅ [RolService] Invitación rechazada exitosamente");
         return {"success": true, "mensaje": data["mensaje"]};
       } else if (response.statusCode == 401) {
         throw Exception("Sesión expirada. Por favor, inicia sesión nuevamente.");
@@ -262,6 +310,7 @@ class RolService {
       if (e.toString().contains('Exception:')) {
         rethrow;
       }
+      print("❌ [RolService] Error en rechazarInvitacion: ${e.toString()}");
       throw Exception("Error de conexión: $e");
     }
   }
@@ -279,12 +328,14 @@ class RolService {
         headers: _getHeaders(token)
       ).timeout(const Duration(seconds: 15));
 
-      print("📡 [RolService] Respuesta listar ${response.statusCode}: ${response.body}");
+      print("📥 [RolService] Respuesta listar - Status: ${response.statusCode}");
 
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
-        return {"success": true, "invitaciones": data["invitaciones"] ?? []};
+        final invitaciones = data["invitaciones"] ?? [];
+        print("✅ [RolService] ${invitaciones.length} invitaciones encontradas");
+        return {"success": true, "invitaciones": invitaciones};
       } else if (response.statusCode == 401) {
         throw Exception("Sesión expirada. Por favor, inicia sesión nuevamente.");
       } else if (response.statusCode == 403) {
@@ -300,6 +351,7 @@ class RolService {
       if (e.toString().contains('Exception:')) {
         rethrow;
       }
+      print("❌ [RolService] Error en listarInvitaciones: ${e.toString()}");
       throw Exception("Error de conexión: $e");
     }
   }
@@ -310,18 +362,20 @@ class RolService {
       final token = await _obtenerTokenValido();
       final url = Uri.parse('$_baseUrl/cancelar/$email');
 
-      print("🚫 [RolService] Cancelando invitación para: $email");
+      print("🚫 [RolService] Cancelando invitación");
+      print("   • Email: ${_sanitizeEmail(email)}");
 
       final response = await http.delete(
         url,
         headers: _getHeaders(token),
       ).timeout(const Duration(seconds: 15));
 
-      print("📡 [RolService] Respuesta cancelar ${response.statusCode}: ${response.body}");
+      print("📥 [RolService] Respuesta cancelar - Status: ${response.statusCode}");
 
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
+        print("✅ [RolService] Invitación cancelada exitosamente");
         return {
           'success': true,
           'mensaje': data['mensaje'] ?? 'Invitación cancelada exitosamente',
@@ -343,6 +397,7 @@ class RolService {
       if (e.toString().contains('Exception:')) {
         rethrow;
       }
+      print("❌ [RolService] Error en cancelarInvitacionPorSuperAdmin: ${e.toString()}");
       throw Exception("Error de conexión: $e");
     }
   }
@@ -353,7 +408,8 @@ class RolService {
       final token = await _obtenerTokenValido();
       final url = Uri.parse('$_baseUrl/invitaciones/todas');
 
-      print("⚠️ [RolService] Eliminando todas las invitaciones con confirmación: $confirmacion");
+      print("⚠️ [RolService] Eliminando todas las invitaciones");
+      print("   • Confirmación recibida: ${confirmacion == 'ELIMINAR TODO' ? '✓' : '✗'}");
 
       final response = await http.delete(
         url,
@@ -361,7 +417,7 @@ class RolService {
         body: jsonEncode({"confirmacion": confirmacion}),
       ).timeout(const Duration(seconds: 15));
 
-      print("📡 [RolService] Respuesta eliminar todas ${response.statusCode}: ${response.body}");
+      print("📥 [RolService] Respuesta eliminar todas - Status: ${response.statusCode}");
 
       final data = jsonDecode(response.body);
 
@@ -388,6 +444,7 @@ class RolService {
       if (e.toString().contains('Exception:')) {
         rethrow;
       }
+      print("❌ [RolService] Error en eliminarTodasLasInvitaciones: ${e.toString()}");
       throw Exception("Error de conexión: $e");
     }
   }
@@ -398,6 +455,7 @@ class RolService {
       final token = await _secureStorage.read(key: 'accessToken');
       return token != null && token.isNotEmpty;
     } catch (e) {
+      print("❌ [RolService] Error al verificar token: ${e.toString()}");
       return false;
     }
   }
@@ -408,8 +466,9 @@ class RolService {
       await _secureStorage.delete(key: 'accessToken');
       await _secureStorage.delete(key: 'refreshToken');
       _token = null;
+      print("✅ [RolService] Tokens limpiados exitosamente");
     } catch (e) {
-      print("Error al limpiar tokens: $e");
+      print("❌ [RolService] Error al limpiar tokens: ${e.toString()}");
     }
   }
 }

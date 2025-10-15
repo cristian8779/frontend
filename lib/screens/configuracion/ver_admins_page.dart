@@ -7,7 +7,7 @@ import '../../providers/auth_provider.dart';
 import '../../services/admin_service.dart';
 import '../admin/styles/ver_admin/ver_admins_colors.dart';
 import '../admin/styles/ver_admin/ver_admins_dimensions.dart';
-import '../admin/styles/ver_admin/ver_admins_styles.dart';
+import '../admin/styles/ver_admin/ver_admins_styles.dart'; 
 
 class VerAdminsPage extends StatefulWidget {
   const VerAdminsPage({super.key});

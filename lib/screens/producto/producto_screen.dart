@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'dart:io';
+import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 
 // Importaciones de servicios y widgets
 import '../../services/producto_usuario_service.dart';
 import '../../services/FavoritoService.dart';
 import '../../services/Carrito_Service.dart';
-import '../../services/HistorialService.dart';  // 📝 NUEVA IMPORTACIÓN
+import '../../services/HistorialService.dart';
+import '../../services/ResenaService.dart';
+import '../../providers/FavoritoProvider.dart';
+import '../../providers/carrito_provider.dart';
 import '../../models/request_models.dart';
 import '/utils/colores.dart';
-import '../../widgets/resena.dart';  // 📝 IMPORTAR WIDGET DE RESEÑAS
+import '../../widgets/resena.dart';
 
 class ProductoScreen extends StatefulWidget {
   final String productId;
@@ -29,22 +30,29 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
   late Animation<double> _fadeAnimation;
   
   // Servicios
-  final FavoritoService _favoritoService = FavoritoService();
-  final CarritoService _carritoService = CarritoService();
-  final HistorialService _historialService = HistorialService();  // 📝 NUEVO SERVICIO
+  final HistorialService _historialService = HistorialService();
+  final ResenaService _resenaService = ResenaService();
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+
+  // Controllers para scroll
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _descripcionKey = GlobalKey();
+  final GlobalKey _especificacionesKey = GlobalKey();
+  final GlobalKey _resenasKey = GlobalKey();
+  final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
   // Estados de selección
   List<String> coloresSeleccionados = [];
   List<String> tallasSeleccionadas = [];
-  bool isFavorite = false;
-  bool _isLoadingFavorite = true;
   bool _isLoggedIn = false;
-  bool _isLoadingCarrito = false;
-  bool _historialAgregado = false;  // 📝 NUEVO ESTADO para evitar duplicados
+  bool _historialAgregado = false;
   int selectedImageIndex = 0;
-  String currentTab = 'descripcion';
   String? imagenActual;
+  String? _cachedImage;
+  
+  // Estado para reseñas
+  List<Map<String, dynamic>> _resenas = [];
+  bool _cargandoResenas = false;
 
   // Helper para responsividad
   bool get _isTablet => MediaQuery.of(context).size.width >= 768;
@@ -52,10 +60,9 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
   double get _screenWidth => MediaQuery.of(context).size.width;
   double get _horizontalPadding => _isDesktop ? 32.0 : _isTablet ? 24.0 : 16.0;
 
-  // Formatear precio en pesos colombianos
   String _formatearPrecio(double precio) {
     final formatter = NumberFormat('#,##0', 'es_CO');
-   return '\$' + formatter.format(precio);
+    return '\$' + formatter.format(precio);
   }
 
   @override
@@ -73,17 +80,62 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
     );
     _animationController.forward();
     
-    _verificarEstadoFavorito();
-    _agregarAlHistorial();  // 📝 NUEVA LLAMADA
+    _verificarEstadoInicial();
+    _agregarAlHistorial();
+    _cargarResenas();
   }
 
   @override
   void dispose() {
     _animationController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
-  // 📝 NUEVO MÉTODO para mostrar imagen en pantalla completa con zoom
+  Future<void> _cargarResenas() async {
+    setState(() => _cargandoResenas = true);
+    
+    try {
+      final resenas = await _resenaService.obtenerResenasPorProducto(widget.productId);
+      setState(() {
+        _resenas = resenas;
+      });
+    } catch (e) {
+      print('Error al cargar reseñas: $e');
+    } finally {
+      setState(() => _cargandoResenas = false);
+    }
+  }
+
+  Future<void> _verificarEstadoInicial() async {
+    try {
+      final token = await _secureStorage.read(key: 'accessToken');
+      
+      if (token == null || token.isEmpty) {
+        setState(() {
+          _isLoggedIn = false;
+        });
+        return;
+      }
+
+      setState(() {
+        _isLoggedIn = true;
+      });
+
+      if (mounted) {
+        final favoritoProvider = Provider.of<FavoritoProvider>(context, listen: false);
+        if (favoritoProvider.favoritos.isEmpty) {
+          await favoritoProvider.cargarFavoritos();
+        }
+      }
+    } catch (e) {
+      print('ERROR en _verificarEstadoInicial: $e');
+      setState(() {
+        _isLoggedIn = false;
+      });
+    }
+  }
+
   void _mostrarImagenCompleta(String imageUrl) {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -92,21 +144,15 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
     );
   }
 
-  // 📝 NUEVO MÉTODO para agregar al historial
   Future<void> _agregarAlHistorial() async {
-    // Solo agregar si no se ha agregado ya y si hay token
     if (_historialAgregado) return;
     
     try {
       final token = await _secureStorage.read(key: 'accessToken');
       
-      // Solo agregar al historial si el usuario está logueado
       if (token == null || token.isEmpty) {
-        print('DEBUG - Usuario no logueado, no se agrega al historial');
         return;
       }
-
-      print('DEBUG - Agregando producto ${widget.productId} al historial');
       
       await _historialService.agregarAlHistorial(widget.productId);
       
@@ -114,13 +160,7 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
         _historialAgregado = true;
       });
       
-      print('DEBUG - Producto agregado al historial exitosamente');
-      
     } catch (e) {
-      // No mostrar error al usuario, solo logear
-      print('DEBUG - Error al agregar al historial (no crítico): $e');
-      
-      // Si el error es por producto ya existente, marcar como agregado
       if (e.toString().contains('ya existe') || e.toString().contains('already exists')) {
         setState(() {
           _historialAgregado = true;
@@ -131,7 +171,9 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
 
   String _obtenerImagenActual(Map<String, dynamic> productData, List<Map<String, dynamic>> variations) {
     if (coloresSeleccionados.isEmpty) {
-      return productData['imagen'] ?? '';
+      final imagen = productData['imagen'] ?? '';
+      _cachedImage ??= imagen;
+      return imagen;
     }
 
     final colorSeleccionado = coloresSeleccionados.first;
@@ -142,21 +184,22 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
           variacion['imagenes'] != null &&
           (variacion['imagenes'] as List).isNotEmpty) {
         final imagenes = variacion['imagenes'] as List;
-        return imagenes[0]['url'] ?? imagenes[0]['urlImagen'] ?? productData['imagen'] ?? '';
+        final nuevaImagen = imagenes[0]['url'] ?? imagenes[0]['urlImagen'] ?? productData['imagen'] ?? '';
+        _cachedImage = nuevaImagen;
+        return nuevaImagen;
       }
     }
 
-    return productData['imagen'] ?? '';
+    final imagen = productData['imagen'] ?? '';
+    _cachedImage ??= imagen;
+    return imagen;
   }
 
-  // Método para obtener el stock actual basado en la selección
   int _obtenerStockActual(Map<String, dynamic> productData, List<Map<String, dynamic>> variations) {
-    // Si no hay variaciones o no hay selección, retornar stock base del producto
     if (variations.isEmpty || (coloresSeleccionados.isEmpty && tallasSeleccionadas.isEmpty)) {
       return productData['stock'] ?? 0;
     }
 
-    // Buscar la variación que coincida con la selección
     for (var variacion in variations) {
       bool colorCoincide = coloresSeleccionados.isEmpty || 
           (variacion['color'] != null && 
@@ -171,40 +214,9 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
       }
     }
 
-    // Si hay selección pero no se encuentra variación específica, 
-    // calcular el stock mínimo de las variaciones que coincidan parcialmente
-    int stockMinimo = productData['stock'] ?? 0;
-    bool encontroCoincidencia = false;
-
-    for (var variacion in variations) {
-      bool tieneCoincidencia = false;
-
-      if (coloresSeleccionados.isNotEmpty && variacion['color'] != null) {
-        if (coloresSeleccionados.contains(variacion['color']['hex'])) {
-          tieneCoincidencia = true;
-        }
-      }
-
-      if (tallasSeleccionadas.isNotEmpty) {
-        if (tallasSeleccionadas.contains(variacion['tallaNumero']?.toString()) ||
-            tallasSeleccionadas.contains(variacion['tallaLetra']?.toString())) {
-          tieneCoincidencia = true;
-        }
-      }
-
-      if (tieneCoincidencia) {
-        encontroCoincidencia = true;
-        int stockVariacion = variacion['stock'] ?? 0;
-        if (!encontroCoincidencia || stockVariacion < stockMinimo) {
-          stockMinimo = stockVariacion;
-        }
-      }
-    }
-
-    return encontroCoincidencia ? stockMinimo : (productData['stock'] ?? 0);
+    return productData['stock'] ?? 0;
   }
 
-  // Widget para mostrar el estado del stock
   Widget _buildStockInfo(int stock) {
     Color stockColor;
     IconData stockIcon;
@@ -246,150 +258,30 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
     );
   }
 
-  Future<void> _verificarEstadoFavorito() async {
-    setState(() {
-      _isLoadingFavorite = true;
-    });
-
-    try {
-      final token = await _secureStorage.read(key: 'accessToken');
-      
-      if (token == null || token.isEmpty) {
-        setState(() {
-          _isLoggedIn = false;
-          _isLoadingFavorite = false;
-          isFavorite = false;
-        });
-        return;
-      }
-
-      setState(() {
-        _isLoggedIn = true;
-      });
-
-      try {
-        final favoritos = await _favoritoService.obtenerFavoritos();
-        print('DEBUG - Verificando favoritos. Total: ${favoritos.length}');
-        print('DEBUG - Buscando producto ID: ${widget.productId}');
-        
-        final esFavorito = favoritos.any((fav) {
-          // Verificar múltiples posibles campos de ID
-          final favoritoId = fav['productoId'] ?? fav['producto']?['_id'] ?? fav['producto']?['id'] ?? fav['id'];
-          final match = favoritoId == widget.productId;
-          print('DEBUG - Comparando: $favoritoId == ${widget.productId} = $match');
-          return match;
-        });
-        
-        print('DEBUG - Resultado final: esFavorito = $esFavorito');
-        
-        setState(() {
-          isFavorite = esFavorito;
-          _isLoadingFavorite = false;
-        });
-      } catch (e) {
-        print('ERROR al verificar favoritos: $e');
-        setState(() {
-          isFavorite = false;
-          _isLoadingFavorite = false;
-        });
-      }
-    } catch (e) {
-      print('ERROR en _verificarEstadoFavorito: $e');
-      setState(() {
-        _isLoggedIn = false;
-        _isLoadingFavorite = false;
-        isFavorite = false;
-      });
-    }
-  }
-
   Future<void> _toggleFavorito() async {
     if (!_isLoggedIn) {
       _mostrarDialogoLogin();
       return;
     }
 
-    // Prevenir múltiples clicks mientras está procesando
-    if (_isLoadingFavorite) {
-      return;
-    }
+    final favoritoProvider = Provider.of<FavoritoProvider>(context, listen: false);
+    final esFavorito = favoritoProvider.esFavorito(widget.productId);
 
-    setState(() {
-      _isLoadingFavorite = true;
-    });
-
-    // Guardar estado actual antes del toggle
-    final estadoAnterior = isFavorite;
-    
     try {
-      print('DEBUG - Estado actual antes del toggle: isFavorite = $isFavorite');
-      
-      if (isFavorite) {
-        // Eliminar de favoritos
-        print('DEBUG - Intentando ELIMINAR de favoritos');
-        await _favoritoService.eliminarFavorito(widget.productId);
-        
-        setState(() {
-          isFavorite = false;
-          _isLoadingFavorite = false;
-        });
-        
-        print('DEBUG - ELIMINADO exitosamente');
+      if (esFavorito) {
+        await favoritoProvider.eliminarFavorito(widget.productId);
         _mostrarSnackbar('Eliminado de favoritos', isSuccess: true);
-        
       } else {
-        // Agregar a favoritos
-        print('DEBUG - Intentando AGREGAR a favoritos');
-        await _favoritoService.agregarFavorito(widget.productId);
-        
-        setState(() {
-          isFavorite = true;
-          _isLoadingFavorite = false;
-        });
-        
-        print('DEBUG - AGREGADO exitosamente');
+        await favoritoProvider.agregarFavorito(widget.productId);
         _mostrarSnackbar('Agregado a favoritos', isSuccess: true);
       }
-      
-      print('DEBUG - Estado después del toggle: isFavorite = $isFavorite');
-      
     } catch (e) {
-      print('ERROR en toggle: $e');
-      
-      // Restaurar estado anterior en caso de error
-      setState(() {
-        isFavorite = estadoAnterior;
-        _isLoadingFavorite = false;
-      });
-      
       String errorMessage = e.toString().replaceFirst('Exception: ', '');
       
-      // Manejo específico de errores
-      if (errorMessage.toLowerCase().contains('ya existe') || 
-          errorMessage.toLowerCase().contains('already exists') ||
-          errorMessage.toLowerCase().contains('duplicate')) {
-        
-        // Si el error dice que ya existe, significa que SÍ está en favoritos
-        setState(() {
-          isFavorite = true;
-        });
-        _mostrarSnackbar('Este producto ya está en favoritos', isSuccess: true);
-        
-      } else if (errorMessage.toLowerCase().contains('no encontrado') ||
-                 errorMessage.toLowerCase().contains('not found')) {
-        
-        // Si no se encuentra, significa que NO está en favoritos
-        setState(() {
-          isFavorite = false;
-        });
-        _mostrarSnackbar('Producto eliminado de favoritos', isSuccess: true);
-        
-      } else if (errorMessage.contains('token') || 
-                 errorMessage.contains('acceso') ||
-                 errorMessage.contains('unauthorized')) {
-        
+      if (errorMessage.contains('token') || 
+          errorMessage.contains('acceso') ||
+          errorMessage.contains('unauthorized')) {
         _mostrarDialogoLogin();
-        
       } else {
         _mostrarSnackbar('Error: $errorMessage', isSuccess: false);
       }
@@ -430,18 +322,7 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-              ),
-              child: const Text(
-                'Ahora no',
-                style: TextStyle(
-                  color: Color(0xFF3483FA),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
-              ),
+              child: const Text('Ahora no', style: TextStyle(color: Color(0xFF3483FA))),
             ),
             ElevatedButton(
               onPressed: () {
@@ -451,17 +332,8 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF3483FA),
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                elevation: 0,
               ),
-              child: const Text(
-                'Iniciar sesión',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
-              ),
+              child: const Text('Iniciar sesión'),
             ),
           ],
         );
@@ -470,63 +342,64 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
   }
 
   void _mostrarSnackbar(String mensaje, {required bool isSuccess}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          mensaje,
-          style: TextStyle(
-            fontSize: _isDesktop ? 15 : 14,
-            fontWeight: FontWeight.w500,
-            color: Colors.white,
+    if (!mounted) return;
+    
+    // Usar el GlobalKey del ScaffoldMessenger
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      
+      try {
+        _scaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(
+            content: Text(mensaje),
+            backgroundColor: isSuccess ? const Color(0xFF00A650) : const Color(0xFFE74C3C),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
+            margin: const EdgeInsets.all(16),
           ),
-        ),
-        backgroundColor: isSuccess ? const Color(0xFF00A650) : const Color(0xFFE74C3C),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-        duration: const Duration(seconds: 3),
-        margin: EdgeInsets.all(_horizontalPadding),
-      ),
-    );
+        );
+      } catch (e) {
+        print('Error mostrando SnackBar: $e');
+      }
+    });
   }
 
   void _mostrarSnackbarConBotonCarrito(String mensaje) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(
-              Icons.check_circle_rounded,
-              color: Colors.white,
-              size: 20,
+    if (!mounted) return;
+    
+    // Usar el GlobalKey del ScaffoldMessenger
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      
+      try {
+        _scaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 12),
+                Expanded(child: Text(mensaje)),
+              ],
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                mensaje,
-                style: TextStyle(
-                  fontSize: _isDesktop ? 15 : 14,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.white,
-                ),
-              ),
+            backgroundColor: const Color(0xFF00A650),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 5),
+            margin: const EdgeInsets.all(16),
+            action: SnackBarAction(
+              label: 'Ir al carrito',
+              textColor: Colors.white,
+              onPressed: () {
+                if (mounted) {
+                  Navigator.pushNamed(context, '/cart');
+                }
+              },
             ),
-          ],
-        ),
-        backgroundColor: const Color(0xFF00A650),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-        duration: const Duration(seconds: 5),
-        margin: EdgeInsets.all(_horizontalPadding),
-        action: SnackBarAction(
-          label: 'Ir al carrito',
-          textColor: Colors.white,
-          backgroundColor: Colors.white.withOpacity(0.2),
-          onPressed: () {
-            Navigator.pushNamed(context, '/cart');
-          },
-        ),
-      ),
-    );
+          ),
+        );
+      } catch (e) {
+        print('Error mostrando SnackBar: $e');
+      }
+    });
   }
 
   List<Map<String, String>> _extraerColoresDisponibles(List<Map<String, dynamic>> variations) {
@@ -598,16 +471,11 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
       return;
     }
 
-    // Verificar stock antes de agregar al carrito
     final stockActual = _obtenerStockActual(productData, variations);
     if (stockActual <= 0) {
       _mostrarSnackbar('Producto sin stock disponible', isSuccess: false);
       return;
     }
-
-    setState(() {
-      _isLoadingCarrito = true;
-    });
 
     try {
       final token = await _secureStorage.read(key: 'accessToken');
@@ -616,57 +484,81 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
         return;
       }
 
+      final carritoProvider = Provider.of<CarritoProvider>(context, listen: false);
+      
+      if (carritoProvider.items.isEmpty) {
+        await carritoProvider.obtenerCarrito(token);
+      }
+      
       final variacionSeleccionada = _obtenerVariacionSeleccionada(variations);
+      final String? variacionId = variacionSeleccionada != null 
+          ? (variacionSeleccionada['_id'] ?? variacionSeleccionada['id']) 
+          : null;
+      
+      final yaExiste = carritoProvider.tieneProducto(widget.productId, variacionId: variacionId);
+      final cantidadActual = carritoProvider.obtenerCantidadProducto(widget.productId, variacionId: variacionId);
 
       bool exito = false;
 
-      if (variacionSeleccionada != null) {
-        final request = AgregarAlCarritoRequest(
-          productoId: widget.productId,
-          cantidad: 1,
-          variacionId: variacionSeleccionada['_id'] ?? variacionSeleccionada['id'],
+      if (yaExiste) {
+        final nuevaCantidad = cantidadActual + 1;
+        
+        if (nuevaCantidad > stockActual) {
+          _mostrarSnackbar('No hay suficiente stock disponible', isSuccess: false);
+          return;
+        }
+        
+        exito = await carritoProvider.actualizarCantidadConVariacion(
+          token, 
+          widget.productId, 
+          nuevaCantidad,
+          variacionId: variacionId,
         );
         
-        exito = await _carritoService.agregarProductoCompleto(token, request);
+        // Esperar un frame antes de mostrar el SnackBar
+        if (exito && mounted) {
+          await Future.delayed(const Duration(milliseconds: 100));
+          _mostrarSnackbarConBotonCarrito('Cantidad actualizada a $nuevaCantidad unidades');
+        }
       } else {
-        exito = await _carritoService.agregarProducto(token, widget.productId, 1);
+        if (variacionSeleccionada != null) {
+          final request = AgregarAlCarritoRequest(
+            productoId: widget.productId,
+            cantidad: 1,
+            variacionId: variacionId,
+          );
+          
+          exito = await carritoProvider.agregarProductoCompleto(token, request);
+        } else {
+          exito = await carritoProvider.agregarProducto(token, widget.productId, 1);
+        }
+
+        // Esperar un frame antes de mostrar el SnackBar
+        if (exito && mounted) {
+          await Future.delayed(const Duration(milliseconds: 100));
+          _mostrarSnackbarConBotonCarrito('Producto agregado al carrito');
+          
+          if (mounted) {
+            setState(() {
+              coloresSeleccionados.clear();
+              tallasSeleccionadas.clear();
+            });
+          }
+        }
       }
 
-      setState(() {
-        _isLoadingCarrito = false;
-      });
-
-      if (exito) {
-        String mensaje = variacionSeleccionada != null 
-            ? 'Variación agregada al carrito'
-            : 'Producto agregado al carrito';
-        _mostrarSnackbarConBotonCarrito(mensaje);
-        
-        setState(() {
-          coloresSeleccionados.clear();
-          tallasSeleccionadas.clear();
-        });
-      } else {
-        _mostrarSnackbar('Error al agregar al carrito', isSuccess: false);
+      if (!exito && mounted) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        _mostrarSnackbar(
+          carritoProvider.error ?? 'Error al procesar la operación', 
+          isSuccess: false
+        );
       }
 
     } catch (e) {
-      setState(() {
-        _isLoadingCarrito = false;
-      });
-
-      String errorMessage = e.toString().replaceFirst('Exception: ', '');
-
-      if (errorMessage.contains('token') ||
-          errorMessage.contains('acceso') ||
-          errorMessage.contains('Unauthorized')) {
-        _mostrarDialogoLogin();
-      } else if (errorMessage.contains('Producto no encontrado')) {
-        _mostrarSnackbar('Producto no disponible. Verifica tu selección.', isSuccess: false);
-      } else if (errorMessage.contains('Variación no encontrada')) {
-        _mostrarSnackbar('Esta variación no está disponible.', isSuccess: false);
-      } else {
-        _mostrarSnackbar('Error: $errorMessage', isSuccess: false);
+      if (mounted) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        _mostrarSnackbar('Error: ${e.toString()}', isSuccess: false);
       }
     }
   }
@@ -680,118 +572,6 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
     }
   }
 
-  Widget _buildDesktopLayout() {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: _buildAppBar(),
-      body: FutureBuilder(
-        future: Future.wait([producto, variaciones]),
-        builder: (context, AsyncSnapshot<List<dynamic>> snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return _buildLoadingState();
-          }
-
-          if (snapshot.hasError) {
-            return _buildErrorState(snapshot.error.toString());
-          }
-
-          Map<String, dynamic> productData = snapshot.data![0];
-          List<Map<String, dynamic>> variations = snapshot.data![1];
-          
-          final coloresDisponibles = _extraerColoresDisponibles(variations);
-          final precioActual = _calcularPrecioSeleccion(productData, variations);
-
-          return FadeTransition(
-            opacity: _fadeAnimation,
-            child: Center(
-              child: Container(
-                constraints: const BoxConstraints(maxWidth: 1200),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Sección de imagen - 50%
-                    Expanded(
-                      flex: 1,
-                      child: _buildImageSection(productData, variations),
-                    ),
-                    const SizedBox(width: 32),
-                    // Sección de información - 50%
-                    Expanded(
-                      flex: 1,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: SingleChildScrollView(
-                              child: Column(
-                                children: [
-                                  _buildProductInfo(productData, precioActual, coloresDisponibles, variations),
-                                  const SizedBox(height: 32),
-                                  _buildTabSection(productData, variations),
-                                  const SizedBox(height: 80),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildMobileLayout() {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: _buildAppBar(),
-      body: FutureBuilder(
-        future: Future.wait([producto, variaciones]),
-        builder: (context, AsyncSnapshot<List<dynamic>> snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return _buildLoadingState();
-          }
-
-          if (snapshot.hasError) {
-            return _buildErrorState(snapshot.error.toString());
-          }
-
-          Map<String, dynamic> productData = snapshot.data![0];
-          List<Map<String, dynamic>> variations = snapshot.data![1];
-          
-          final coloresDisponibles = _extraerColoresDisponibles(variations);
-          final precioActual = _calcularPrecioSeleccion(productData, variations);
-
-          return FadeTransition(
-            opacity: _fadeAnimation,
-            child: Column(
-              children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildImageSection(productData, variations),
-                        _buildProductInfo(productData, precioActual, coloresDisponibles, variations),
-                        _buildTabSection(productData, variations),
-                        const SizedBox(height: 80),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
       backgroundColor: const Color(0xFFF5F5F5),
@@ -801,28 +581,174 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
         onPressed: () => Navigator.pop(context),
       ),
       actions: [
-        _isLoadingFavorite
-            ? Container(
-                width: 48,
-                height: 48,
-                padding: const EdgeInsets.all(12),
-                child: const CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF666666)),
-                ),
-              )
-            : IconButton(
-                icon: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  child: Icon(
-                    isFavorite ? Icons.favorite : Icons.favorite_border,
-                    key: ValueKey(isFavorite),
-                    color: isFavorite ? const Color(0xFFE74C3C) : const Color(0xFF666666),
+        Consumer<FavoritoProvider>(
+          builder: (context, favoritoProvider, child) {
+            final esFavorito = favoritoProvider.esFavorito(widget.productId);
+            final isLoading = favoritoProvider.isLoading;
+
+            if (isLoading) {
+              return const Padding(
+                padding: EdgeInsets.all(12),
+                child: CircularProgressIndicator(strokeWidth: 2),
+              );
+            }
+
+            return IconButton(
+              icon: Icon(
+                esFavorito ? Icons.favorite : Icons.favorite_border,
+                color: esFavorito ? const Color(0xFFE74C3C) : const Color(0xFF666666),
+              ),
+              onPressed: _toggleFavorito,
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPurchaseButtons(Map<String, dynamic> productData, List<Map<String, dynamic>> variations, int stockActual) {
+    final buttonHeight = _isDesktop ? 56.0 : _isTablet ? 52.0 : 48.0;
+    
+    return Consumer<CarritoProvider>(
+      builder: (context, carritoProvider, child) {
+        final isLoading = carritoProvider.isAdding || carritoProvider.isUpdating;
+        
+        return SizedBox(
+          width: double.infinity,
+          height: buttonHeight,
+          child: ElevatedButton(
+            onPressed: (isLoading || stockActual <= 0) ? null : () => _agregarAlCarrito(productData, variations),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: stockActual <= 0 ? Colors.grey : const Color(0xFF3483FA),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+              elevation: 0,
+            ),
+            child: isLoading
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : Text(
+                    stockActual <= 0 ? 'Sin stock' : 'Agregar al carrito',
+                    style: TextStyle(
+                      fontSize: _isDesktop ? 18 : 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDesktopLayout() {
+    return ScaffoldMessenger(
+      key: _scaffoldMessengerKey,
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        appBar: _buildAppBar(),
+        body: FutureBuilder(
+          future: Future.wait([producto, variaciones]),
+          builder: (context, AsyncSnapshot<List<dynamic>> snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return _buildLoadingState();
+            }
+
+            if (snapshot.hasError) {
+              return _buildErrorState(snapshot.error.toString());
+            }
+
+            Map<String, dynamic> productData = snapshot.data![0];
+            List<Map<String, dynamic>> variations = snapshot.data![1];
+            
+            final coloresDisponibles = _extraerColoresDisponibles(variations);
+            final precioActual = _calcularPrecioSeleccion(productData, variations);
+
+            return FadeTransition(
+              opacity: _fadeAnimation,
+              child: Center(
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 1200),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 1,
+                        child: _buildImageSection(productData, variations),
+                      ),
+                      const SizedBox(width: 32),
+                      Expanded(
+                        flex: 1,
+                        child: SingleChildScrollView(
+                          controller: _scrollController,
+                          child: Column(
+                            children: [
+                              _buildProductInfo(productData, precioActual, coloresDisponibles, variations),
+                              const SizedBox(height: 32),
+                              _buildAllSections(productData, variations),
+                              const SizedBox(height: 80),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                onPressed: _toggleFavorito,
               ),
-      ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileLayout() {
+    return ScaffoldMessenger(
+      key: _scaffoldMessengerKey,
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        appBar: _buildAppBar(),
+        body: FutureBuilder(
+          future: Future.wait([producto, variaciones]),
+          builder: (context, AsyncSnapshot<List<dynamic>> snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return _buildLoadingState();
+            }
+
+            if (snapshot.hasError) {
+              return _buildErrorState(snapshot.error.toString());
+            }
+
+            Map<String, dynamic> productData = snapshot.data![0];
+            List<Map<String, dynamic>> variations = snapshot.data![1];
+            
+            final coloresDisponibles = _extraerColoresDisponibles(variations);
+            final precioActual = _calcularPrecioSeleccion(productData, variations);
+
+            return FadeTransition(
+              opacity: _fadeAnimation,
+              child: SingleChildScrollView(
+                controller: _scrollController,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildImageSection(productData, variations),
+                    _buildProductInfo(productData, precioActual, coloresDisponibles, variations),
+                    const SizedBox(height: 16),
+                    _buildAllSections(productData, variations),
+                    const SizedBox(height: 80),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 
@@ -831,17 +757,13 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          CircularProgressIndicator(
-            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF3483FA)),
-            strokeWidth: _isDesktop ? 4 : 3,
+          const CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3483FA)),
           ),
-          SizedBox(height: _isDesktop ? 20 : 16),
+          const SizedBox(height: 16),
           Text(
             'Cargando producto...',
-            style: TextStyle(
-              fontSize: _isDesktop ? 18 : 16,
-              color: const Color(0xFF666666),
-            ),
+            style: TextStyle(fontSize: _isDesktop ? 18 : 16),
           ),
         ],
       ),
@@ -855,52 +777,19 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.error_outline, 
-              size: _isDesktop ? 80 : 64, 
-              color: Colors.grey.shade400
-            ),
-            SizedBox(height: _isDesktop ? 20 : 16),
-            Text(
-              'Ups! Algo salió mal',
-              style: TextStyle(
-                fontSize: _isDesktop ? 24 : 20,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF333333),
-              ),
-            ),
-            SizedBox(height: _isDesktop ? 12 : 8),
-            Text(
-              'No pudimos cargar este producto. Revisá tu conexión e intentá de nuevo.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.grey.shade600,
-                fontSize: _isDesktop ? 18 : 16,
-              ),
-            ),
-            SizedBox(height: _isDesktop ? 24 : 20),
+            Icon(Icons.error_outline, size: _isDesktop ? 80 : 64, color: Colors.grey.shade400),
+            const SizedBox(height: 16),
+            const Text('Ups! Algo salió mal', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            const Text('No pudimos cargar este producto.', textAlign: TextAlign.center),
+            const SizedBox(height: 20),
             ElevatedButton(
               onPressed: () => setState(() {
                 producto = ProductoUsuarioService().obtenerProductoPorId(widget.productId);
                 variaciones = ProductoUsuarioService().obtenerVariacionesPorProducto(widget.productId);
               }),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF3483FA),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                elevation: 0,
-                padding: EdgeInsets.symmetric(
-                  horizontal: _isDesktop ? 32 : 24,
-                  vertical: _isDesktop ? 16 : 12,
-                ),
-              ),
-              child: Text(
-                'Reintentar',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: _isDesktop ? 16 : 14,
-                ),
-              ),
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF3483FA)),
+              child: const Text('Reintentar'),
             ),
           ],
         ),
@@ -912,102 +801,35 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
     final imagenMostrar = _obtenerImagenActual(productData, variations);
     final imageHeight = _isDesktop ? 500.0 : _isTablet ? 450.0 : 400.0;
     
+    final imagenAMostrar = _cachedImage ?? imagenMostrar;
+    
     return Container(
       height: imageHeight,
       width: double.infinity,
       color: Colors.white,
-      child: Stack(
-        children: [
-          Center(
-            child: GestureDetector(
-              onTap: () => _mostrarImagenCompleta(imagenMostrar),
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 300),
-                child: Image.network(
-                  imagenMostrar,
-                  key: ValueKey(imagenMostrar),
-                  fit: BoxFit.contain,
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) {
-                      return child;
-                    }
-                    return Container(
-                      height: imageHeight,
-                      child: const Center(
-                        child: CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3483FA)),
-                          strokeWidth: 2,
-                        ),
-                      ),
-                    );
-                  },
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      height: imageHeight,
-                      color: const Color(0xFFF5F5F5),
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.image_not_supported_outlined,
-                              size: _isDesktop ? 64 : 48,
-                              color: const Color(0xFFCCCCCC),
-                            ),
-                            SizedBox(height: _isDesktop ? 12 : 8),
-                            Text(
-                              'Imagen no disponible',
-                              style: TextStyle(
-                                color: const Color(0xFF999999),
-                                fontSize: _isDesktop ? 16 : 14,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
+      child: GestureDetector(
+        onTap: () => _mostrarImagenCompleta(imagenAMostrar),
+        child: Image.network(
+          imagenAMostrar,
+          key: ValueKey(imagenAMostrar),
+          fit: BoxFit.contain,
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return Center(
+              child: CircularProgressIndicator(
+                value: loadingProgress.expectedTotalBytes != null
+                    ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                    : null,
+                valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF3483FA)),
               ),
-            ),
-          ),
-          // Indicador de tap para zoom
-          Positioned(
-            top: 16,
-            right: 16,
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.6),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Icon(
-                Icons.zoom_in,
-                color: Colors.white,
-                size: _isDesktop ? 20 : 16,
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: 16,
-            right: 16,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.6),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                '1/1',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: _isDesktop ? 13 : 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ),
-        ],
+            );
+          },
+          errorBuilder: (context, error, stackTrace) {
+            return Center(
+              child: Icon(Icons.image_not_supported_outlined, size: 64, color: Colors.grey.shade400),
+            );
+          },
+        ),
       ),
     );
   }
@@ -1015,7 +837,6 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
   Widget _buildProductInfo(Map<String, dynamic> productData, double precioActual, 
                           List<Map<String, String>> coloresDisponibles, 
                           List<Map<String, dynamic>> variations) {
-    final precioBase = double.tryParse(productData['precio'].toString()) ?? 0.0;
     final stockActual = _obtenerStockActual(productData, variations);
     
     return Container(
@@ -1024,60 +845,74 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Precio
-          Row(
-            children: [
-              Text(
-                _formatearPrecio(precioActual),
-                style: TextStyle(
-                  fontSize: _isDesktop ? 36 : _isTablet ? 34 : 32,
-                  fontWeight: FontWeight.w300,
-                  color: const Color(0xFF333333),
-                ),
-              ),
-              if (precioActual != precioBase) ...[
-                const SizedBox(width: 8),
-                Text(
-                  _formatearPrecio(precioBase),
-                  style: TextStyle(
-                    fontSize: _isDesktop ? 20 : 18,
-                    decoration: TextDecoration.lineThrough,
-                    color: const Color(0xFF999999),
-                  ),
-                ),
-              ],
-            ],
-          ),
-          
-          SizedBox(height: _isDesktop ? 16 : 12),
-          
-          // Nombre del producto
+          _buildEstrellasSuperior(productData),
+          const SizedBox(height: 12),
           Text(
-            productData['nombre'],
+            _formatearPrecio(precioActual),
             style: TextStyle(
-              fontSize: _isDesktop ? 24 : _isTablet ? 22 : 20,
-              fontWeight: FontWeight.w400,
-              color: const Color(0xFF333333),
-              height: 1.2,
+              fontSize: _isDesktop ? 36 : 32,
+              fontWeight: FontWeight.w300,
             ),
           ),
-          
-          SizedBox(height: _isDesktop ? 20 : 16),
-          
-          // Selectores de variaciones
+          const SizedBox(height: 16),
+          Text(
+            productData['nombre'],
+            style: TextStyle(fontSize: _isDesktop ? 24 : 20, fontWeight: FontWeight.w400),
+          ),
+          const SizedBox(height: 20),
           if (variations.isNotEmpty) ...[
             _buildVariationSelectors(coloresDisponibles, variations),
+            const SizedBox(height: 20),
           ],
-          
-          SizedBox(height: _isDesktop ? 20 : 16),
-          
-          // Información de stock dinámico
           _buildStockInfo(stockActual),
-          
-          SizedBox(height: _isDesktop ? 24 : 20),
-          
-          // Botón de agregar al carrito
+          const SizedBox(height: 24),
           _buildPurchaseButtons(productData, variations, stockActual),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEstrellasSuperior(Map<String, dynamic> productData) {
+    if (_resenas.isEmpty) return const SizedBox.shrink();
+    
+    final promedio = _calcularPromedioCalificacion();
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF9E6),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: const Color(0xFFFFE5B4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: List.generate(5, (index) {
+              return Icon(
+                index < promedio.round() ? Icons.star : Icons.star_border,
+                color: const Color(0xFFFFB800),
+                size: _isDesktop ? 18 : 16,
+              );
+            }),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            promedio.toStringAsFixed(1),
+            style: TextStyle(
+              fontSize: _isDesktop ? 15 : 14,
+              fontWeight: FontWeight.w600,
+              color: const Color(0xFF333333),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '(${_resenas.length})',
+            style: TextStyle(
+              fontSize: _isDesktop ? 14 : 13,
+              color: Colors.grey.shade600,
+            ),
+          ),
         ],
       ),
     );
@@ -1088,29 +923,14 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (coloresDisponibles.isNotEmpty) ...[
-          Text(
-            'Color: ${coloresSeleccionados.isEmpty ? "Elegir" : coloresDisponibles.firstWhere((c) => coloresSeleccionados.contains(c['hex']))['nombre']}',
-            style: TextStyle(
-              fontSize: _isDesktop ? 16 : 14,
-              fontWeight: FontWeight.w500,
-              color: const Color(0xFF333333),
-            ),
-          ),
-          SizedBox(height: _isDesktop ? 12 : 8),
+          Text('Color:', style: TextStyle(fontSize: _isDesktop ? 16 : 14, fontWeight: FontWeight.w500)),
+          const SizedBox(height: 12),
           _buildColorSelector(coloresDisponibles),
-          SizedBox(height: _isDesktop ? 20 : 16),
+          const SizedBox(height: 20),
         ],
-        
         if (_tieneVariacionesDeTalla(variations)) ...[
-          Text(
-            'Talle: ${tallasSeleccionadas.isEmpty ? "Elegir" : tallasSeleccionadas.first}',
-            style: TextStyle(
-              fontSize: _isDesktop ? 16 : 14,
-              fontWeight: FontWeight.w500,
-              color: const Color(0xFF333333),
-            ),
-          ),
-          SizedBox(height: _isDesktop ? 12 : 8),
+          Text('Talle:', style: TextStyle(fontSize: _isDesktop ? 16 : 14, fontWeight: FontWeight.w500)),
+          const SizedBox(height: 12),
           _buildSizeSelector(variations),
         ],
       ],
@@ -1125,14 +945,10 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
   }
 
   Widget _buildColorSelector(List<Map<String, String>> coloresDisponibles) {
-    final colorSize = _isDesktop ? 44.0 : _isTablet ? 42.0 : 40.0;
-    
     return Wrap(
-      spacing: _isDesktop ? 12 : 8,
-      runSpacing: _isDesktop ? 12 : 8,
+      spacing: 8,
       children: coloresDisponibles.map((colorData) {
         final hex = colorData['hex']!;
-        final nombre = colorData['nombre']!;
         final color = Colores.hexToColor(hex);
         final seleccionado = coloresSeleccionados.contains(hex);
 
@@ -1148,8 +964,8 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
             });
           },
           child: Container(
-            width: colorSize,
-            height: colorSize,
+            width: 40,
+            height: 40,
             decoration: BoxDecoration(
               color: color,
               border: Border.all(
@@ -1159,11 +975,7 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
               borderRadius: BorderRadius.circular(4),
             ),
             child: seleccionado 
-                ? Icon(
-                    Icons.check,
-                    color: _getContrastColor(color),
-                    size: _isDesktop ? 20 : 16,
-                  )
+                ? Icon(Icons.check, color: _getContrastColor(color), size: 16)
                 : null,
           ),
         );
@@ -1179,9 +991,7 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
   Widget _buildSizeSelector(List<Map<String, dynamic>> variations) {
     final tallas = <String>{};
     
-    // Filtrar y obtener solo las tallas válidas
     for (var v in variations) {
-      // Solo agregar tallas que no sean null ni vacías
       if (v['tallaNumero'] != null && v['tallaNumero'].toString().trim().isNotEmpty) {
         tallas.add(v['tallaNumero'].toString().trim());
       }
@@ -1190,27 +1000,12 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
       }
     }
 
-    // Si no hay tallas válidas, no mostrar nada
-    if (tallas.isEmpty) {
-      return const SizedBox.shrink();
-    }
+    if (tallas.isEmpty) return const SizedBox.shrink();
 
-    // Convertir a lista y ordenar
-    final tallasList = tallas.toList();
-    tallasList.sort((a, b) {
-      // Intentar ordenar numéricamente si son números
-      final numA = int.tryParse(a);
-      final numB = int.tryParse(b);
-      if (numA != null && numB != null) {
-        return numA.compareTo(numB);
-      }
-      // Si no son números, ordenar alfabéticamente
-      return a.compareTo(b);
-    });
+    final tallasList = tallas.toList()..sort();
 
     return Wrap(
-      spacing: _isDesktop ? 12 : 8,
-      runSpacing: _isDesktop ? 12 : 8,
+      spacing: 8,
       children: tallasList.map((talla) {
         final seleccionado = tallasSeleccionadas.contains(talla);
         
@@ -1226,10 +1021,7 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
             });
           },
           child: Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: _isDesktop ? 20 : 16, 
-              vertical: _isDesktop ? 12 : 8,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
               color: seleccionado ? const Color(0xFF3483FA) : Colors.white,
               border: Border.all(
@@ -1242,7 +1034,6 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
               style: TextStyle(
                 color: seleccionado ? Colors.white : const Color(0xFF333333),
                 fontWeight: FontWeight.w500,
-                fontSize: _isDesktop ? 16 : 14,
               ),
             ),
           ),
@@ -1251,482 +1042,557 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
     );
   }
 
-  Widget _buildPurchaseButtons(Map<String, dynamic> productData, List<Map<String, dynamic>> variations, int stockActual) {
-    final buttonHeight = _isDesktop ? 56.0 : _isTablet ? 52.0 : 48.0;
-    
-    return SizedBox(
-      width: double.infinity,
-      height: buttonHeight,
-      child: ElevatedButton(
-        onPressed: (_isLoadingCarrito || stockActual <= 0) ? null : () => _agregarAlCarrito(productData, variations),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: stockActual <= 0 ? Colors.grey : const Color(0xFF3483FA),
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-          elevation: 0,
+  Widget _buildAllSections(Map<String, dynamic> productData, List<Map<String, dynamic>> variations) {
+    return Column(
+      children: [
+        // Separador visual
+        Container(
+          height: 8,
+          color: const Color(0xFFF5F5F5),
         ),
-        child: _isLoadingCarrito
-            ? SizedBox(
-                height: _isDesktop ? 24 : 20,
-                width: _isDesktop ? 24 : 20,
-                child: const CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
-              )
-            : Text(
-                stockActual <= 0 ? 'Sin stock' : 'Agregar al carrito',
+        
+        // Descripción
+        Container(
+          key: _descripcionKey,
+          width: double.infinity,
+          padding: EdgeInsets.all(_horizontalPadding),
+          color: Colors.white,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Descripción',
                 style: TextStyle(
-                  fontSize: _isDesktop ? 18 : 16,
+                  fontSize: _isDesktop ? 20 : 18,
                   fontWeight: FontWeight.w600,
+                  color: const Color(0xFF333333),
                 ),
               ),
-      ),
-    );
-  }
-
-  Widget _buildTabSection(Map<String, dynamic> productData, List<Map<String, dynamic>> variations) {
-    return Container(
-      color: Colors.white,
-      child: Column(
-        children: [
-          // Divisor
-          Container(
-            height: _isDesktop ? 12 : 8,
-            color: const Color(0xFFF5F5F5),
-          ),
-          
-          // Tabs
-          Container(
-            color: Colors.white,
-            child: Column(
-              children: [
-                _buildTabBar(),
-                _buildTabContent(productData, variations),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTabBar() {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: _horizontalPadding),
-      child: Row(
-        children: [
-          Expanded(
-            child: GestureDetector(
-              onTap: () => setState(() => currentTab = 'descripcion'),
-              child: Container(
-                padding: EdgeInsets.symmetric(vertical: _isDesktop ? 20 : 16),
-                decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(
-                      color: currentTab == 'descripcion' 
-                          ? const Color(0xFF3483FA) 
-                          : Colors.transparent,
-                      width: 2,
-                    ),
-                  ),
-                ),
-                child: Text(
-                  'Descripción',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: _isDesktop ? 16 : 14,
-                    fontWeight: FontWeight.w600,
-                    color: currentTab == 'descripcion' 
-                        ? const Color(0xFF3483FA) 
-                        : const Color(0xFF666666),
-                  ),
+              const SizedBox(height: 16),
+              Text(
+                productData['descripcion'] ?? 'Sin descripción disponible.',
+                style: TextStyle(
+                  fontSize: _isDesktop ? 16 : 14,
+                  height: 1.5,
+                  color: const Color(0xFF666666),
                 ),
               ),
-            ),
+            ],
           ),
-          Expanded(
-            child: GestureDetector(
-              onTap: () => setState(() => currentTab = 'especificaciones'),
-              child: Container(
-                padding: EdgeInsets.symmetric(vertical: _isDesktop ? 20 : 16),
-                decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(
-                      color: currentTab == 'especificaciones' 
-                          ? const Color(0xFF3483FA) 
-                          : Colors.transparent,
-                      width: 2,
-                    ),
-                  ),
-                ),
-                child: Text(
-                  'Características',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: _isDesktop ? 16 : 14,
-                    fontWeight: FontWeight.w600,
-                    color: currentTab == 'especificaciones' 
-                        ? const Color(0xFF3483FA) 
-                        : const Color(0xFF666666),
-                  ),
+        ),
+        
+        // Separador
+        Container(
+          height: 8,
+          color: const Color(0xFFF5F5F5),
+        ),
+        
+        // Características
+        Container(
+          key: _especificacionesKey,
+          width: double.infinity,
+          padding: EdgeInsets.all(_horizontalPadding),
+          color: Colors.white,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Características principales',
+                style: TextStyle(
+                  fontSize: _isDesktop ? 20 : 18,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF333333),
                 ),
               ),
-            ),
+              const SizedBox(height: 16),
+              _buildSpecItem('Producto', productData['nombre']),
+              _buildSpecItem('Stock total', (productData['stock'] ?? 0).toString()),
+              if (variations.isNotEmpty && _extraerColoresDisponibles(variations).isNotEmpty)
+                _buildSpecItem('Colores disponibles', 
+                  _extraerColoresDisponibles(variations).map((c) => c['nombre']).join(', ')),
+            ],
           ),
-          Expanded(
-            child: GestureDetector(
-              onTap: () => setState(() => currentTab = 'resenas'),
-              child: Container(
-                padding: EdgeInsets.symmetric(vertical: _isDesktop ? 20 : 16),
-                decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(
-                      color: currentTab == 'resenas' 
-                          ? const Color(0xFF3483FA) 
-                          : Colors.transparent,
-                      width: 2,
-                    ),
-                  ),
-                ),
-                child: Text(
-                  'Reseñas',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: _isDesktop ? 16 : 14,
-                    fontWeight: FontWeight.w600,
-                    color: currentTab == 'resenas' 
-                        ? const Color(0xFF3483FA) 
-                        : const Color(0xFF666666),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTabContent(Map<String, dynamic> productData, List<Map<String, dynamic>> variations) {
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 200),
-      child: currentTab == 'descripcion'
-          ? _buildDescription(productData)
-          : currentTab == 'especificaciones'
-              ? _buildSpecifications(productData, variations)
-              : _buildResenas(productData),
-    );
-  }
-
-  Widget _buildDescription(Map<String, dynamic> productData) {
-    return Container(
-      key: const ValueKey('descripcion'),
-      width: double.infinity,
-      padding: EdgeInsets.all(_horizontalPadding),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Descripción',
-            style: TextStyle(
-              fontSize: _isDesktop ? 20 : 18,
-              fontWeight: FontWeight.w600,
-              color: const Color(0xFF333333),
-            ),
-          ),
-          SizedBox(height: _isDesktop ? 16 : 12),
-          Text(
-            productData['descripcion'] ?? 'Sin descripción disponible.',
-            style: TextStyle(
-              fontSize: _isDesktop ? 16 : 14,
-              height: 1.5,
-              color: const Color(0xFF666666),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildResenas(Map<String, dynamic> productData) {
-    return Container(
-      key: const ValueKey('resenas'),
-      width: double.infinity,
-      height: 400, // Altura fija para el contenedor de reseñas
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: EdgeInsets.all(_horizontalPadding),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Reseñas del producto',
-                  style: TextStyle(
-                    fontSize: _isDesktop ? 20 : 18,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF333333),
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ResenaWidget(
-                          productoId: widget.productId,
-                          nombreProducto: productData['nombre'] ?? 'Producto',
-                        ),
-                      ),
-                    );
-                  },
-                  icon: const Icon(
-                    Icons.open_in_new,
-                    size: 16,
-                    color: Color(0xFF3483FA),
-                  ),
-                  label: const Text(
-                    'Ver todas',
-                    style: TextStyle(
-                      color: Color(0xFF3483FA),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: Container(
-              padding: EdgeInsets.symmetric(horizontal: _horizontalPadding),
-              child: Center(
+        ),
+        
+        // Separador
+        Container(
+          height: 8,
+          color: const Color(0xFFF5F5F5),
+        ),
+        
+        // Reseñas
+        Container(
+          key: _resenasKey,
+          width: double.infinity,
+          color: Colors.white,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: EdgeInsets.all(_horizontalPadding),
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      Icons.rate_review_outlined,
-                      size: _isDesktop ? 48 : 40,
-                      color: const Color(0xFF3483FA),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Opiniones del producto',
+                          style: TextStyle(
+                            fontSize: _isDesktop ? 20 : 18,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF333333),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ResenaWidget(
+                                  productoId: widget.productId,
+                                  nombreProducto: productData['nombre'] ?? 'Producto',
+                                ),
+                              ),
+                            ).then((_) => _cargarResenas());
+                          },
+                          child: const Text(
+                            'Ver todas',
+                            style: TextStyle(color: Color(0xFF3483FA), fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
                     ),
-                    SizedBox(height: _isDesktop ? 16 : 12),
-                    Text(
-                      'Ver reseñas completas',
-                      style: TextStyle(
-                        fontSize: _isDesktop ? 16 : 14,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF333333),
-                      ),
-                    ),
-                    SizedBox(height: _isDesktop ? 8 : 6),
-                    Text(
-                      'Toca "Ver todas" para leer y escribir reseñas',
-                      style: TextStyle(
-                        fontSize: _isDesktop ? 14 : 12,
-                        color: const Color(0xFF666666),
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
+                    const SizedBox(height: 16),
+                    _buildResumenCalificacion(),
                   ],
                 ),
               ),
-            ),
+              
+              const SizedBox(height: 16),
+              
+              if (_cargandoResenas)
+                Padding(
+                  padding: EdgeInsets.all(_horizontalPadding),
+                  child: const Center(
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3483FA)),
+                    ),
+                  ),
+                )
+              else if (_resenas.isEmpty)
+                _buildEmptyResenas()
+              else
+                Column(
+                  children: [
+                    ..._resenas.take(2).map((resena) => _buildResenaCompacta(resena)).toList(),
+                    if (_resenas.length > 2)
+                      Padding(
+                        padding: EdgeInsets.all(_horizontalPadding),
+                        child: OutlinedButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ResenaWidget(
+                                  productoId: widget.productId,
+                                  nombreProducto: productData['nombre'] ?? 'Producto',
+                                ),
+                              ),
+                            ).then((_) => _cargarResenas());
+                          },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF3483FA),
+                            side: const BorderSide(color: Color(0xFF3483FA)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                            minimumSize: const Size(double.infinity, 44),
+                          ),
+                          child: Text('Ver las ${_resenas.length} opiniones'),
+                        ),
+                      ),
+                  ],
+                ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
-  }
-
-  Widget _buildSpecifications(Map<String, dynamic> productData, List<Map<String, dynamic>> variations) {
-    return Container(
-      key: const ValueKey('especificaciones'),
-      width: double.infinity,
-      padding: EdgeInsets.all(_horizontalPadding),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Características principales',
-            style: TextStyle(
-              fontSize: _isDesktop ? 20 : 18,
-              fontWeight: FontWeight.w600,
-              color: const Color(0xFF333333),
-            ),
-          ),
-          SizedBox(height: _isDesktop ? 16 : 12),
-          _buildSpecItem('Producto', productData['nombre']),
-          _buildSpecItem('Stock total', (productData['stock'] ?? 0).toString()),
-          if (variations.isNotEmpty && _extraerColoresDisponibles(variations).isNotEmpty)
-            _buildSpecItem('Colores disponibles', 
-              _extraerColoresDisponibles(variations).map((c) => c['nombre']).join(', ')),
-          if (variations.isNotEmpty && _tieneVariacionesDeTalla(variations)) ...[
-            _buildSpecItem('Tallas disponibles', _obtenerTallasDisponibles(variations)),
-          ],
-          if (variations.isNotEmpty) ...[
-            SizedBox(height: _isDesktop ? 12 : 8),
-            Text(
-              'Stock por variación:',
-              style: TextStyle(
-                fontSize: _isDesktop ? 16 : 14,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF333333),
-              ),
-            ),
-            SizedBox(height: _isDesktop ? 12 : 8),
-            ...variations.map((variacion) => _buildVariationStockItem(variacion)).toList(),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildVariationStockItem(Map<String, dynamic> variacion) {
-    String descripcion = '';
-    
-    if (variacion['color'] != null) {
-      descripcion += variacion['color']['nombre'] ?? 'Color sin nombre';
-    }
-    
-    if (variacion['tallaNumero'] != null) {
-      descripcion += descripcion.isNotEmpty ? ' - Talla ${variacion['tallaNumero']}' : 'Talla ${variacion['tallaNumero']}';
-    } else if (variacion['tallaLetra'] != null) {
-      descripcion += descripcion.isNotEmpty ? ' - Talla ${variacion['tallaLetra']}' : 'Talla ${variacion['tallaLetra']}';
-    }
-    
-    final stock = variacion['stock'] ?? 0;
-    
-    return Padding(
-      padding: EdgeInsets.only(bottom: _isDesktop ? 12 : 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              descripcion.isEmpty ? 'Variación sin especificar' : descripcion,
-              style: TextStyle(
-                fontSize: _isDesktop ? 15 : 13,
-                color: const Color(0xFF666666),
-              ),
-            ),
-          ),
-          Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: _isDesktop ? 12 : 8, 
-              vertical: _isDesktop ? 4 : 2,
-            ),
-            decoration: BoxDecoration(
-              color: stock <= 0 ? Colors.red.shade50 : 
-                     stock <= 5 ? Colors.orange.shade50 : Colors.green.shade50,
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(
-                color: stock <= 0 ? Colors.red.shade200 : 
-                       stock <= 5 ? Colors.orange.shade200 : Colors.green.shade200,
-                width: 1,
-              ),
-            ),
-            child: Text(
-              '$stock unidades',
-              style: TextStyle(
-                fontSize: _isDesktop ? 14 : 12,
-                fontWeight: FontWeight.w500,
-                color: stock <= 0 ? Colors.red.shade700 : 
-                       stock <= 5 ? Colors.orange.shade700 : Colors.green.shade700,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _obtenerTallasDisponibles(List<Map<String, dynamic>> variations) {
-    final tallas = <String>{};
-    for (var v in variations) {
-      // Usar la misma lógica de filtrado que en _buildSizeSelector
-      if (v['tallaNumero'] != null && v['tallaNumero'].toString().trim().isNotEmpty) {
-        tallas.add(v['tallaNumero'].toString().trim());
-      }
-      if (v['tallaLetra'] != null && v['tallaLetra'].toString().trim().isNotEmpty) {
-        tallas.add(v['tallaLetra'].toString().trim());
-      }
-    }
-    
-    if (tallas.isEmpty) {
-      return 'No disponibles';
-    }
-    
-    final tallasList = tallas.toList();
-    tallasList.sort((a, b) {
-      final numA = int.tryParse(a);
-      final numB = int.tryParse(b);
-      if (numA != null && numB != null) {
-        return numA.compareTo(numB);
-      }
-      return a.compareTo(b);
-    });
-    
-    return tallasList.join(', ');
   }
 
   Widget _buildSpecItem(String label, String value) {
     return Padding(
-      padding: EdgeInsets.only(bottom: _isDesktop ? 16 : 12),
+      padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: _isDesktop ? 140 : 120,
-            child: Text(
-              '$label:',
-              style: TextStyle(
-                fontSize: _isDesktop ? 16 : 14,
-                color: const Color(0xFF999999),
-              ),
-            ),
+            width: 140,
+            child: Text('$label:', style: const TextStyle(color: Color(0xFF999999))),
           ),
           Expanded(
-            child: Text(
-              value,
-              style: TextStyle(
-                fontSize: _isDesktop ? 16 : 14,
-                color: const Color(0xFF333333),
-              ),
-            ),
+            child: Text(value, style: const TextStyle(color: Color(0xFF333333))),
           ),
         ],
       ),
     );
   }
+
+  Widget _buildResumenCalificacion() {
+    if (_resenas.isEmpty) return const SizedBox.shrink();
+    
+    final promedio = _calcularPromedioCalificacion();
+    
+    return Row(
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              promedio.toStringAsFixed(1),
+              style: TextStyle(
+                fontSize: _isDesktop ? 48 : 40,
+                fontWeight: FontWeight.w300,
+                height: 1,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: List.generate(5, (index) {
+                return Icon(
+                  index < promedio.round() ? Icons.star : Icons.star_border,
+                  color: const Color(0xFFFFB800),
+                  size: 16,
+                );
+              }),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${_resenas.length} opinión${_resenas.length != 1 ? 'es' : ''}',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            ),
+          ],
+        ),
+        const SizedBox(width: 24),
+        Expanded(child: _buildDistribucionEstrellas()),
+      ],
+    );
+  }
+
+  Widget _buildDistribucionEstrellas() {
+    final distribucion = _calcularDistribucionEstrellas();
+    
+    return Column(
+      children: List.generate(5, (index) {
+        final stars = 5 - index;
+        final count = distribucion[stars] ?? 0;
+        final percentage = _resenas.isEmpty ? 0.0 : (count / _resenas.length);
+        
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Row(
+            children: [
+              Text('$stars', style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
+              const SizedBox(width: 4),
+              Icon(Icons.star, size: 12, color: Colors.grey.shade400),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: LinearProgressIndicator(
+                    value: percentage,
+                    backgroundColor: const Color(0xFFEEEEEE),
+                    valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFFB800)),
+                    minHeight: 5,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 24,
+                child: Text(
+                  '$count',
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  textAlign: TextAlign.right,
+                ),
+              ),
+            ],
+          ),
+        );
+      }),
+    );
+  }
+
+  Widget _buildResenaCompacta(Map<String, dynamic> resena) {
+    final calificacion = resena['calificacion'] ?? 0;
+    final comentario = resena['comentario'] ?? '';
+    final fecha = resena['fecha'] ?? resena['fechaCreacion'] ?? resena['createdAt'] ?? '';
+    
+    final usuarioData = resena['usuario'];
+    String usuario = 'Usuario anónimo';
+    String imagenPerfil = '';
+    
+    if (usuarioData is Map) {
+      usuario = usuarioData['nombre'] ?? 'Usuario anónimo';
+      imagenPerfil = usuarioData['imagenPerfil'] ?? '';
+    } else if (usuarioData is String) {
+      usuario = resena['usuarioNombre'] ?? 'Usuario anónimo';
+    }
+    
+    return Container(
+      margin: EdgeInsets.only(left: _horizontalPadding, right: _horizontalPadding, bottom: 16),
+      padding: EdgeInsets.all(_isDesktop ? 16 : 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: const Color(0xFFEEEEEE)),
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              imagenPerfil.isNotEmpty
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: Image.network(
+                        imagenPerfil,
+                        width: _isDesktop ? 40 : 36,
+                        height: _isDesktop ? 40 : 36,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return CircleAvatar(
+                            radius: _isDesktop ? 20 : 18,
+                            backgroundColor: const Color(0xFFE3F2FD),
+                            child: Text(
+                              usuario.isNotEmpty ? usuario[0].toUpperCase() : 'U',
+                              style: TextStyle(
+                                color: const Color(0xFF3483FA),
+                                fontWeight: FontWeight.bold,
+                                fontSize: _isDesktop ? 16 : 14,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    )
+                  : CircleAvatar(
+                      radius: _isDesktop ? 20 : 18,
+                      backgroundColor: const Color(0xFFE3F2FD),
+                      child: Text(
+                        usuario.isNotEmpty ? usuario[0].toUpperCase() : 'U',
+                        style: TextStyle(
+                          color: const Color(0xFF3483FA),
+                          fontWeight: FontWeight.bold,
+                          fontSize: _isDesktop ? 16 : 14,
+                        ),
+                      ),
+                    ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      usuario,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: _isDesktop ? 15 : 14,
+                        color: const Color(0xFF333333),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Icon(Icons.check_circle, size: 12, color: Colors.green.shade600),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Compra verificada',
+                          style: TextStyle(
+                            fontSize: _isDesktop ? 12 : 11,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              if (fecha.isNotEmpty)
+                Text(
+                  _formatearFecha(fecha),
+                  style: TextStyle(
+                    fontSize: _isDesktop ? 12 : 11,
+                    color: Colors.grey.shade500,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          
+          Row(
+            children: [
+              Row(
+                children: List.generate(5, (index) {
+                  return Icon(
+                    index < calificacion ? Icons.star : Icons.star_border,
+                    color: const Color(0xFFFFB800),
+                    size: _isDesktop ? 16 : 14,
+                  );
+                }),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: calificacion >= 4
+                      ? Colors.green.shade50
+                      : calificacion >= 3
+                          ? Colors.orange.shade50
+                          : Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: calificacion >= 4
+                        ? Colors.green.shade200
+                        : calificacion >= 3
+                            ? Colors.orange.shade200
+                            : Colors.red.shade200,
+                    width: 1,
+                  ),
+                ),
+                child: Text(
+                  calificacion >= 4
+                      ? 'Excelente'
+                      : calificacion >= 3
+                          ? 'Bueno'
+                          : 'Regular',
+                  style: TextStyle(
+                    fontSize: _isDesktop ? 11 : 10,
+                    fontWeight: FontWeight.w600,
+                    color: calificacion >= 4
+                        ? Colors.green.shade700
+                        : calificacion >= 3
+                            ? Colors.orange.shade700
+                            : Colors.red.shade700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          
+          if (comentario.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              comentario,
+              style: TextStyle(
+                fontSize: _isDesktop ? 14 : 13,
+                height: 1.6,
+                color: const Color(0xFF333333),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyResenas() {
+    return Padding(
+      padding: EdgeInsets.all(_horizontalPadding),
+      child: Container(
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          children: [
+            Icon(Icons.rate_review_outlined, size: 40, color: Colors.grey.shade400),
+            const SizedBox(height: 12),
+            Text(
+              'Todavía no hay opiniones',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              _isLoggedIn 
+                ? 'Sé el primero en opinar sobre este producto'
+                : 'Iniciá sesión para escribir tu opinión',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  double _calcularPromedioCalificacion() {
+    if (_resenas.isEmpty) return 0.0;
+    final suma = _resenas.fold<double>(0.0, (sum, resena) => sum + (resena['calificacion']?.toDouble() ?? 0.0));
+    return suma / _resenas.length;
+  }
+
+  Map<int, int> _calcularDistribucionEstrellas() {
+    final distribucion = <int, int>{1: 0, 2: 0, 3: 0, 4: 0, 5: 0};
+    for (var resena in _resenas) {
+      final cal = resena['calificacion'] ?? 0;
+      if (cal >= 1 && cal <= 5) {
+        distribucion[cal] = (distribucion[cal] ?? 0) + 1;
+      }
+    }
+    return distribucion;
+  }
+
+  String _formatearFecha(String fecha) {
+    try {
+      final dateTime = DateTime.parse(fecha);
+      final now = DateTime.now();
+      final difference = now.difference(dateTime);
+      
+      if (difference.inDays == 0) return 'Hoy';
+      if (difference.inDays == 1) return 'Ayer';
+      if (difference.inDays < 30) return 'Hace ${difference.inDays} días';
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+    } catch (e) {
+      return fecha;
+    }
+  }
 }
 
-// 📝 NUEVA CLASE PARA LA PANTALLA DE ZOOM DE IMAGEN
+
 class ImagenZoomScreen extends StatefulWidget {
   final String imageUrl;
   
-  const ImagenZoomScreen({
-    required this.imageUrl, 
-    Key? key
-  }) : super(key: key);
+  const ImagenZoomScreen({required this.imageUrl, Key? key}) : super(key: key);
 
   @override
   State<ImagenZoomScreen> createState() => _ImagenZoomScreenState();
 }
 
-class _ImagenZoomScreenState extends State<ImagenZoomScreen> 
-    with SingleTickerProviderStateMixin {
-  
-  late TransformationController _transformationController;
+class _ImagenZoomScreenState extends State<ImagenZoomScreen> with TickerProviderStateMixin {
+  final TransformationController _transformationController = TransformationController();
   late AnimationController _animationController;
   Animation<Matrix4>? _animation;
+  TapDownDetails? _doubleTapDetails;
   
   @override
   void initState() {
     super.initState();
-    _transformationController = TransformationController();
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 300),
       vsync: this,
-    );
+      duration: const Duration(milliseconds: 300),
+    )..addListener(() {
+        _transformationController.value = _animation!.value;
+      });
   }
 
   @override
@@ -1736,52 +1602,40 @@ class _ImagenZoomScreenState extends State<ImagenZoomScreen>
     super.dispose();
   }
 
-  void _onAnimationComplete() {
-    _transformationController.value = _animation!.value;
-    if (!_animationController.isAnimating) {
-      _animation?.removeListener(_onAnimationComplete);
-      _animation = null;
-      _animationController.reset();
-    }
+  void _handleDoubleTapDown(TapDownDetails details) {
+    _doubleTapDetails = details;
   }
 
-  void _resetZoom() {
-    _animation = Matrix4Tween(
-      begin: _transformationController.value,
-      end: Matrix4.identity(),
-    ).animate(
-      CurvedAnimation(
-        parent: _animationController, 
-        curve: Curves.ease
-      ),
-    );
-    _animation!.addListener(_onAnimationComplete);
-    _animationController.forward();
-  }
+  void _handleDoubleTap() {
+    if (_doubleTapDetails == null) return;
 
-  void _onDoubleTap() {
-    Matrix4 endMatrix;
-    Offset position = Offset.zero;
+    final position = _doubleTapDetails!.localPosition;
+    final double scale = _transformationController.value.getMaxScaleOnAxis();
+
+    Matrix4 matrix;
     
-    if (_transformationController.value != Matrix4.identity()) {
-      endMatrix = Matrix4.identity();
+    if (scale > 1.0) {
+      // Si está con zoom, volver a escala normal
+      matrix = Matrix4.identity();
     } else {
-      endMatrix = Matrix4.identity()
-        ..translate(-100.0, -100.0)
-        ..scale(2.5);
+      // Hacer zoom x3 en el punto tocado
+      final double newScale = 3.0;
+      final double x = -position.dx * (newScale - 1);
+      final double y = -position.dy * (newScale - 1);
+      matrix = Matrix4.identity()
+        ..translate(x, y)
+        ..scale(newScale);
     }
-    
+
     _animation = Matrix4Tween(
       begin: _transformationController.value,
-      end: endMatrix,
-    ).animate(
-      CurvedAnimation(
-        parent: _animationController, 
-        curve: Curves.ease
-      ),
-    );
-    _animation!.addListener(_onAnimationComplete);
-    _animationController.forward();
+      end: matrix,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeInOut,
+    ));
+
+    _animationController.forward(from: 0);
   }
 
   @override
@@ -1797,96 +1651,61 @@ class _ImagenZoomScreenState extends State<ImagenZoomScreen>
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white),
-            onPressed: _resetZoom,
-            tooltip: 'Restablecer zoom',
+            icon: const Icon(Icons.zoom_out_map, color: Colors.white),
+            onPressed: () {
+              // Reset zoom
+              _animation = Matrix4Tween(
+                begin: _transformationController.value,
+                end: Matrix4.identity(),
+              ).animate(CurvedAnimation(
+                parent: _animationController,
+                curve: Curves.easeInOut,
+              ));
+              _animationController.forward(from: 0);
+            },
           ),
         ],
       ),
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
+      body: GestureDetector(
+        onDoubleTapDown: _handleDoubleTapDown,
+        onDoubleTap: _handleDoubleTap,
         child: InteractiveViewer(
           transformationController: _transformationController,
-          minScale: 0.5,
+          minScale: 1.0,
           maxScale: 4.0,
-          child: GestureDetector(
-            onDoubleTap: _onDoubleTap,
-            child: Center(
-              child: Hero(
-                tag: 'product-image-${widget.imageUrl}',
-                child: Image.network(
-                  widget.imageUrl,
-                  fit: BoxFit.contain,
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) {
-                      return child;
-                    }
-                    return Container(
-                      width: double.infinity,
-                      height: double.infinity,
-                      child: const Center(
-                        child: CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          strokeWidth: 2,
-                        ),
-                      ),
-                    );
-                  },
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      width: double.infinity,
-                      height: double.infinity,
-                      child: const Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.image_not_supported_outlined,
-                              size: 64,
-                              color: Colors.white54,
-                            ),
-                            SizedBox(height: 16),
-                            Text(
-                              'Imagen no disponible',
-                              style: TextStyle(
-                                color: Colors.white54,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-      bottomNavigationBar: Container(
-        color: Colors.black,
-        padding: const EdgeInsets.all(16),
-        child: SafeArea(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Text(
-                  'Pellizca para zoom • Doble tap para acercar/alejar',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 12,
+          clipBehavior: Clip.none,
+          boundaryMargin: const EdgeInsets.all(double.infinity),
+          child: Center(
+            child: Image.network(
+              widget.imageUrl,
+              fit: BoxFit.contain,
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return Center(
+                  child: CircularProgressIndicator(
+                    value: loadingProgress.expectedTotalBytes != null
+                        ? loadingProgress.cumulativeBytesLoaded / 
+                          loadingProgress.expectedTotalBytes!
+                        : null,
+                    color: Colors.white,
                   ),
-                ),
-              ),
-            ],
+                );
+              },
+              errorBuilder: (context, error, stackTrace) {
+                return const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.image_not_supported_outlined, 
+                           size: 64, color: Colors.white54),
+                      SizedBox(height: 16),
+                      Text('Imagen no disponible', 
+                           style: TextStyle(color: Colors.white54)),
+                    ],
+                  ),
+                );
+              },
+            ),
           ),
         ),
       ),

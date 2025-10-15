@@ -8,6 +8,12 @@ import 'crear_producto_screen.dart';
 import 'gestionar_variaciones_screen.dart';
 import 'dart:io';
 
+// Importar estilos
+import 'styles/gestion_producto/app_colors.dart';
+import 'styles/gestion_producto/app_dimensions.dart';
+import 'styles/gestion_producto/widget_styles.dart';
+import 'styles/gestion_producto/animation_config.dart';
+
 enum ConnectionState { online, offline, serverError, loading }
 
 class BuscadorProductos extends StatefulWidget {
@@ -39,10 +45,13 @@ class _BuscadorProductosState extends State<BuscadorProductos>
     _focusNode = FocusNode();
     _controller = TextEditingController(text: widget.busqueda);
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 200),
+      duration: AnimationConfig.scaleAnimationDuration,
       vsync: this,
     );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.98).animate(
+    _scaleAnimation = Tween<double>(
+      begin: AnimationConfig.scaleAnimationBegin,
+      end: AnimationConfig.scaleAnimationEnd,
+    ).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
 
@@ -66,9 +75,8 @@ class _BuscadorProductosState extends State<BuscadorProductos>
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallScreen = screenWidth < 360;
-    final horizontalPadding = screenWidth * 0.05;
-    final fontSize = isSmallScreen ? 14.0 : 16.0;
+    final isSmallScreen = AppDimensions.isSmallScreen(screenWidth);
+    final horizontalPadding = AppDimensions.getHorizontalPadding(screenWidth);
     
     return AnimatedBuilder(
       animation: _scaleAnimation,
@@ -77,42 +85,25 @@ class _BuscadorProductosState extends State<BuscadorProductos>
           scale: _scaleAnimation.value,
           child: Container(
             padding: EdgeInsets.symmetric(
-              horizontal: horizontalPadding.clamp(16.0, 24.0),
+              horizontal: horizontalPadding,
               vertical: 4,
             ),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(25),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.blue.withOpacity(_focusNode.hasFocus ? 0.15 : 0.08),
-                  blurRadius: _focusNode.hasFocus ? 12 : 8,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-              border: Border.all(
-                color: _focusNode.hasFocus 
-                  ? Colors.blue.withOpacity(0.5) 
-                  : Colors.transparent,
-                width: 2,
-              ),
+            decoration: WidgetStyles.searchBarDecoration(
+              isFocused: _focusNode.hasFocus,
             ),
             child: TextField(
               controller: _controller,
               focusNode: _focusNode,
               onChanged: widget.onBusquedaChanged,
-              style: TextStyle(fontSize: fontSize),
+              style: WidgetStyles.searchTextStyle(screenWidth),
               decoration: InputDecoration(
                 prefixIcon: Icon(
                   Icons.search,
-                  color: _focusNode.hasFocus ? Colors.blue : Colors.grey[600],
-                  size: isSmallScreen ? 20 : 24,
+                  color: _focusNode.hasFocus ? AppColors.primary : Colors.grey[600],
+                  size: AppDimensions.getSearchIconSize(screenWidth),
                 ),
                 hintText: 'Buscar productos...',
-                hintStyle: TextStyle(
-                  color: Colors.grey[500],
-                  fontSize: fontSize,
-                ),
+                hintStyle: WidgetStyles.searchHintStyle(screenWidth),
                 border: InputBorder.none,
                 suffixIcon: widget.busqueda.isNotEmpty
                     ? GestureDetector(
@@ -170,19 +161,22 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
   void initState() {
     super.initState();
     _fadeAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 800),
+      duration: AnimationConfig.fadeAnimationDuration,
       vsync: this,
     );
     _listAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 600),
+      duration: AnimationConfig.listAnimationDuration,
       vsync: this,
     );
     _staggeredAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 1200),
+      duration: AnimationConfig.staggeredAnimationDuration,
       vsync: this,
     );
     
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+    _fadeAnimation = Tween<double>(
+      begin: AnimationConfig.fadeAnimationBegin,
+      end: AnimationConfig.fadeAnimationEnd,
+    ).animate(
       CurvedAnimation(
         parent: _fadeAnimationController,
         curve: Curves.easeInOut,
@@ -227,80 +221,82 @@ class _GestionProductosScreenState extends State<GestionProductosScreen>
     }
   }
 
-Future<void> _cargarDatos() async {
-  if (!mounted) return;
-  
-  setState(() {
-    _connectionState = ConnectionState.loading;
-    _errorMessage = null;
-  });
+  Future<void> _cargarDatos() async {
+    if (!mounted) return;
+    
+    setState(() {
+      _connectionState = ConnectionState.loading;
+      _errorMessage = null;
+    });
 
-  try {
-    final hasInternet = await _checkInternetConnection();
-    if (!hasInternet) {
+    try {
+      final hasInternet = await _checkInternetConnection();
+      if (!hasInternet) {
+        if (mounted) {
+          setState(() {
+            _connectionState = ConnectionState.offline;
+          });
+        }
+        return;
+      }
+
+      categorias = await categoriaService.obtenerCategorias();
+      
+      final provider = Provider.of<ProductoProvider>(context, listen: false);
+      
+      final esPrimeraCarga = provider.state == ProductoState.initial;
+      
+      if (esPrimeraCarga) {
+        debugPrint('🔄 Primera carga: Limpiando filtros');
+        provider.mostrarTodosLosProductos();
+        await provider.inicializar();
+      } else {
+        debugPrint('🔄 Recarga: Manteniendo filtros actuales');
+        await provider.refrescar();
+      }
+      
+      if (mounted) {
+        setState(() {
+          _connectionState = ConnectionState.online;
+        });
+
+        await Future.delayed(AnimationConfig.delayAfterLoading);
+        if (mounted) {
+          _fadeAnimationController.forward();
+          _listAnimationController.forward();
+        }
+      }
+
+    } on SocketException catch (_) {
       if (mounted) {
         setState(() {
           _connectionState = ConnectionState.offline;
+          _errorMessage = 'Sin conexión a internet';
         });
       }
-      return;
-    }
-
-    categorias = await categoriaService.obtenerCategorias();
-    
-    final provider = Provider.of<ProductoProvider>(context, listen: false);
-    
-    // ✅ CORREGIDO: NO limpiar filtros automáticamente
-    // Solo limpiar si es la primera carga (state == initial)
-    if (provider.state == ProductoState.initial) {
-      debugPrint('🔄 Primera carga: Limpiando filtros');
-      provider.mostrarTodosLosProductos();
-      await provider.inicializar();
-    } else {
-      // ✅ Refrescar MANTENIENDO los filtros actuales
-      debugPrint('🔄 Recarga: Manteniendo filtros actuales');
-      await provider.refrescar();
-    }
-    
-    if (mounted) {
-      setState(() {
-        _connectionState = ConnectionState.online;
-      });
-
-      _fadeAnimationController.forward();
-      _listAnimationController.forward();
-    }
-
-  } on SocketException catch (_) {
-    if (mounted) {
-      setState(() {
-        _connectionState = ConnectionState.offline;
-        _errorMessage = 'Sin conexión a internet';
-      });
-    }
-  } on HttpException catch (e) {
-    if (mounted) {
-      setState(() {
-        _connectionState = ConnectionState.serverError;
-        _errorMessage = 'Error del servidor: ${e.message}';
-      });
-    }
-  } catch (e) {
-    final errorMessage = _getErrorMessage(e.toString());
-    if (mounted) {
-      setState(() {
-        _connectionState = ConnectionState.serverError;
-        _errorMessage = errorMessage;
-      });
-      
-      _mostrarSnackBar(
-        errorMessage,
-        Colors.red,
-        Icons.error_outline,
-      );
+    } on HttpException catch (e) {
+      if (mounted) {
+        setState(() {
+          _connectionState = ConnectionState.serverError;
+          _errorMessage = 'Error del servidor: ${e.message}';
+        });
+      }
+    } catch (e) {
+      final errorMessage = _getErrorMessage(e.toString());
+      if (mounted) {
+        setState(() {
+          _connectionState = ConnectionState.serverError;
+          _errorMessage = errorMessage;
+        });
+        
+        _mostrarSnackBar(
+          errorMessage,
+          AppColors.error,
+          Icons.error_outline,
+        );
+      }
     }
   }
-}
 
   String _getErrorMessage(String error) {
     if (error.toLowerCase().contains('timeout')) {
@@ -334,8 +330,8 @@ Future<void> _cargarDatos() async {
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         margin: const EdgeInsets.all(16),
-        duration: const Duration(seconds: 4),
-        action: color == Colors.red ? SnackBarAction(
+        duration: AnimationConfig.snackBarDuration,
+        action: color == AppColors.error ? SnackBarAction(
           label: 'Reintentar',
           textColor: Colors.white,
           onPressed: _cargarDatos,
@@ -349,9 +345,11 @@ Future<void> _cargarDatos() async {
       animation: _staggeredAnimationController,
       builder: (context, _) {
         final animationProgress = _staggeredAnimationController.value;
-        final normalizedDelay = delay * 0.1;
-        final adjustedProgress = ((animationProgress - normalizedDelay) / (1.0 - normalizedDelay))
-            .clamp(0.0, 1.0);
+        final normalizedDelay = AnimationConfig.getNormalizedDelay(delay);
+        final adjustedProgress = AnimationConfig.getAdjustedProgress(
+          animationProgress,
+          normalizedDelay,
+        );
         
         if (adjustedProgress <= 0) {
           return Shimmer.fromColors(
@@ -362,7 +360,8 @@ Future<void> _cargarDatos() async {
         }
         
         final opacity = Curves.easeOut.transform(adjustedProgress);
-        final scale = 0.95 + (0.05 * Curves.easeOutBack.transform(adjustedProgress));
+        final scale = AnimationConfig.shimmerScaleBegin + 
+                     (AnimationConfig.shimmerScaleEnd * Curves.easeOutBack.transform(adjustedProgress));
         
         return Transform.scale(
           scale: scale,
@@ -377,47 +376,26 @@ Future<void> _cargarDatos() async {
 
   Widget _buildShimmerSearchBar() {
     final screenWidth = MediaQuery.of(context).size.width;
-    final horizontalPadding = screenWidth * 0.05;
+    final horizontalPadding = AppDimensions.getHorizontalPadding(screenWidth);
     
     return Container(
       height: 56,
       padding: EdgeInsets.symmetric(
-        horizontal: horizontalPadding.clamp(16.0, 24.0),
+        horizontal: horizontalPadding,
         vertical: 4,
       ),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(25),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+      decoration: WidgetStyles.cardDecoration(),
     );
   }
 
   Widget _buildShimmerStatsCard() {
     final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallScreen = screenWidth < 360;
-    final cardPadding = isSmallScreen ? 12.0 : 16.0;
-    final iconSize = isSmallScreen ? 40.0 : 48.0;
+    final cardPadding = AppDimensions.getCardPadding(screenWidth);
+    final iconSize = AppDimensions.getStatsIconSize(screenWidth);
     
     return Container(
       padding: EdgeInsets.all(cardPadding),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+      decoration: WidgetStyles.cardDecoration(),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -426,7 +404,7 @@ Future<void> _cargarDatos() async {
             height: iconSize,
             decoration: BoxDecoration(
               color: Colors.grey.shade400,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppDimensions.iconContainerRadius),
             ),
           ),
           const SizedBox(height: 8),
@@ -454,21 +432,11 @@ Future<void> _cargarDatos() async {
 
   Widget _buildShimmerFilters() {
     final screenWidth = MediaQuery.of(context).size.width;
-    final cardPadding = screenWidth < 360 ? 12.0 : 16.0;
+    final cardPadding = AppDimensions.getCardPadding(screenWidth);
     
     return Container(
       padding: EdgeInsets.all(cardPadding),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+      decoration: WidgetStyles.filterContainerDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -520,7 +488,7 @@ Future<void> _cargarDatos() async {
 
   Widget _buildShimmerProductGrid() {
     final screenWidth = MediaQuery.of(context).size.width;
-    final crossAxisCount = _getCrossAxisCount(screenWidth);
+    final crossAxisCount = AppDimensions.getCrossAxisCount(screenWidth);
     final itemCount = crossAxisCount * 3;
     
     return SizedBox(
@@ -531,25 +499,15 @@ Future<void> _cargarDatos() async {
         padding: const EdgeInsets.symmetric(vertical: 8),
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: crossAxisCount,
-          crossAxisSpacing: _getGridSpacing(screenWidth),
-          mainAxisSpacing: _getGridSpacing(screenWidth),
-          childAspectRatio: _getChildAspectRatio(screenWidth),
+          crossAxisSpacing: AppDimensions.getGridSpacing(screenWidth),
+          mainAxisSpacing: AppDimensions.getGridSpacing(screenWidth),
+          childAspectRatio: AppDimensions.getChildAspectRatio(screenWidth),
         ),
         itemBuilder: (context, index) {
           return _buildShimmerElement(
             delay: 6 + index,
             child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
+              decoration: WidgetStyles.cardDecoration(),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -600,7 +558,7 @@ Future<void> _cargarDatos() async {
 
   Widget _buildConnectionErrorState() {
     final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallScreen = screenWidth < 360;
+    final isSmallScreen = AppDimensions.isSmallScreen(screenWidth);
     
     IconData icon;
     Color color;
@@ -611,13 +569,13 @@ Future<void> _cargarDatos() async {
     switch (_connectionState) {
       case ConnectionState.offline:
         icon = Icons.wifi_off_rounded;
-        color = Colors.orange;
+        color = AppColors.warning;
         title = 'Sin conexión a internet';
         message = 'Verifica tu conexión WiFi o datos móviles y vuelve a intentar.';
         break;
       case ConnectionState.serverError:
         icon = Icons.cloud_off_rounded;
-        color = Colors.red;
+        color = AppColors.error;
         title = 'Error del servidor';
         message = _errorMessage ?? 'El servidor no está disponible. Intenta más tarde.';
         break;
@@ -626,44 +584,33 @@ Future<void> _cargarDatos() async {
     }
 
     return Container(
-      height: screenWidth < 360 ? 400 : 500,
-      padding: EdgeInsets.all(isSmallScreen ? 24.0 : 32.0),
+      height: AppDimensions.getErrorStateHeight(screenWidth),
+      padding: EdgeInsets.all(AppDimensions.getEmptyStatePadding(screenWidth)),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            padding: EdgeInsets.all(isSmallScreen ? 20.0 : 24.0),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
+            padding: EdgeInsets.all(AppDimensions.getIconPadding(screenWidth)),
+            decoration: WidgetStyles.errorContainerDecoration(color),
             child: Icon(
               icon,
-              size: isSmallScreen ? 56 : 64,
+              size: AppDimensions.getErrorIconSize(screenWidth),
               color: color,
             ),
           ),
-          SizedBox(height: isSmallScreen ? 20 : 24),
+          SizedBox(height: AppDimensions.getSectionSpacing(screenWidth)),
           Text(
             title,
-            style: TextStyle(
-              fontSize: isSmallScreen ? 20 : 22,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
+            style: WidgetStyles.errorTitleStyle(screenWidth),
             textAlign: TextAlign.center,
           ),
-          SizedBox(height: isSmallScreen ? 10 : 12),
+          SizedBox(height: AppDimensions.getVerticalSpacing(screenWidth)),
           Text(
             message,
             textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: isSmallScreen ? 14 : 16,
-              color: Colors.grey[600],
-              height: 1.5,
-            ),
+            style: WidgetStyles.errorMessageStyle(screenWidth),
           ),
-          SizedBox(height: isSmallScreen ? 28 : 32),
+          SizedBox(height: AppDimensions.getSectionSpacing(screenWidth) + 4),
           Wrap(
             spacing: 12,
             runSpacing: 12,
@@ -673,39 +620,20 @@ Future<void> _cargarDatos() async {
                 onPressed: _cargarDatos,
                 icon: const Icon(Icons.refresh),
                 label: Text(actionText),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: color,
-                  foregroundColor: Colors.white,
-                  padding: EdgeInsets.symmetric(
-                    horizontal: isSmallScreen ? 20 : 24,
-                    vertical: isSmallScreen ? 10 : 12,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(25),
-                  ),
-                ),
+                style: WidgetStyles.secondaryButtonStyle(screenWidth, color),
               ),
               if (_connectionState == ConnectionState.offline)
                 OutlinedButton.icon(
                   onPressed: () {
                     _mostrarSnackBar(
                       'Ve a Configuración > WiFi o Datos móviles',
-                      Colors.blue,
+                      AppColors.primary,
                       Icons.info_outline,
                     );
                   },
                   icon: const Icon(Icons.settings),
                   label: const Text('Ayuda'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: color,
-                    padding: EdgeInsets.symmetric(
-                      horizontal: isSmallScreen ? 20 : 24,
-                      vertical: isSmallScreen ? 10 : 12,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(25),
-                    ),
-                  ),
+                  style: WidgetStyles.outlinedButtonStyle(screenWidth, color),
                 ),
             ],
           ),
@@ -716,106 +644,72 @@ Future<void> _cargarDatos() async {
 
   Widget _buildFiltrosYOrdenamiento() {
     final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallScreen = screenWidth < 360;
-    final cardPadding = isSmallScreen ? 12.0 : 16.0;
-    final fontSize = isSmallScreen ? 14.0 : 16.0;
+    final cardPadding = AppDimensions.getCardPadding(screenWidth);
+    final fontSize = AppDimensions.getLabelFontSize(screenWidth);
     
     return Consumer<ProductoProvider>(
       builder: (context, provider, child) {
         return Container(
           padding: EdgeInsets.all(cardPadding),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
+          decoration: WidgetStyles.filterContainerDecoration(),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.filter_alt_outlined,
-                    color: Colors.blue,
-                    size: isSmallScreen ? 18 : 20,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Filtros y ordenamiento',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: fontSize,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  if (provider.tieneFiltrosActivos) ...[
-                    const Spacer(),
-                    TextButton(
-                      onPressed: provider.limpiarFiltros,
-                      child: Text(
-                        'Limpiar',
-                        style: TextStyle(
-                          fontSize: fontSize - 2,
-                          color: Colors.red,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-              SizedBox(height: isSmallScreen ? 12 : 16),
+           Row(
+  children: [
+    Icon(
+      Icons.filter_alt_outlined,
+      color: AppColors.primary,
+      size: AppDimensions.getFilterIconSize(screenWidth),
+    ),
+    const SizedBox(width: 8),
+    Expanded(
+      child: Text(
+        'Filtros y ordenamiento',
+        style: WidgetStyles.filterTitleStyle(screenWidth),
+      ),
+    ),
+    if (provider.tieneFiltrosActivos) ...[
+      TextButton(
+        onPressed: provider.limpiarFiltros,
+        style: TextButton.styleFrom(
+          padding: EdgeInsets.symmetric(
+            horizontal: screenWidth < 360 ? 8 : 12,
+            vertical: 4,
+          ),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        child: Text(
+          'Limpiar',
+          style: TextStyle(
+            fontSize: AppDimensions.getButtonTextFontSize(screenWidth),
+            color: AppColors.error,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    ],
+  ],
+),
+              SizedBox(height: AppDimensions.getVerticalSpacing(screenWidth)),
               
               DropdownButtonFormField<String>(
                 value: provider.categoriaSeleccionada,
                 isExpanded: true,
-                decoration: InputDecoration(
+                decoration: WidgetStyles.dropdownDecoration(
                   labelText: 'Categoría',
-                  labelStyle: TextStyle(
-                    fontSize: fontSize - 1,
-                    color: Colors.black87,
-                  ),
-                  prefixIcon: Icon(
-                    Icons.category_outlined,
-                    size: isSmallScreen ? 18 : 20,
-                    color: Colors.grey[600],
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.grey[300]!),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.grey[300]!),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Colors.blue),
-                  ),
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: isSmallScreen ? 12 : 16,
-                    vertical: isSmallScreen ? 10 : 12,
-                  ),
+                  prefixIcon: Icons.category_outlined,
+                  screenWidth: screenWidth,
                 ),
-                style: TextStyle(
-                  fontSize: fontSize - 1,
-                  color: Colors.black87,
-                ),
+                style: WidgetStyles.dropdownItemStyle(screenWidth),
                 dropdownColor: Colors.white,
                 items: [
                   DropdownMenuItem<String>(
                     value: null,
                     child: Text(
                       'Todas las categorías',
-                      style: TextStyle(
-                        fontSize: fontSize - 1,
-                        color: Colors.black87,
-                      ),
+                      style: WidgetStyles.dropdownItemStyle(screenWidth),
                     ),
                   ),
                   ...categorias.map((categoria) => DropdownMenuItem<String>(
@@ -823,10 +717,7 @@ Future<void> _cargarDatos() async {
                     child: Text(
                       categoria['nombre'] ?? 'Sin nombre',
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: fontSize - 1,
-                        color: Colors.black87,
-                      ),
+                      style: WidgetStyles.dropdownItemStyle(screenWidth),
                     ),
                   )),
                 ],
@@ -835,7 +726,7 @@ Future<void> _cargarDatos() async {
                 },
               ),
               
-              SizedBox(height: isSmallScreen ? 12 : 16),
+              SizedBox(height: AppDimensions.getVerticalSpacing(screenWidth)),
               
               Row(
                 children: [
@@ -844,68 +735,33 @@ Future<void> _cargarDatos() async {
                     child: DropdownButtonFormField<String>(
                       value: provider.sortBy,
                       isExpanded: true,
-                      decoration: InputDecoration(
+                      decoration: WidgetStyles.dropdownDecoration(
                         labelText: 'Ordenar por',
-                        labelStyle: TextStyle(
-                          fontSize: fontSize - 1,
-                          color: Colors.black87,
-                        ),
-                        prefixIcon: Icon(
-                          Icons.sort,
-                          size: isSmallScreen ? 18 : 20,
-                          color: Colors.grey[600],
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey[300]!),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey[300]!),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Colors.blue),
-                        ),
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: isSmallScreen ? 12 : 16,
-                          vertical: isSmallScreen ? 10 : 12,
-                        ),
+                        prefixIcon: Icons.sort,
+                        screenWidth: screenWidth,
                       ),
-                      style: TextStyle(
-                        fontSize: fontSize - 1,
-                        color: Colors.black87,
-                      ),
+                      style: WidgetStyles.dropdownItemStyle(screenWidth),
                       dropdownColor: Colors.white,
                       items: [
                         DropdownMenuItem(
                           value: 'nombre',
                           child: Text(
                             'Nombre', 
-                            style: TextStyle(
-                              fontSize: fontSize - 1,
-                              color: Colors.black87,
-                            ),
+                            style: WidgetStyles.dropdownItemStyle(screenWidth),
                           ),
                         ),
                         DropdownMenuItem(
                           value: 'precio',
                           child: Text(
                             'Precio', 
-                            style: TextStyle(
-                              fontSize: fontSize - 1,
-                              color: Colors.black87,
-                            ),
+                            style: WidgetStyles.dropdownItemStyle(screenWidth),
                           ),
                         ),
                         DropdownMenuItem(
                           value: 'fecha',
                           child: Text(
                             'Fecha', 
-                            style: TextStyle(
-                              fontSize: fontSize - 1,
-                              color: Colors.black87,
-                            ),
+                            style: WidgetStyles.dropdownItemStyle(screenWidth),
                           ),
                         ),
                       ],
@@ -918,10 +774,7 @@ Future<void> _cargarDatos() async {
                   Container(
                     width: 48,
                     height: 48,
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    decoration: WidgetStyles.iconContainerDecoration(AppColors.primary),
                     child: IconButton(
                       onPressed: () {
                         provider.cambiarOrdenamiento(
@@ -931,8 +784,8 @@ Future<void> _cargarDatos() async {
                       },
                       icon: Icon(
                         provider.sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
-                        color: Colors.blue,
-                        size: isSmallScreen ? 18 : 20,
+                        color: AppColors.primary,
+                        size: AppDimensions.getFilterIconSize(screenWidth),
                       ),
                       tooltip: provider.sortAscending ? 'Ascendente' : 'Descendente',
                     ),
@@ -946,58 +799,18 @@ Future<void> _cargarDatos() async {
     );
   }
 
-  int _getCrossAxisCount(double screenWidth) {
-    if (screenWidth < 360) return 1;
-    if (screenWidth < 600) return 2;
-    if (screenWidth < 900) return 3;
-    return 4;
-  }
-
-  double _getGridSpacing(double screenWidth) {
-    if (screenWidth < 360) return 8.0;
-    if (screenWidth < 600) return 12.0;
-    return 16.0;
-  }
-
-  double _getChildAspectRatio(double screenWidth) {
-    if (screenWidth < 360) return 0.85;
-    if (screenWidth < 600) return 0.75;
-    return 0.8;
-  }
-
   Widget _buildEstadisticasHeader() {
     final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallScreen = screenWidth < 360;
-    
-    final cardPadding = isSmallScreen ? 12.0 : 16.0;
-    final containerPadding = isSmallScreen ? 16.0 : 20.0;
-    final iconSize = isSmallScreen ? 24.0 : 32.0;
-    final titleFontSize = isSmallScreen ? 12.0 : 14.0;
-    final numberFontSize = isSmallScreen ? 20.0 : 24.0;
-    final subtitleFontSize = isSmallScreen ? 12.0 : 14.0;
+    final isSmallScreen = AppDimensions.isSmallScreen(screenWidth);
+    final cardPadding = AppDimensions.getCardPadding(screenWidth);
+    final containerPadding = AppDimensions.getContainerPadding(screenWidth);
+    final iconSize = AppDimensions.getStatsIconSize(screenWidth);
     
     return Consumer<ProductoProvider>(
       builder: (context, provider, child) {
         return Container(
           padding: EdgeInsets.all(containerPadding),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Colors.blue[50]!,
-                Colors.white,
-              ],
-            ),
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.blue.withOpacity(0.1),
-                blurRadius: 12,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
+          decoration: WidgetStyles.statsContainerDecoration(),
           child: Row(
             children: [
               Expanded(
@@ -1015,40 +828,23 @@ Future<void> _cargarDatos() async {
                   },
                   child: Container(
                     padding: EdgeInsets.all(cardPadding),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.blue.withOpacity(0.1),
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
+                    decoration: WidgetStyles.cardDecoration(shadowColor: AppColors.primary),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Container(
                           padding: EdgeInsets.all(isSmallScreen ? 8.0 : 12.0),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                          decoration: WidgetStyles.iconContainerDecoration(AppColors.primary),
                           child: Icon(
                             Icons.add_box_outlined,
-                            color: Colors.blue,
+                            color: AppColors.primary,
                             size: iconSize,
                           ),
                         ),
                         SizedBox(height: isSmallScreen ? 6 : 8),
                         Text(
                           'Agregar Producto',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: titleFontSize,
-                            color: Colors.black87,
-                          ),
+                          style: WidgetStyles.statsTitleStyle(screenWidth),
                           textAlign: TextAlign.center,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
@@ -1058,30 +854,17 @@ Future<void> _cargarDatos() async {
                   ),
                 ),
               ),
-              SizedBox(width: isSmallScreen ? 12 : 16),
+              SizedBox(width: AppDimensions.getVerticalSpacing(screenWidth)),
               Expanded(
                 child: Container(
                   padding: EdgeInsets.all(cardPadding),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.green.withOpacity(0.1),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
+                  decoration: WidgetStyles.cardDecoration(shadowColor: AppColors.secondary),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Container(
                         padding: EdgeInsets.all(isSmallScreen ? 6.0 : 8.0),
-                        decoration: BoxDecoration(
-                          color: Colors.green.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                        decoration: WidgetStyles.iconContainerDecoration(AppColors.secondary),
                         child: Icon(
                           Icons.inventory_2_outlined,
                           color: Colors.green[700],
@@ -1091,48 +874,27 @@ Future<void> _cargarDatos() async {
                       SizedBox(height: isSmallScreen ? 6 : 8),
                       Text(
                         '${provider.totalFiltrados}',
-                        style: TextStyle(
-                          fontSize: numberFontSize,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green,
-                        ),
+                        style: WidgetStyles.statsNumberStyle(screenWidth, AppColors.secondary),
                       ),
                       Text(
                         'Productos',
-                        style: TextStyle(
-                          fontSize: subtitleFontSize,
-                          color: Colors.grey,
-                          fontWeight: FontWeight.w500,
-                        ),
+                        style: WidgetStyles.statsLabelStyle(screenWidth),
                       ),
                     ],
                   ),
                 ),
               ),
-              SizedBox(width: isSmallScreen ? 12 : 16),
+              SizedBox(width: AppDimensions.getVerticalSpacing(screenWidth)),
               Expanded(
                 child: Container(
                   padding: EdgeInsets.all(cardPadding),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.orange.withOpacity(0.1),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
+                  decoration: WidgetStyles.cardDecoration(shadowColor: AppColors.accent),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Container(
                         padding: EdgeInsets.all(isSmallScreen ? 6.0 : 8.0),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                        decoration: WidgetStyles.iconContainerDecoration(AppColors.accent),
                         child: Icon(
                           Icons.category_outlined,
                           color: Colors.orange[700],
@@ -1142,19 +904,11 @@ Future<void> _cargarDatos() async {
                       SizedBox(height: isSmallScreen ? 6 : 8),
                       Text(
                         '${categorias.length}',
-                        style: TextStyle(
-                          fontSize: numberFontSize,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.orange,
-                        ),
+                        style: WidgetStyles.statsNumberStyle(screenWidth, AppColors.accent),
                       ),
                       Text(
                         'Categorías',
-                        style: TextStyle(
-                          fontSize: subtitleFontSize,
-                          color: Colors.grey,
-                          fontWeight: FontWeight.w500,
-                        ),
+                        style: WidgetStyles.statsLabelStyle(screenWidth),
                       ),
                     ],
                   ),
@@ -1167,234 +921,195 @@ Future<void> _cargarDatos() async {
     );
   }
 
-  Widget _buildEmptyState() {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = MediaQuery.of(context).size.height;
-    final isSmallScreen = screenWidth < 360;
-    final isVerySmallScreen = screenHeight < 600;
-    
-    final containerHeight = isVerySmallScreen ? 300.0 : 400.0;
-    final padding = isSmallScreen ? 24.0 : 32.0;
-    final iconSize = isSmallScreen ? 56.0 : 64.0;
-    final titleFontSize = isSmallScreen ? 18.0 : 20.0;
-    final subtitleFontSize = isSmallScreen ? 14.0 : 16.0;
-    
-    return Consumer<ProductoProvider>(
-      builder: (context, provider, child) {
-        return SizedBox(
-          height: containerHeight,
-          child: Center(
-            child: Padding(
-              padding: EdgeInsets.all(padding),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: EdgeInsets.all(isSmallScreen ? 20.0 : 24.0),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      provider.tieneFiltrosActivos ? Icons.search_off : Icons.inventory_2_outlined,
-                      size: iconSize,
-                      color: Colors.grey[400],
-                    ),
-                  ),
-                  SizedBox(height: isSmallScreen ? 20 : 24),
-                  Text(
-                    provider.tieneFiltrosActivos
-                      ? 'No encontramos productos'
-                      : 'No hay productos registrados',
-                    style: TextStyle(
-                      fontSize: titleFontSize,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  SizedBox(height: isSmallScreen ? 10 : 12),
-                  Text(
-                    provider.tieneFiltrosActivos
-                      ? 'Intenta con otros filtros o términos de búsqueda.'
-                      : 'Comienza agregando tu primer producto.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: subtitleFontSize,
-                      color: Colors.grey[600],
-                      height: 1.4,
-                    ),
-                  ),
-                  if (!provider.tieneFiltrosActivos) ...[
-                    SizedBox(height: isSmallScreen ? 20 : 24),
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        final result = await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const CrearProductoScreen(),
-                          ),
-                        );
-                        if (result == true) {
-                          provider.refrescar();
-                        }
-                      },
-                      icon: const Icon(Icons.add),
-                      label: const Text('Agregar producto'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                        padding: EdgeInsets.symmetric(
-                          horizontal: isSmallScreen ? 20 : 24,
-                          vertical: isSmallScreen ? 10 : 12,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(25),
-                        ),
-                      ),
-                    ),
-                  ] else ...[
-                    SizedBox(height: isSmallScreen ? 20 : 24),
-                    ElevatedButton.icon(
-                      onPressed: provider.limpiarFiltros,
-                      icon: const Icon(Icons.clear_all),
-                      label: const Text('Limpiar filtros'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.orange,
-                        foregroundColor: Colors.white,
-                        padding: EdgeInsets.symmetric(
-                          horizontal: isSmallScreen ? 20 : 24,
-                          vertical: isSmallScreen ? 10 : 12,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(25),
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
- // En GestionProductosScreen - Método _buildProductGrid CORREGIDO
-
-Widget _buildProductGrid() {
+ Widget _buildEmptyState() {
   final screenWidth = MediaQuery.of(context).size.width;
-  final crossAxisCount = _getCrossAxisCount(screenWidth);
-  final spacing = _getGridSpacing(screenWidth);
-  final childAspectRatio = _getChildAspectRatio(screenWidth);
+  final screenHeight = MediaQuery.of(context).size.height;
+  final containerHeight = AppDimensions.getEmptyStateHeight(screenWidth, screenHeight);
+  final padding = AppDimensions.getEmptyStatePadding(screenWidth);
+  final iconSize = AppDimensions.getEmptyStateIconSize(screenWidth);
+  final isVerySmall = screenWidth < 360 || screenHeight < 650;
   
   return Consumer<ProductoProvider>(
     builder: (context, provider, child) {
-      final productos = provider.productosFiltrados;
-      
-      if (productos.isEmpty) return const SizedBox.shrink();
-      
-      return Column(
-        children: [
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            padding: EdgeInsets.zero,
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: crossAxisCount,
-              crossAxisSpacing: spacing,
-              mainAxisSpacing: spacing,
-              childAspectRatio: childAspectRatio,
-            ),
-            itemCount: productos.length,
-            itemBuilder: (context, index) {
-              final producto = productos[index];
-              final productoId = producto['_id'] ?? producto['id'] ?? '';
-              
-              return AnimatedBuilder(
-                key: ValueKey('producto_${productoId}_${provider.state}'), // ✅ Key dinámica
-                animation: _listAnimationController,
-                builder: (context, child) {
-                  final animationProgress = _listAnimationController.value;
-                  final itemDelay = (index * 0.1).clamp(0.0, 0.8);
-                  final animationValue = ((animationProgress - itemDelay) / (1.0 - itemDelay))
-                      .clamp(0.0, 1.0);
-                  
-                  final curvedValue = Curves.easeOutBack.transform(animationValue);
-                  final opacity = curvedValue.clamp(0.0, 1.0);
-                  final scale = (0.5 + (curvedValue * 0.5)).clamp(0.0, 1.0);
-                  
-                  return Transform.scale(
-                    scale: scale,
-                    child: Opacity(
-                      opacity: opacity,
-                      child: ProductoCard(
-                        key: ValueKey('card_$productoId'),
-                        id: productoId,
-                        producto: producto,
-                        onProductoEliminado: () {
-                          // ✅ NO hacer nada - el Consumer se reconstruirá automáticamente
-                          debugPrint('✅ Producto eliminado confirmado');
-                        },
-                        onProductoActualizado: () {
-                          // ✅ Solo notificar
-                          debugPrint('📝 Producto actualizado confirmado');
-                        },
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
-          ),
-          
-          if (provider.isLoadingMore)
-            Container(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+      return Container(
+        constraints: BoxConstraints(
+          maxHeight: containerHeight,
+          minHeight: 200,
+        ),
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: EdgeInsets.all(padding),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: EdgeInsets.all(AppDimensions.getIconPadding(screenWidth)),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    shape: BoxShape.circle,
                   ),
-                  const SizedBox(width: 12),
-                  Text(
-                    'Cargando más productos...',
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 14,
+                  child: Icon(
+                    provider.tieneFiltrosActivos ? Icons.search_off : Icons.inventory_2_outlined,
+                    size: iconSize,
+                    color: Colors.grey[400],
+                  ),
+                ),
+                SizedBox(height: AppDimensions.getSectionSpacing(screenWidth)),
+                Text(
+                  provider.tieneFiltrosActivos
+                    ? 'No encontramos productos'
+                    : 'No hay productos registrados',
+                  style: WidgetStyles.emptyStateTitleStyle(screenWidth),
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(height: AppDimensions.getVerticalSpacing(screenWidth)),
+                Text(
+                  provider.tieneFiltrosActivos
+                    ? 'Intenta con otros filtros o términos de búsqueda.'
+                    : 'Comienza agregando tu primer producto.',
+                  textAlign: TextAlign.center,
+                  style: WidgetStyles.emptyStateSubtitleStyle(screenWidth),
+                ),
+                if (!provider.tieneFiltrosActivos) ...[
+                  SizedBox(height: AppDimensions.getSectionSpacing(screenWidth)),
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      final result = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const CrearProductoScreen(),
+                        ),
+                      );
+                      if (result == true) {
+                        provider.refrescar();
+                      }
+                    },
+                    icon: Icon(Icons.add, size: isVerySmall ? 18 : 20),
+                    label: Text(
+                      'Agregar producto',
+                      style: TextStyle(fontSize: isVerySmall ? 13 : 15),
                     ),
+                    style: WidgetStyles.primaryButtonStyle(screenWidth),
                   ),
                 ],
-              ),
+              ],
             ),
-            
-          if (!provider.hasMore && productos.isNotEmpty && productos.length > 10)
-            Container(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                'Has visto todos los productos (${productos.length})',
-                style: TextStyle(
-                  color: Colors.grey[500],
-                  fontSize: 12,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ),
-        ],
+          ),
+        ),
       );
     },
   );
 }
 
+  Widget _buildProductGrid() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final crossAxisCount = AppDimensions.getCrossAxisCount(screenWidth);
+    final spacing = AppDimensions.getGridSpacing(screenWidth);
+    final childAspectRatio = AppDimensions.getChildAspectRatio(screenWidth);
+    
+    return Consumer<ProductoProvider>(
+      builder: (context, provider, child) {
+        final productos = provider.productosFiltrados;
+        
+        if (productos.isEmpty) return const SizedBox.shrink();
+        
+        return Column(
+          children: [
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: EdgeInsets.zero,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: crossAxisCount,
+                crossAxisSpacing: spacing,
+                mainAxisSpacing: spacing,
+                childAspectRatio: childAspectRatio,
+              ),
+              itemCount: productos.length,
+              itemBuilder: (context, index) {
+                final producto = productos[index];
+                final productoId = producto['_id'] ?? producto['id'] ?? '';
+                
+                return AnimatedBuilder(
+                  key: ValueKey('producto_${productoId}_${provider.state}'),
+                  animation: _listAnimationController,
+                  builder: (context, child) {
+                    final animationProgress = _listAnimationController.value;
+                    final itemDelay = AnimationConfig.getItemDelay(index);
+                    final animationValue = AnimationConfig.getAnimationValue(
+                      animationProgress,
+                      itemDelay,
+                    );
+                    
+                    final curvedValue = Curves.easeOutBack.transform(animationValue);
+                    final opacity = curvedValue.clamp(0.0, 1.0);
+                    final scale = (AnimationConfig.productCardScaleBegin + 
+                                  (curvedValue * AnimationConfig.productCardScaleEnd))
+                                  .clamp(0.0, 1.0);
+                    
+                    return Transform.scale(
+                      scale: scale,
+                      child: Opacity(
+                        opacity: opacity,
+                        child: ProductoCard(
+                          key: ValueKey('card_$productoId'),
+                          id: productoId,
+                          producto: producto,
+                          onProductoEliminado: () {
+                            debugPrint('✅ Producto eliminado confirmado');
+                          },
+                          onProductoActualizado: () {
+                            debugPrint('📝 Producto actualizado confirmado');
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+            
+            if (provider.isLoadingMore)
+              Container(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Cargando más productos...',
+                      style: WidgetStyles.loadingMoreStyle(),
+                    ),
+                  ],
+                ),
+              ),
+              
+            if (!provider.hasMore && productos.isNotEmpty && productos.length > 10)
+              Container(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  'Has visto todos los productos (${productos.length})',
+                  style: WidgetStyles.endOfListStyle(),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildConnectionStatus() {
     if (_connectionState == ConnectionState.online) return const SizedBox.shrink();
     
     final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallScreen = screenWidth < 360;
+    final isSmallScreen = AppDimensions.isSmallScreen(screenWidth);
     
     Color statusColor;
     IconData statusIcon;
@@ -1402,12 +1117,12 @@ Widget _buildProductGrid() {
     
     switch (_connectionState) {
       case ConnectionState.offline:
-        statusColor = Colors.orange;
+        statusColor = AppColors.warning;
         statusIcon = Icons.wifi_off;
         statusText = 'Sin conexión';
         break;
       case ConnectionState.serverError:
-        statusColor = Colors.red;
+        statusColor = AppColors.error;
         statusIcon = Icons.cloud_off;
         statusText = 'Error del servidor';
         break;
@@ -1416,32 +1131,24 @@ Widget _buildProductGrid() {
     }
     
     return Container(
-      margin: EdgeInsets.only(bottom: isSmallScreen ? 12 : 16),
+      margin: EdgeInsets.only(bottom: AppDimensions.getVerticalSpacing(screenWidth)),
       padding: EdgeInsets.symmetric(
         horizontal: isSmallScreen ? 12 : 16,
         vertical: isSmallScreen ? 10 : 12,
       ),
-      decoration: BoxDecoration(
-        color: statusColor.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: statusColor.withOpacity(0.3)),
-      ),
+      decoration: WidgetStyles.statusBarDecoration(statusColor),
       child: Row(
         children: [
           Icon(
             statusIcon,
             color: statusColor,
-            size: isSmallScreen ? 18 : 20,
+            size: AppDimensions.getFilterIconSize(screenWidth),
           ),
           SizedBox(width: isSmallScreen ? 10 : 12),
           Expanded(
             child: Text(
               statusText,
-              style: TextStyle(
-                color: statusColor.withOpacity(0.8),
-                fontWeight: FontWeight.w600,
-                fontSize: isSmallScreen ? 14 : 16,
-              ),
+              style: WidgetStyles.statusTextStyle(screenWidth, statusColor),
             ),
           ),
           TextButton(
@@ -1462,14 +1169,16 @@ Widget _buildProductGrid() {
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallScreen = screenWidth < 360;
-    final padding = screenWidth * 0.04;
-    final clampedPadding = padding.clamp(12.0, 20.0);
+    final isSmallScreen = AppDimensions.isSmallScreen(screenWidth);
+    final padding = AppDimensions.getScreenPadding(screenWidth);
     
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: AppColors.background,
       body: Consumer<ProductoProvider>(
         builder: (context, provider, child) {
+          final mostrarShimmer = _connectionState == ConnectionState.loading && 
+                                 provider.state == ProductoState.initial;
+          
           return RefreshIndicator(
             onRefresh: () async {
               await _cargarDatos();
@@ -1479,7 +1188,7 @@ Widget _buildProductGrid() {
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
                 SliverAppBar(
-                  expandedHeight: isSmallScreen ? 100 : 120,
+                  expandedHeight: AppDimensions.getAppBarHeight(screenWidth),
                   floating: false,
                   pinned: true,
                   backgroundColor: Colors.white,
@@ -1487,30 +1196,19 @@ Widget _buildProductGrid() {
                   flexibleSpace: FlexibleSpaceBar(
                     title: Text(
                       'Gestión de Productos',
-                      style: TextStyle(
-                        color: Colors.black87,
-                        fontSize: isSmallScreen ? 18 : 20,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: WidgetStyles.appBarTitleStyle(screenWidth),
                     ),
                     centerTitle: true,
                     background: Container(
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.blue[50]!,
-                            Colors.white,
-                          ],
-                        ),
+                        gradient: AppColors.appBarGradient,
                       ),
                     ),
                   ),
                 ),
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: EdgeInsets.all(clampedPadding),
+                    padding: EdgeInsets.all(padding),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -1520,7 +1218,8 @@ Widget _buildProductGrid() {
                             _connectionState == ConnectionState.serverError)
                           _buildConnectionErrorState()
                         else ...[
-                          if (provider.isLoading && provider.state == ProductoState.initial)
+                          // Buscador
+                          if (mostrarShimmer)
                             _buildShimmerElement(
                               delay: 0,
                               child: _buildShimmerSearchBar(),
@@ -1538,16 +1237,17 @@ Widget _buildProductGrid() {
                                 },
                               ),
                             ),
-                          SizedBox(height: isSmallScreen ? 20 : 24),
+                          SizedBox(height: AppDimensions.getSectionSpacing(screenWidth)),
                           
-                          if (provider.isLoading && provider.state == ProductoState.initial)
+                          // Estadísticas
+                          if (mostrarShimmer)
                             _buildShimmerElement(
                               delay: 1,
                               child: Container(
-                                padding: EdgeInsets.all(isSmallScreen ? 16 : 20),
+                                padding: EdgeInsets.all(AppDimensions.getContainerPadding(screenWidth)),
                                 decoration: BoxDecoration(
                                   color: Colors.white,
-                                  borderRadius: BorderRadius.circular(20),
+                                  borderRadius: BorderRadius.circular(AppDimensions.containerRadius),
                                   boxShadow: [
                                     BoxShadow(
                                       color: Colors.black.withOpacity(0.05),
@@ -1559,9 +1259,9 @@ Widget _buildProductGrid() {
                                 child: Row(
                                   children: [
                                     Expanded(child: _buildShimmerStatsCard()),
-                                    SizedBox(width: isSmallScreen ? 12 : 16),
+                                    SizedBox(width: AppDimensions.getVerticalSpacing(screenWidth)),
                                     Expanded(child: _buildShimmerStatsCard()),
-                                    SizedBox(width: isSmallScreen ? 12 : 16),
+                                    SizedBox(width: AppDimensions.getVerticalSpacing(screenWidth)),
                                     Expanded(child: _buildShimmerStatsCard()),
                                   ],
                                 ),
@@ -1572,9 +1272,10 @@ Widget _buildProductGrid() {
                               opacity: _fadeAnimation,
                               child: _buildEstadisticasHeader(),
                             ),
-                          SizedBox(height: isSmallScreen ? 20 : 24),
+                          SizedBox(height: AppDimensions.getSectionSpacing(screenWidth)),
                           
-                          if (provider.isLoading && provider.state == ProductoState.initial)
+                          // Filtros
+                          if (mostrarShimmer)
                             _buildShimmerElement(
                               delay: 2,
                               child: _buildShimmerFilters(),
@@ -1584,9 +1285,10 @@ Widget _buildProductGrid() {
                               opacity: _fadeAnimation,
                               child: _buildFiltrosYOrdenamiento(),
                             ),
-                          SizedBox(height: isSmallScreen ? 20 : 24),
+                          SizedBox(height: AppDimensions.getSectionSpacing(screenWidth)),
                           
-                          if (provider.isLoading && provider.state == ProductoState.initial)
+                          // Título de productos
+                          if (mostrarShimmer)
                             _buildShimmerElement(
                               delay: 3,
                               child: Row(
@@ -1608,15 +1310,6 @@ Widget _buildProductGrid() {
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                   ),
-                                  const Spacer(),
-                                  Container(
-                                    width: 80,
-                                    height: 20,
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade400,
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                  ),
                                 ],
                               ),
                             )
@@ -1627,18 +1320,14 @@ Widget _buildProductGrid() {
                                 children: [
                                   Icon(
                                     Icons.inventory,
-                                    color: Colors.blue,
+                                    color: AppColors.primary,
                                     size: isSmallScreen ? 20 : 24,
                                   ),
                                   SizedBox(width: isSmallScreen ? 6 : 8),
                                   Expanded(
                                     child: Text(
                                       'Productos Registrados',
-                                      style: TextStyle(
-                                        fontSize: isSmallScreen ? 20 : 22,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.black87,
-                                      ),
+                                      style: WidgetStyles.headerTitleStyle(screenWidth),
                                     ),
                                   ),
                                   if (provider.productosFiltrados.isNotEmpty) ...[
@@ -1648,25 +1337,22 @@ Widget _buildProductGrid() {
                                         vertical: isSmallScreen ? 4 : 6,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: Colors.blue.withOpacity(0.1),
+                                        color: AppColors.primaryLight(0.1),
                                         borderRadius: BorderRadius.circular(20),
                                       ),
                                       child: Text(
                                         '${provider.productosFiltrados.length} resultado${provider.productosFiltrados.length != 1 ? 's' : ''}',
-                                        style: TextStyle(
-                                          color: Colors.blue,
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: isSmallScreen ? 11 : 12,
-                                        ),
+                                        style: WidgetStyles.resultsBadgeStyle(screenWidth),
                                       ),
                                     ),
                                   ],
                                 ],
                               ),
                             ),
-                          SizedBox(height: isSmallScreen ? 12 : 16),
+                          SizedBox(height: AppDimensions.getVerticalSpacing(screenWidth)),
                           
-                          if (provider.isLoading && provider.state == ProductoState.initial)
+                          // Grid de productos
+                          if (mostrarShimmer)
                             _buildShimmerProductGrid()
                           else if (provider.productosFiltrados.isEmpty)
                             FadeTransition(
@@ -1679,7 +1365,7 @@ Widget _buildProductGrid() {
                               child: _buildProductGrid(),
                             ),
                           
-                          SizedBox(height: isSmallScreen ? 24 : 32),
+                          SizedBox(height: AppDimensions.getSectionSpacing(screenWidth) + 8),
                         ],
                       ],
                     ),

@@ -38,7 +38,7 @@ class ProductoVenta {
   final String? variacionId;
   final String nombreProducto;
   final String? talla;
-  final dynamic color; // Puede ser String o Map
+  final dynamic color;
   final int cantidad;
   final double precioUnitario;
   final String? imagen;
@@ -58,13 +58,13 @@ class ProductoVenta {
     return {
       'productoId': productoId,
       if (variacionId != null) 'variacionId': variacionId,
-      'nombre': nombreProducto, // Cambio: usar 'nombre' como en el backend
-      'nombreProducto': nombreProducto, // Mantener compatibilidad
+      'nombre': nombreProducto,
+      'nombreProducto': nombreProducto,
       if (talla != null) 'talla': talla,
       if (color != null) 'color': color,
       'cantidad': cantidad,
-      'precio': precioUnitario, // Cambio: usar 'precio' como en el backend
-      'precioUnitario': precioUnitario, // Mantener compatibilidad
+      'precio': precioUnitario,
+      'precioUnitario': precioUnitario,
       if (imagen != null) 'imagen': imagen,
       if (talla != null || color != null || imagen != null) 'atributos': {
         if (talla != null) 'tallaLetra': talla,
@@ -117,7 +117,6 @@ class FiltrosVenta {
     if (producto?.isNotEmpty == true) params['producto'] = producto!;
     if (estado?.isNotEmpty == true) params['estado'] = estado!;
     
-    print('🔎 Query params para ventas: $params');
     return params;
   }
 }
@@ -130,6 +129,47 @@ class VentaService {
   
   String? _cachedToken;
   DateTime? _tokenExpiry;
+
+  // === FUNCIONES DE SANITIZACIÓN ===
+  
+  String _sanitize(String value, {int visibleChars = 4}) {
+    if (value.isEmpty) return '***';
+    if (value.length <= visibleChars) return '***';
+    return '${value.substring(0, visibleChars)}***';
+  }
+
+  String _sanitizeId(String id) {
+    if (id.length <= 8) return '***';
+    return '${id.substring(0, 4)}...${id.substring(id.length - 4)}';
+  }
+
+  String _sanitizeToken(String? token) {
+    if (token == null || token.isEmpty) return '[NO_TOKEN]';
+    if (token.length < 20) return '***';
+    return '${token.substring(0, 10)}...${token.substring(token.length - 10)}';
+  }
+
+  Map<String, dynamic> _sanitizeResponseBody(String body, {int maxLength = 200}) {
+    try {
+      final data = jsonDecode(body);
+      // Sanitizar campos sensibles si existen
+      if (data is Map) {
+        final sanitized = Map<String, dynamic>.from(data);
+        if (sanitized.containsKey('token')) sanitized['token'] = '[SANITIZED]';
+        if (sanitized.containsKey('accessToken')) sanitized['accessToken'] = '[SANITIZED]';
+        if (sanitized.containsKey('refreshToken')) sanitized['refreshToken'] = '[SANITIZED]';
+        
+        final jsonStr = jsonEncode(sanitized);
+        if (jsonStr.length > maxLength) {
+          return {'info': 'Respuesta muy larga', 'length': jsonStr.length};
+        }
+        return sanitized;
+      }
+      return {'data': 'Respuesta recibida'};
+    } catch (_) {
+      return {'error': 'No se pudo parsear respuesta'};
+    }
+  }
 
   // === MANEJO DE AUTENTICACIÓN ===
   
@@ -147,14 +187,21 @@ class VentaService {
 
   Future<bool> _renovarToken() async {
     try {
+      print('🔄 [VentaService] Intentando renovar token');
+      
       final refreshToken = await _secureStorage.read(key: 'refreshToken');
-      if (refreshToken == null) return false;
+      if (refreshToken == null) {
+        print('❌ [VentaService] No hay refresh token');
+        return false;
+      }
 
       final response = await _httpClient.post(
         Uri.parse('${dotenv.env['API_URL']}/auth/refresh'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({"refreshToken": refreshToken}),
       ).timeout(VentaConfig.timeout);
+
+      print('📥 [VentaService] Renovación - Status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -163,11 +210,13 @@ class VentaService {
         await _secureStorage.write(key: 'accessToken', value: newToken);
         _cachedToken = newToken;
         _tokenExpiry = DateTime.now().add(const Duration(hours: 1));
+        print('✅ [VentaService] Token renovado exitosamente');
         return true;
       }
+      print('❌ [VentaService] Error al renovar token');
       return false;
     } catch (e) {
-      print('❌ Error renovando token: $e');
+      print('❌ [VentaService] Excepción renovando token: ${e.toString()}');
       return false;
     }
   }
@@ -200,14 +249,18 @@ class VentaService {
       final response = await request().timeout(VentaConfig.timeout);
       
       if (response.statusCode == 401 && requiresAuth && retries == 0) {
+        print('⚠️ [VentaService] Token expirado (401), renovando...');
         if (await _renovarToken()) {
           return _makeRequest(request, parser, requiresAuth: requiresAuth, retries: 1);
         }
         throw VentaAuthException('No se pudo renovar el token');
       }
       
-      print('📡 Status Code: ${response.statusCode}');
-      print('📦 Response Body: ${response.body}');
+      print('📥 [VentaService] Status: ${response.statusCode}');
+      
+      // Sanitizar el body antes de mostrarlo
+      final sanitizedBody = _sanitizeResponseBody(response.body);
+      print('📦 [VentaService] Respuesta: $sanitizedBody');
       
       final data = jsonDecode(response.body);
       
@@ -225,6 +278,7 @@ class VentaService {
       throw VentaNetworkException('Tiempo de espera agotado');
     } catch (e) {
       if (e is VentaException) rethrow;
+      print('❌ [VentaService] Error inesperado: ${e.toString()}');
       throw VentaException('Error inesperado: $e');
     }
   }
@@ -237,7 +291,6 @@ class VentaService {
       if (data.containsKey('ventas') && data['ventas'] is List) {
         return List<Map<String, dynamic>>.from(data['ventas']);
       }
-      // Si la respuesta es una sola venta, devolverla como lista
       return [data];
     }
     return <Map<String, dynamic>>[];
@@ -245,31 +298,27 @@ class VentaService {
 
   // === MÉTODO PARA OBTENER INFORMACIÓN DE USUARIO ===
   Future<String?> obtenerNombreUsuario(String usuarioId) async {
-    print('🔍 [VentaService] === OBTENIENDO NOMBRE USUARIO ===');
-    print('👤 [VentaService] Usuario ID: $usuarioId');
+    print('🔍 [VentaService] Obteniendo nombre de usuario');
+    print('   • Usuario ID: ${_sanitizeId(usuarioId)}');
     
     try {
       final token = await _obtenerTokenValido();
-      print('🔑 [VentaService] Token obtenido para consulta de usuario');
       
       final url = '$_baseUrl/usuario/$usuarioId';
-      print('🌐 [VentaService] URL de consulta: $url');
       
       final response = await _httpClient.get(
         Uri.parse(url),
         headers: _getHeaders(token),
       ).timeout(VentaConfig.timeout);
 
-      print('📡 [VentaService] Status Code: ${response.statusCode}');
-      print('📦 [VentaService] Response Body: ${response.body}');
+      print('📥 [VentaService] Status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        print('📊 [VentaService] Datos del usuario recibidos: $data');
         
         if (data['usuario']?['nombre'] != null) {
           final nombre = data['usuario']['nombre'].toString().trim();
-          print('✅ [VentaService] Nombre encontrado: $nombre');
+          print('✅ [VentaService] Nombre obtenido exitosamente');
           return nombre;
         } else {
           print('⚠️ [VentaService] No se encontró campo usuario.nombre');
@@ -282,23 +331,25 @@ class VentaService {
         print('⚠️ [VentaService] Error HTTP: ${response.statusCode}');
         return 'Usuario desconocido';
       }
-    } catch (e, stackTrace) {
-      print('❌ [VentaService] Error obteniendo nombre de usuario $usuarioId: $e');
-      print('📍 [VentaService] Stack trace: $stackTrace');
+    } catch (e) {
+      print('❌ [VentaService] Error obteniendo nombre: ${e.toString()}');
       return 'Usuario desconocido';
-    } finally {
-      print('🏁 [VentaService] === FIN OBTENER NOMBRE USUARIO ===');
     }
   }
 
   // === MÉTODOS PÚBLICOS PRINCIPALES ===
 
-  /// 🆕 Crear venta pendiente (nueva funcionalidad del backend)
+  /// 🆕 Crear venta pendiente
   Future<Map<String, dynamic>> crearVentaPendiente({
     required List<ProductoVenta> productos,
     required double total,
     required String referenciaPago,
   }) async {
+    print('🆕 [VentaService] Creando venta pendiente');
+    print('   • Productos: ${productos.length} items');
+    print('   • Total: \$${total.toStringAsFixed(2)}');
+    print('   • Referencia: ${_sanitize(referenciaPago, visibleChars: 6)}');
+    
     _validarDatosVenta(productos, total);
     
     final usuarioId = await _secureStorage.read(key: 'usuarioId');
@@ -306,7 +357,8 @@ class VentaService {
       throw VentaAuthException('No se encontró usuarioId en el dispositivo');
     }
 
-    // No usar token para esta ruta, usa API key del backend
+    print('   • Usuario ID: ${_sanitizeId(usuarioId)}');
+
     return _makeRequest(
       () => _httpClient.post(
         Uri.parse('$_baseUrl/ventas/crear'),
@@ -318,13 +370,22 @@ class VentaService {
           'referenciaPago': referenciaPago,
         }),
       ),
-      (data) => data,
-      requiresAuth: false, // Esta ruta usa API key, no token de usuario
+      (data) {
+        print('✅ [VentaService] Venta creada exitosamente');
+        return data;
+      },
+      requiresAuth: false,
     );
   }
 
   /// 🔍 Buscar venta por referencia de pago
   Future<Map<String, dynamic>?> buscarVentaPorReferencia(String referenciaPago, {String? usuarioId}) async {
+    print('🔍 [VentaService] Buscando venta por referencia');
+    print('   • Referencia: ${_sanitize(referenciaPago, visibleChars: 6)}');
+    if (usuarioId != null) {
+      print('   • Usuario ID: ${_sanitizeId(usuarioId)}');
+    }
+    
     try {
       final queryParams = <String, String>{};
       if (usuarioId != null) queryParams['usuarioId'] = usuarioId;
@@ -335,84 +396,113 @@ class VentaService {
 
       return _makeRequest(
         () => _httpClient.get(uri, headers: {'Content-Type': 'application/json'}),
-        (data) => data,
-        requiresAuth: false, // Esta ruta usa API key
+        (data) {
+          print('✅ [VentaService] Venta encontrada');
+          return data;
+        },
+        requiresAuth: false,
       );
     } catch (e) {
       if (e is VentaException && e.statusCode == 404) {
-        return null; // Venta no encontrada
+        print('ℹ️ [VentaService] Venta no encontrada');
+        return null;
       }
       rethrow;
     }
   }
 
-  /// 💳 Confirmar pago de una venta (webhook interno)
-  /// Nota: Este método probablemente no se use desde Flutter, es para webhooks
+  /// 💳 Confirmar pago de una venta
   Future<Map<String, dynamic>> confirmarPago({
     required String referenciaPago,
     required String estadoPagoBold,
   }) async {
+    print('💳 [VentaService] Confirmando pago');
+    print('   • Referencia: ${_sanitize(referenciaPago, visibleChars: 6)}');
+    print('   • Estado Bold: $estadoPagoBold');
+    
     return _makeRequest(
       () => _httpClient.post(
-        Uri.parse('$_baseUrl/ventas/confirmar-pago'), // Esta ruta no existe en las routes, sería necesario agregarla
+        Uri.parse('$_baseUrl/ventas/confirmar-pago'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'referenciaPago': referenciaPago,
           'estadoPagoBold': estadoPagoBold,
         }),
       ),
-      (data) => data,
+      (data) {
+        print('✅ [VentaService] Pago confirmado');
+        return data;
+      },
       requiresAuth: false,
     );
   }
 
   /// 👤 Obtener ventas del usuario autenticado
   Future<List<Map<String, dynamic>>> obtenerVentasUsuario() async {
+    print('👤 [VentaService] Obteniendo ventas del usuario');
+    
     final token = await _obtenerTokenValido();
     return _makeRequest(
       () => _httpClient.get(
         Uri.parse('$_baseUrl/ventas/usuario'),
         headers: _getHeaders(token),
       ),
-      (data) => _mapearVentas(data),
+      (data) {
+        final ventas = _mapearVentas(data);
+        print('✅ [VentaService] ${ventas.length} ventas obtenidas');
+        return ventas;
+      },
       requiresAuth: true,
     );
   }
 
   /// 📊 Obtener todas las ventas con filtros (Admin)
   Future<List<Map<String, dynamic>>> obtenerTodasLasVentas([FiltrosVenta? filtros]) async {
+    print('📊 [VentaService] Obteniendo todas las ventas');
+    
     final token = await _obtenerTokenValido();
     final queryParams = filtros?.toQueryParams() ?? <String, String>{};
+    
+    if (queryParams.isNotEmpty) {
+      print('   • Filtros aplicados: ${queryParams.keys.join(", ")}');
+    }
     
     final uri = Uri.parse('$_baseUrl/ventas').replace(
       queryParameters: queryParams.isNotEmpty ? queryParams : null,
     );
 
-    print('🌐 URL para obtener todas las ventas: $uri');
-
     return _makeRequest(
       () => _httpClient.get(uri, headers: _getHeaders(token)),
-      (data) => _mapearVentas(data),
+      (data) {
+        final ventas = _mapearVentas(data);
+        print('✅ [VentaService] ${ventas.length} ventas obtenidas');
+        return ventas;
+      },
       requiresAuth: true,
     );
   }
 
   /// 🗑️ Eliminar venta (Admin)
   Future<Map<String, dynamic>> eliminarVenta(String ventaId) async {
+    print('🗑️ [VentaService] Eliminando venta');
+    print('   • Venta ID: ${_sanitizeId(ventaId)}');
+    
     final token = await _obtenerTokenValido();
     return _makeRequest(
       () => _httpClient.delete(
         Uri.parse('$_baseUrl/ventas/$ventaId'),
         headers: _getHeaders(token),
       ),
-      (data) => data,
+      (data) {
+        print('✅ [VentaService] Venta eliminada');
+        return data;
+      },
       requiresAuth: true,
     );
   }
 
   // === MÉTODOS HEREDADOS (mantenemos compatibilidad) ===
 
-  /// ⚠️ DEPRECATED: Usar crearVentaPendiente en su lugar
   @Deprecated('Usar crearVentaPendiente para el nuevo flujo de pagos')
   Future<Map<String, dynamic>> crearVenta({
     required List<ProductoVenta> productos,
@@ -420,7 +510,6 @@ class VentaService {
     String? estadoPago,
     String? referenciaPago,
   }) async {
-    // Redirigir al nuevo método si se proporciona referenciaPago
     if (referenciaPago != null) {
       return crearVentaPendiente(
         productos: productos,
@@ -432,7 +521,6 @@ class VentaService {
     throw VentaException('Este método está deprecado. Use crearVentaPendiente con referenciaPago.');
   }
 
-  /// ⚠️ DEPRECATED: El backend no soporta actualización directa de estado
   @Deprecated('El flujo de pagos se maneja internamente por el backend')
   Future<Map<String, dynamic>> actualizarEstadoVenta({
     required String ventaId,
@@ -441,13 +529,12 @@ class VentaService {
     throw VentaException('Esta funcionalidad no está disponible. El estado se actualiza automáticamente por webhooks.');
   }
 
-  /// ⚠️ DEPRECATED: El backend no soporta exportación de Excel
   @Deprecated('Esta funcionalidad no está implementada en el backend')
   Future<List<int>> exportarVentasExcel({int? mes, int? anio}) async {
     throw VentaException('La exportación de Excel no está disponible.');
   }
 
-  // === MÉTODOS DE BÚSQUEDA (usando la funcionalidad existente) ===
+  // === MÉTODOS DE BÚSQUEDA ===
 
   Future<List<Map<String, dynamic>>> buscarVentas({
     DateTime? fechaInicio,

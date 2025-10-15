@@ -45,3 +45,10 @@ app.*.map.json
 /android/app/release
 
 .env
+
+# Ignorar llaves y configuraciones de firma
+my-release-key.jks
+key.properties
+
+
+

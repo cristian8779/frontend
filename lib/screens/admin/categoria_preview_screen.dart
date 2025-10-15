@@ -11,6 +11,7 @@ import 'crear_producto_screen.dart';
 import 'package:crud/screens/admin/widgets/producto_card.dart';
 import '../../providers/categoria_admin_provider.dart';
 import '../../providers/producto_admin_provider.dart';
+import 'styles/categoria_preview/categoria_preview_styles.dart';
 
 class CategoriaPreviewScreen extends StatefulWidget {
   final Categoria categoria;
@@ -32,7 +33,6 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
   late Animation<double> _fadeAnimation;
   final ScrollController _scrollController = ScrollController();
 
-  // Variable para mantener la categoría actualizada
   late Categoria _categoriaActual;
 
   @override
@@ -42,15 +42,14 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
     
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 500),
+      duration: CategoriaPreviewStyles.animationDuration,
     );
     _fadeAnimation = CurvedAnimation(
       parent: _animationController,
-      curve: Curves.easeInOut,
+      curve: CategoriaPreviewStyles.animationCurve,
     );
     _animationController.forward();
 
-    // ✅ CORREGIDO: Inicializar después del primer frame para evitar condiciones de carrera
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _inicializarProductos();
     });
@@ -63,14 +62,12 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
     super.dispose();
   }
 
-  // ✅ CORREGIDO: Refrescar ANTES de filtrar
   Future<void> _inicializarProductos() async {
     if (!mounted) return;
 
     final productoProvider = Provider.of<ProductoProvider>(context, listen: false);
     
     try {
-      // ✅ SIEMPRE refrescar para obtener datos más recientes del servidor
       if (productoProvider.state == ProductoState.initial) {
         debugPrint('🔄 Inicializando provider desde categoria preview');
         await productoProvider.inicializar();
@@ -79,18 +76,15 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
         await productoProvider.refrescar();
       }
       
-      // ✅ DESPUÉS de tener los datos actualizados, aplicar el filtro
       debugPrint('🔍 Filtrando por categoría: ${_categoriaActual.id}');
       productoProvider.filtrarPorCategoria(_categoriaActual.id);
       
     } catch (e) {
       debugPrint('❌ Error al inicializar productos: $e');
-      // Fallback: intentar filtrar con los datos existentes
       productoProvider.filtrarPorCategoria(_categoriaActual.id);
     }
   }
 
-  // Método para actualizar la información de la categoría
   Future<void> _actualizarInformacionCategoria() async {
     try {
       final categoriasProvider = Provider.of<CategoriasProvider>(context, listen: false);
@@ -106,7 +100,6 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
     }
   }
 
-  // Navegar a editar categoría y esperar resultado
   Future<void> _navegarAEditarCategoria() async {
     try {
       final resultado = await Navigator.push<bool>(
@@ -116,7 +109,6 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
         ),
       );
 
-      // Si se retorna true, significa que la categoría fue actualizada
       if (resultado == true && mounted) {
         await _actualizarInformacionCategoria();
         await _refrescarProductos();
@@ -126,7 +118,6 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
     }
   }
 
-  // ✅ MEJORADO: Refrescar con mejor manejo de estados
   Future<void> _refrescarProductos() async {
     if (_isRefreshing) return;
     
@@ -137,17 +128,14 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
     final productoProvider = Provider.of<ProductoProvider>(context, listen: false);
     
     try {
-      // Refrescar productos desde el servidor
       await productoProvider.refrescar();
-      
-      // Aplicar filtro después de refrescar
       productoProvider.filtrarPorCategoria(_categoriaActual.id);
 
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
           0,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
+          duration: CategoriaPreviewStyles.scrollAnimationDuration,
+          curve: CategoriaPreviewStyles.scrollCurve,
         );
       }
     } catch (e) {
@@ -163,59 +151,35 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
 
   Widget _buildShimmerGrid() {
     return GridView.builder(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: 6,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-        childAspectRatio: 0.75,
-      ),
+      padding: CategoriaPreviewStyles.gridPadding,
+      itemCount: CategoriaPreviewStyles.shimmerItemCount,
+      gridDelegate: CategoriaPreviewStyles.shimmerGridDelegate,
       itemBuilder: (context, index) {
         return Shimmer.fromColors(
-          baseColor: Colors.grey.shade200,
-          highlightColor: Colors.grey.shade100,
+          baseColor: CategoriaPreviewStyles.shimmerBaseColor(),
+          highlightColor: CategoriaPreviewStyles.shimmerHighlightColor(),
           child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            padding: const EdgeInsets.all(12),
+            decoration: CategoriaPreviewStyles.containerDecoration(),
+            padding: CategoriaPreviewStyles.containerPadding,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
                   width: double.infinity,
-                  height: 120,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  height: CategoriaPreviewStyles.spacing120,
+                  decoration: CategoriaPreviewStyles.shimmerItemDecoration(),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: CategoriaPreviewStyles.spacing12),
                 Container(
                   width: double.infinity,
-                  height: 16,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
+                  height: CategoriaPreviewStyles.spacing16,
+                  decoration: CategoriaPreviewStyles.shimmerBarDecoration(),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: CategoriaPreviewStyles.spacing8),
                 Container(
-                  width: 80,
-                  height: 16,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
+                  width: CategoriaPreviewStyles.spacing80,
+                  height: CategoriaPreviewStyles.spacing16,
+                  decoration: CategoriaPreviewStyles.shimmerBarDecoration(),
                 ),
               ],
             ),
@@ -232,18 +196,17 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
     return Scaffold(
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: const Color(0xFFF5F5F5),
+        backgroundColor: CategoriaPreviewStyles.backgroundColor,
         title: Text(
           _categoriaActual.nombre,
-          style: const TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w600,
-            color: Colors.black87,
-          ),
+          style: CategoriaPreviewStyles.appBarTitleStyle(),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.edit, color: Colors.black87),
+            icon: const Icon(
+              Icons.edit,
+              color: CategoriaPreviewStyles.iconColor,
+            ),
             tooltip: 'Editar categoría',
             onPressed: _navegarAEditarCategoria,
           ),
@@ -253,7 +216,6 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
         onPressed: () async {
           HapticFeedback.selectionClick();
           
-          // ✅ MEJORADO: Manejar el resultado de crear producto
           final productoCreado = await Navigator.push<bool>(
             context,
             MaterialPageRoute(
@@ -261,7 +223,6 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
             ),
           );
 
-          // ✅ Si se creó un producto, refrescar la lista
           if (productoCreado == true && mounted) {
             debugPrint('✅ Producto creado, refrescando vista de categoría');
             await _refrescarProductos();
@@ -293,20 +254,17 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
   Widget _buildContent(ThemeData theme, BoxConstraints constraints) {
     return Consumer<ProductoProvider>(
       builder: (context, productoProvider, child) {
-        // Mostrar shimmer mientras carga
         if (productoProvider.isLoading && productoProvider.productos.isEmpty) {
           return _buildShimmerGrid();
         }
 
-        // Mostrar error si hay error
         if (productoProvider.hasError) {
           return _errorDisplay(theme, productoProvider.errorMessage);
         }
 
-        // ✅ CORREGIDO: Filtrar productos de esta categoría de manera más robusta
         final productosDeCategoria = productoProvider.productos.where((producto) {
           final categoriaId = producto['categoria']?.toString();
-          final categoriaIdAlt = producto['categoriaId']?.toString(); // Algunos pueden usar este campo
+          final categoriaIdAlt = producto['categoriaId']?.toString();
           
           return categoriaId == _categoriaActual.id || categoriaIdAlt == _categoriaActual.id;
         }).toList();
@@ -314,37 +272,27 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
         debugPrint('📊 Productos en categoría ${_categoriaActual.nombre}: ${productosDeCategoria.length}');
         debugPrint('📊 Total productos en provider: ${productoProvider.productos.length}');
 
-        // Mostrar mensaje vacío si no hay productos
         if (productosDeCategoria.isEmpty && !productoProvider.isLoading) {
           return _emptyDisplay(theme);
         }
 
-        // Mostrar grid de productos
         return GridView.builder(
           controller: _scrollController,
-          padding: const EdgeInsets.only(bottom: 80),
+          padding: CategoriaPreviewStyles.gridBottomPadding,
           itemCount: productosDeCategoria.length,
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: (constraints.maxWidth / 200).floor().clamp(2, 4),
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
-            childAspectRatio: 0.75,
-          ),
+          gridDelegate: CategoriaPreviewStyles.gridDelegate(constraints),
           itemBuilder: (context, index) {
             final productoData = productosDeCategoria[index];
             
-            // Obtener el ID correcto del producto
             final productoId = productoData['_id']?.toString() ?? 
                               productoData['id']?.toString() ?? '';
 
             return ProductoCard(
               id: productoId,
-              producto: productoData, // ✅ Pasar el producto completo
-              // Callback para refrescar al eliminar
+              producto: productoData,
               onProductoEliminado: () {
                 _refrescarProductos();
               },
-              // Callback para refrescar al actualizar
               onProductoActualizado: () {
                 _refrescarProductos();
               },
@@ -360,15 +308,14 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.error_outline,
-              size: 80, color: theme.colorScheme.error.withOpacity(0.6)),
-          const SizedBox(height: 16),
+          CategoriaPreviewStyles.errorIcon(theme),
+          const SizedBox(height: CategoriaPreviewStyles.spacing16),
           Text(
             errorMessage ?? 'Ocurrió un error al cargar los productos.\nReintenta más tarde.',
             textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium?.copyWith(fontSize: 16),
+            style: CategoriaPreviewStyles.errorTextStyle(theme),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: CategoriaPreviewStyles.spacing16),
           ElevatedButton.icon(
             onPressed: _refrescarProductos,
             icon: const Icon(Icons.refresh),
@@ -384,12 +331,11 @@ class _CategoriaPreviewScreenState extends State<CategoriaPreviewScreen>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.inventory_2_outlined,
-              size: 80, color: Colors.grey.shade400),
-          const SizedBox(height: 16),
+          CategoriaPreviewStyles.emptyIcon(),
+          const SizedBox(height: CategoriaPreviewStyles.spacing16),
           Text(
             'No hay productos registrados en esta categoría.',
-            style: theme.textTheme.bodyMedium?.copyWith(fontSize: 18),
+            style: CategoriaPreviewStyles.emptyTextStyle(theme),
             textAlign: TextAlign.center,
           ),
         ],

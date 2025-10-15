@@ -232,7 +232,7 @@ class _SelectorVisualScreenState extends State<SelectorVisualScreen>
           Expanded(
             child: _filteredItems.isEmpty
                 ? _buildNoResultsState()
-                : _buildGridView(),
+                : _buildListView(),
           ),
         ],
       ),
@@ -311,8 +311,8 @@ class _SelectorVisualScreenState extends State<SelectorVisualScreen>
     );
   }
 
-  Widget _buildGridView() {
-    return GridView.builder(
+  Widget _buildListView() {
+    return ListView.builder(
       controller: _scrollController,
       padding: const EdgeInsets.fromLTRB(
         SelectorVisualConstants.screenPadding,
@@ -321,19 +321,11 @@ class _SelectorVisualScreenState extends State<SelectorVisualScreen>
         SelectorVisualConstants.screenPadding,
       ),
       itemCount: _filteredItems.length,
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: MediaQuery.of(context).size.width > SelectorVisualConstants.gridBreakpoint
-            ? SelectorVisualConstants.gridCrossAxisCountTablet
-            : SelectorVisualConstants.gridCrossAxisCountMobile,
-        childAspectRatio: SelectorVisualConstants.gridChildAspectRatio,
-        crossAxisSpacing: SelectorVisualConstants.gridCrossAxisSpacing,
-        mainAxisSpacing: SelectorVisualConstants.gridMainAxisSpacing,
-      ),
-      itemBuilder: (context, index) => _buildGridItem(index),
+      itemBuilder: (context, index) => _buildListItem(index),
     );
   }
 
-  Widget _buildGridItem(int index) {
+  Widget _buildListItem(int index) {
     final item = _filteredItems[index];
     final nombre = item['nombre'] ?? 'Sin nombre';
     final imagen = item['imagen'] ?? '';
@@ -344,6 +336,7 @@ class _SelectorVisualScreenState extends State<SelectorVisualScreen>
             (index * SelectorVisualConstants.cardAnimationIncrement),
       ),
       curve: Curves.easeOutBack,
+      margin: const EdgeInsets.only(bottom: SelectorVisualConstants.spacingMedium),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -351,16 +344,38 @@ class _SelectorVisualScreenState extends State<SelectorVisualScreen>
           onTap: () => Navigator.pop(context, item),
           child: Container(
             decoration: SelectorVisualDecorations.cardDecoration,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            child: Row(
               children: [
-                Expanded(
-                  flex: SelectorVisualConstants.cardImageFlex,
-                  child: _buildCardImage(imagen),
+                // Imagen a la izquierda
+                SizedBox(
+                  width: 80,
+                  height: 80,
+                  child: _buildListImage(imagen),
                 ),
+                const SizedBox(width: SelectorVisualConstants.spacingMedium),
+                // Título a la derecha
                 Expanded(
-                  flex: SelectorVisualConstants.cardContentFlex,
-                  child: _buildCardTitle(nombre),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: SelectorVisualConstants.cardPadding,
+                      horizontal: SelectorVisualConstants.spacingSmall,
+                    ),
+                    child: Text(
+                      nombre,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: SelectorVisualTextStyles.cardTitle,
+                    ),
+                  ),
+                ),
+                // Ícono de flecha
+                Padding(
+                  padding: const EdgeInsets.only(right: SelectorVisualConstants.spacingMedium),
+                  child: Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    size: 16,
+                    color: SelectorVisualColors.cardIconColor.withOpacity(0.5),
+                  ),
                 ),
               ],
             ),
@@ -370,27 +385,27 @@ class _SelectorVisualScreenState extends State<SelectorVisualScreen>
     );
   }
 
-  Widget _buildCardImage(String imagen) {
+  Widget _buildListImage(String imagen) {
     return ClipRRect(
-      borderRadius: const BorderRadius.vertical(
-        top: Radius.circular(SelectorVisualConstants.cardBorderRadius),
+      borderRadius: const BorderRadius.horizontal(
+        left: Radius.circular(SelectorVisualConstants.cardBorderRadius),
       ),
       child: imagen.isNotEmpty
-          ? Image.network(
-              imagen,
-              fit: BoxFit.cover,
-              width: double.infinity,
-              height: double.infinity,
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) return child;
-                return Container(
-                  color: SelectorVisualColors.cardImagePlaceholder,
-                  child: Center(
+          ? Container(
+              color: SelectorVisualColors.cardImagePlaceholder,
+              child: Image.network(
+                imagen,
+                fit: BoxFit.contain,
+                width: double.infinity,
+                height: double.infinity,
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return Center(
                     child: SizedBox(
-                      width: SelectorVisualConstants.cardLoadingIndicatorSize,
-                      height: SelectorVisualConstants.cardLoadingIndicatorSize,
+                      width: 24,
+                      height: 24,
                       child: CircularProgressIndicator(
-                        strokeWidth: SelectorVisualConstants.cardLoadingIndicatorStroke,
+                        strokeWidth: 2,
                         valueColor: AlwaysStoppedAnimation<Color>(
                           SelectorVisualColors.cardImageLoadingIndicator,
                         ),
@@ -400,73 +415,35 @@ class _SelectorVisualScreenState extends State<SelectorVisualScreen>
                             : null,
                       ),
                     ),
-                  ),
-                );
-              },
-              errorBuilder: (context, error, stackTrace) => _buildImageError(),
+                  );
+                },
+                errorBuilder: (context, error, stackTrace) => _buildListImageError(),
+              ),
             )
-          : _buildImagePlaceholder(),
+          : _buildListImagePlaceholder(),
     );
   }
 
-  Widget _buildImageError() {
+  Widget _buildListImageError() {
     return Container(
       color: SelectorVisualColors.cardImagePlaceholder,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.broken_image_rounded,
-            size: SelectorVisualConstants.cardIconSize,
-            color: SelectorVisualColors.cardIconColor,
-          ),
-          const SizedBox(height: SelectorVisualConstants.spacingSmall),
-          Text(
-            'Error al cargar',
-            style: SelectorVisualTextStyles.cardImageError,
-          ),
-        ],
+      child: Icon(
+        Icons.broken_image_rounded,
+        size: 32,
+        color: SelectorVisualColors.cardIconColor,
       ),
     );
   }
 
-  Widget _buildImagePlaceholder() {
+  Widget _buildListImagePlaceholder() {
     return Container(
       color: SelectorVisualColors.cardImagePlaceholder,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            widget.esProducto
-                ? Icons.inventory_2_outlined
-                : Icons.category_outlined,
-            size: SelectorVisualConstants.cardIconSize,
-            color: SelectorVisualColors.cardIconColor,
-          ),
-          const SizedBox(height: SelectorVisualConstants.spacingSmall),
-          Text(
-            'Sin imagen',
-            style: SelectorVisualTextStyles.cardNoImage,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCardTitle(String nombre) {
-    return Padding(
-      padding: const EdgeInsets.all(SelectorVisualConstants.cardPadding),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            nombre,
-            textAlign: TextAlign.center,
-            maxLines: SelectorVisualConstants.cardTitleMaxLines,
-            overflow: TextOverflow.ellipsis,
-            style: SelectorVisualTextStyles.cardTitle,
-          ),
-        ],
+      child: Icon(
+        widget.esProducto
+            ? Icons.inventory_2_outlined
+            : Icons.category_outlined,
+        size: 32,
+        color: SelectorVisualColors.cardIconColor,
       ),
     );
   }

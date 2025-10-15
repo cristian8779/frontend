@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter/services.dart'; // 👈 agregado para controlar la orientación
 import 'package:flutter_localizations/flutter_localizations.dart'; // 👈 agregado para español
+import 'package:showcaseview/showcaseview.dart'; // 👈 NUEVO: Para los tooltips del tutorial
 
 // Providers
 import 'providers/auth_provider.dart';
@@ -17,7 +18,7 @@ import 'providers/anuncio_admin_provider.dart';
 import 'providers/variacion_admin_provider.dart';
 import 'providers/FavoritoProvider.dart';
 import 'providers/variacion_admin_provider.dart';
-
+import 'providers/carrito_provider.dart';
 
 
 // Widgets de búsqueda
@@ -45,9 +46,6 @@ import 'screens/admin/gestion_anuncios_screen.dart';
 import 'screens/admin/anuncios_screen.dart';
 import 'screens/admin/pantalla_rol.dart';
 import 'screens/admin/invitaciones.dart';
-import 'screens/admin/confirmar_codigo_rol_screen.dart';
-
-
 
 import 'screens/usuario/bienvenida_usuario_screen.dart';
 import 'screens/usuario/favorito.dart';
@@ -97,12 +95,12 @@ class AppProviders extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => VariacionProvider()),
         ChangeNotifierProvider(create: (_) => FavoritoProvider()),
         ChangeNotifierProvider(create: (_) => VariacionProvider()),
-
-
-
+       ChangeNotifierProvider(create: (_) => CarritoProvider()),
 
       ],
-      child: const MyApp(),
+      child: ShowCaseWidget( // 👈 NUEVO: Envuelve MyApp con ShowCaseWidget
+        builder: (context) => const MyApp(),
+      ),
     );
   }
 }
@@ -150,7 +148,6 @@ class MyApp extends StatelessWidget {
             '/pantalla-rol': (_) => const PantallaRol(),
             '/invitaciones': (_) =>
                 const InvitacionRolScreen(rolActual: 'superAdmin'),
-           '/confirmar-codigo-rol': (_) => const ConfirmarCodigoRolScreen(),
 
             '/bienvenida': (_) => const BienvenidaUsuarioScreen(),
             '/favorites': (_) => FavoritesPage(),

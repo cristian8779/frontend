@@ -8,10 +8,19 @@ import '../models/request_models.dart';
 class CarritoService {
   final String _baseUrl = '${dotenv.env['API_URL']}/carrito';
 
+  // -------------------------------
+  // UTILIDAD PARA ENMASCARAR TOKENS
+  // -------------------------------
+  String _enmascararId(String? id) {
+    if (id == null || id.isEmpty) return 'VACIO';
+    if (id.length <= 8) return '***';
+    return '${id.substring(0, 4)}...${id.substring(id.length - 4)}';
+  }
+
   /// Agregar producto al carrito - Método con debugging mejorado
   Future<bool> agregarProducto(String token, String productoId, int cantidad) async {
     try {
-      // 🔍 Debug: Mostrar qué se está enviando
+      // 🔍 Debug: Mostrar qué se está enviando (SIN token ni IDs completos)
       final requestBody = {
         'productoId': productoId,
         'cantidad': cantidad,
@@ -19,8 +28,7 @@ class CarritoService {
       
       print('📤 Enviando al carrito:');
       print('   - URL: $_baseUrl');
-      print('   - Body: ${json.encode(requestBody)}');
-      print('   - ProductoId: $productoId (${productoId.runtimeType})');
+      print('   - ProductoId: ${_enmascararId(productoId)}');
       print('   - Cantidad: $cantidad');
 
       final response = await http.post(
@@ -34,7 +42,6 @@ class CarritoService {
 
       print('📥 Respuesta del servidor:');
       print('   - Status: ${response.statusCode}');
-      print('   - Body: ${response.body}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         print('✅ Producto agregado exitosamente');
@@ -42,7 +49,7 @@ class CarritoService {
       } else if (response.statusCode == 401) {
         throw Exception('Unauthorized');
       } else {
-        print('❌ Error al agregar producto (${response.statusCode}): ${response.body}');
+        print('❌ Error al agregar producto (${response.statusCode})');
         
         // 🔍 Intentar parsear el error para más detalles
         try {
@@ -74,7 +81,7 @@ class CarritoService {
     // Si parece ser un ID de variación (muy largo o con formato específico),
     // podría necesitar un endpoint diferente
     if (productoId.length > 50) {
-      print('⚠️  ID muy largo, podría ser ID de variación: $productoId');
+      print('⚠️  ID muy largo, podría ser ID de variación');
     }
     
     return await agregarProducto(token, productoId, cantidad);
@@ -102,8 +109,10 @@ class CarritoService {
         }
       }
 
-      print('📤 Enviando producto base con variación:');
-      print('   - Body: ${json.encode(requestBody)}');
+      print('📤 Enviando producto base');
+      print('   - ProductoId: ${_enmascararId(productoBaseId)}');
+      print('   - Cantidad: $cantidad');
+      print('   - Con variación: ${variacionSeleccionada != null}');
 
       final response = await http.post(
         Uri.parse(_baseUrl),
@@ -114,14 +123,14 @@ class CarritoService {
         body: json.encode(requestBody),
       );
 
-      print('📥 Respuesta: ${response.statusCode} - ${response.body}');
+      print('📥 Respuesta: ${response.statusCode}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         return true;
       } else if (response.statusCode == 401) {
         throw Exception('Unauthorized');
       } else {
-        print('❌ Error al agregar producto base (${response.statusCode}): ${response.body}');
+        print('❌ Error al agregar producto base (${response.statusCode})');
         return false;
       }
     } catch (e) {
@@ -129,8 +138,6 @@ class CarritoService {
       return false;
     }
   }
-
-  // ... resto de los métodos sin cambios ...
 
   /// Obtener carrito completo (JWT) - Retorna modelo Carrito
   Future<Carrito?> obtenerCarritoModelo(String token) async {
@@ -158,7 +165,7 @@ class CarritoService {
       } else if (response.statusCode == 401) {
         throw Exception('Unauthorized');
       } else {
-        print('❌ Error al obtener carrito (${response.statusCode}): ${response.body}');
+        print('❌ Error al obtener carrito (${response.statusCode})');
         return null;
       }
     } catch (e) {
@@ -181,7 +188,7 @@ class CarritoService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         
-        print('🔍 Respuesta del backend: $data'); // Debug
+        print('🔍 Carrito obtenido correctamente');
 
         // ✅ Adaptar respuesta del backend (productos → items + total)
         if (data is Map<String, dynamic> && data.containsKey('productos')) {
@@ -189,8 +196,6 @@ class CarritoService {
           final items = productos.map((p) {
             final cantidad = p['cantidad'] ?? 1;
             final precioUnitario = (p['precio'] ?? 0).toDouble();
-            
-            print('🔍 Producto individual: $p'); // Debug para ver qué campos vienen
             
             return {
               'productoId': p['productoId'],
@@ -215,6 +220,7 @@ class CarritoService {
 
           final total = items.fold<double>(0.0, (acc, item) => acc + (item['precio'] as double));
 
+          print('🔍 Total de items en carrito: ${items.length}');
           return {
             'items': items,
             'total': total,
@@ -222,13 +228,12 @@ class CarritoService {
         }
 
         // Si ya viene en formato correcto, retornar tal como está
-        print('🔍 Retornando data tal como viene: $data');
         return data;
         
       } else if (response.statusCode == 401) {
         throw Exception('Unauthorized'); // 🔐 solo en este caso mandamos al login
       } else {
-        print('❌ Error al obtener carrito (${response.statusCode}): ${response.body}');
+        print('❌ Error al obtener carrito (${response.statusCode})');
         return {}; // devolvemos mapa vacío para no romper la UI
       }
     } catch (e) {
@@ -254,7 +259,7 @@ class CarritoService {
       } else if (response.statusCode == 401) {
         throw Exception('Unauthorized');
       } else {
-        print('❌ Error al obtener resumen (${response.statusCode}): ${response.body}');
+        print('❌ Error al obtener resumen (${response.statusCode})');
         return null;
       }
     } catch (e) {
@@ -278,7 +283,7 @@ class CarritoService {
     } else if (response.statusCode == 401) {
       throw Exception('Unauthorized');
     } else {
-      print('❌ Error al obtener resumen raw (${response.statusCode}): ${response.body}');
+      print('❌ Error al obtener resumen raw (${response.statusCode})');
       return {};
     }
   }
@@ -300,7 +305,7 @@ class CarritoService {
       } else if (response.statusCode == 401) {
         throw Exception('Unauthorized');
       } else {
-        print('❌ Error al agregar producto completo (${response.statusCode}): ${response.body}');
+        print('❌ Error al agregar producto completo (${response.statusCode})');
         return false;
       }
     } catch (e) {
@@ -312,6 +317,8 @@ class CarritoService {
   /// Actualizar cantidad - Método simple (sin variaciones)
   Future<bool> actualizarCantidad(String token, String productoId, int cantidad) async {
     try {
+      print('🔄 Actualizando cantidad: ProductoId ${_enmascararId(productoId)} -> Cantidad: $cantidad');
+      
       final response = await http.put(
         Uri.parse(_baseUrl),
         headers: {
@@ -325,11 +332,12 @@ class CarritoService {
       );
 
       if (response.statusCode == 200) {
+        print('✅ Cantidad actualizada');
         return true;
       } else if (response.statusCode == 401) {
         throw Exception('Unauthorized');
       } else {
-        print('❌ Error al actualizar cantidad (${response.statusCode}): ${response.body}');
+        print('❌ Error al actualizar cantidad (${response.statusCode})');
         return false;
       }
     } catch (e) {
@@ -351,6 +359,11 @@ class CarritoService {
         body['variacionId'] = variacionId;
       }
 
+      print('🔄 Actualizando cantidad con variación');
+      print('   - ProductoId: ${_enmascararId(productoId)}');
+      print('   - Cantidad: $cantidad');
+      print('   - VariacionId: ${variacionId != null ? _enmascararId(variacionId) : 'N/A'}');
+
       final response = await http.put(
         Uri.parse(_baseUrl),
         headers: {
@@ -361,11 +374,12 @@ class CarritoService {
       );
 
       if (response.statusCode == 200) {
+        print('✅ Cantidad actualizada');
         return true;
       } else if (response.statusCode == 401) {
         throw Exception('Unauthorized');
       } else {
-        print('❌ Error al actualizar cantidad con variación (${response.statusCode}): ${response.body}');
+        print('❌ Error al actualizar cantidad con variación (${response.statusCode})');
         return false;
       }
     } catch (e) {
@@ -391,7 +405,7 @@ class CarritoService {
       } else if (response.statusCode == 401) {
         throw Exception('Unauthorized');
       } else {
-        print('❌ Error al actualizar cantidad completo (${response.statusCode}): ${response.body}');
+        print('❌ Error al actualizar cantidad completo (${response.statusCode})');
         return false;
       }
     } catch (e) {
@@ -403,6 +417,8 @@ class CarritoService {
   /// Eliminar producto - Método simple (sin variaciones)
   Future<bool> eliminarProducto(String token, String productoId) async {
     try {
+      print('🗑️ Eliminando producto: ${_enmascararId(productoId)}');
+      
       final response = await http.delete(
         Uri.parse(_baseUrl),
         headers: {
@@ -415,11 +431,12 @@ class CarritoService {
       );
 
       if (response.statusCode == 200) {
+        print('✅ Producto eliminado');
         return true;
       } else if (response.statusCode == 401) {
         throw Exception('Unauthorized');
       } else {
-        print('❌ Error al eliminar producto (${response.statusCode}): ${response.body}');
+        print('❌ Error al eliminar producto (${response.statusCode})');
         return false;
       }
     } catch (e) {
@@ -440,6 +457,10 @@ class CarritoService {
         body['variacionId'] = variacionId;
       }
 
+      print('🗑️ Eliminando producto con variación');
+      print('   - ProductoId: ${_enmascararId(productoId)}');
+      print('   - VariacionId: ${variacionId != null ? _enmascararId(variacionId) : 'N/A'}');
+
       final response = await http.delete(
         Uri.parse(_baseUrl),
         headers: {
@@ -450,11 +471,12 @@ class CarritoService {
       );
 
       if (response.statusCode == 200) {
+        print('✅ Producto eliminado');
         return true;
       } else if (response.statusCode == 401) {
         throw Exception('Unauthorized');
       } else {
-        print('❌ Error al eliminar producto con variación (${response.statusCode}): ${response.body}');
+        print('❌ Error al eliminar producto con variación (${response.statusCode})');
         return false;
       }
     } catch (e) {
@@ -480,7 +502,7 @@ class CarritoService {
       } else if (response.statusCode == 401) {
         throw Exception('Unauthorized');
       } else {
-        print('❌ Error al eliminar producto completo (${response.statusCode}): ${response.body}');
+        print('❌ Error al eliminar producto completo (${response.statusCode})');
         return false;
       }
     } catch (e) {
@@ -492,6 +514,8 @@ class CarritoService {
   /// Vaciar carrito usando JWT (método principal para usuarios)
   Future<bool> vaciarCarrito(String token) async {
     try {
+      print('🗑️ Vaciando carrito completo');
+      
       final response = await http.delete(
         Uri.parse('$_baseUrl/vaciar'),
         headers: {
@@ -501,11 +525,12 @@ class CarritoService {
       );
 
       if (response.statusCode == 200) {
+        print('✅ Carrito vaciado');
         return true;
       } else if (response.statusCode == 401) {
         throw Exception('Unauthorized');
       } else {
-        print('❌ Error al vaciar carrito (${response.statusCode}): ${response.body}');
+        print('❌ Error al vaciar carrito (${response.statusCode})');
         return false;
       }
     } catch (e) {
@@ -517,6 +542,8 @@ class CarritoService {
   /// Vaciar carrito usando API Key (solo para microservicios)
   Future<bool> vaciarCarritoInterno(String userId, String apiKey) async {
     try {
+      print('🗑️ Vaciando carrito interno para usuario: ${_enmascararId(userId)}');
+      
       final response = await http.delete(
         Uri.parse('${dotenv.env['API_URL']}/carrito/vaciar/$userId'),
         headers: {
@@ -526,9 +553,10 @@ class CarritoService {
       );
 
       if (response.statusCode == 200) {
+        print('✅ Carrito interno vaciado');
         return true;
       } else {
-        print('❌ Error al vaciar carrito interno (${response.statusCode}): ${response.body}');
+        print('❌ Error al vaciar carrito interno (${response.statusCode})');
         return false;
       }
     } catch (e) {
@@ -540,6 +568,8 @@ class CarritoService {
   /// Obtener resumen usando API Key (solo para microservicios)
   Future<Map<String, dynamic>?> obtenerResumenInterno(String userId, String apiKey) async {
     try {
+      print('🔍 Obteniendo resumen interno para usuario: ${_enmascararId(userId)}');
+      
       final response = await http.get(
         Uri.parse('${dotenv.env['API_URL']}/carrito/resumen/$userId'),
         headers: {
@@ -549,9 +579,10 @@ class CarritoService {
       );
 
       if (response.statusCode == 200) {
+        print('✅ Resumen interno obtenido');
         return json.decode(response.body);
       } else {
-        print('❌ Error al obtener resumen interno (${response.statusCode}): ${response.body}');
+        print('❌ Error al obtener resumen interno (${response.statusCode})');
         return {};
       }
     } catch (e) {

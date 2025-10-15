@@ -37,11 +37,13 @@ class _BoldPaymentPageState extends State<BoldPaymentPage> with TickerProviderSt
 
   static const String _netlifyPaymentUrl = 'https://mellow-pasca-a7bd11.netlify.app/';
 
-  final NumberFormat _currencyFormat = NumberFormat.currency(
-    locale: 'es_CO',
-    symbol: '\$',
-    decimalDigits: 0,
-  );
+ final NumberFormat _currencyFormat = NumberFormat.currency(
+  locale: 'es_CO',
+  symbol: '\$',
+  decimalDigits: 0,
+  customPattern: '\u00A4#,##0', // coloca el símbolo $ al inicio
+);
+
 
   // Breakpoints responsivos
   static const double _tabletBreakpoint = 768.0;
@@ -282,7 +284,6 @@ class _BoldPaymentPageState extends State<BoldPaymentPage> with TickerProviderSt
     }
   }
 
-  // Widget para card estilo MercadoLibre
   Widget _buildCard({required Widget child, bool noPadding = false}) {
     return Container(
       width: double.infinity,
@@ -849,88 +850,7 @@ class _BoldPaymentPageState extends State<BoldPaymentPage> with TickerProviderSt
 
                   SizedBox(height: _isMobile ? 16 : 24),
 
-                  // Método de pago
-                  _buildCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 24,
-                              height: 24,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF3483FA),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(
-                                Icons.payment,
-                                color: Colors.white,
-                                size: 14,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Text(
-                              'Pago',
-                              style: TextStyle(
-                                fontSize: _titleFontSize,
-                                fontWeight: FontWeight.w600,
-                                color: const Color(0xFF333333),
-                              ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: _isMobile ? 16 : 20),
-                        Container(
-                          padding: EdgeInsets.all(_isMobile ? 16 : 20),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF8F9FA),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: const Color(0xFFE5E5E5)),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: _isMobile ? 40 : 48,
-                                height: _isMobile ? 28 : 32,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF00D4FF),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Icon(
-                                  Icons.credit_card,
-                                  color: Colors.white,
-                                  size: _isMobile ? 16 : 20,
-                                ),
-                              ),
-                              SizedBox(width: _isMobile ? 12 : 16),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Bold',
-                                    style: TextStyle(
-                                      fontSize: _fontSize + 1,
-                                      fontWeight: FontWeight.w600,
-                                      color: const Color(0xFF333333),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    'Tarjeta de crédito o débito',
-                                    style: TextStyle(
-                                      fontSize: _fontSize - 1,
-                                      color: const Color(0xFF666666),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+
 
                   SizedBox(height: _isMobile ? 32 : 40),
                 ],

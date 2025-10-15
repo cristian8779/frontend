@@ -7,6 +7,12 @@ import 'package:provider/provider.dart';
 import '../../providers/producto_admin_provider.dart';
 import 'gestionar_variaciones_screen.dart';
 
+// Importar estilos
+import 'styles/crear_producto/colors.dart';
+import 'styles/crear_producto/text_styles.dart';
+import 'styles/crear_producto/decorations.dart';
+import 'styles/crear_producto/dimensions.dart';
+
 // Clase para formatear el precio en pesos colombianos
 class ColombiaCurrencyInputFormatter extends TextInputFormatter {
   @override
@@ -18,17 +24,13 @@ class ColombiaCurrencyInputFormatter extends TextInputFormatter {
       return newValue;
     }
 
-    // Extraer solo los números
     String numbersOnly = newValue.text.replaceAll(RegExp(r'[^\d]'), '');
     
     if (numbersOnly.isEmpty) {
       return const TextEditingValue(text: '');
     }
 
-    // Convertir a entero para formatear
     int value = int.parse(numbersOnly);
-    
-    // Formatear con puntos como separadores de miles
     String formatted = _formatCurrency(value);
     
     return TextEditingValue(
@@ -38,7 +40,6 @@ class ColombiaCurrencyInputFormatter extends TextInputFormatter {
   }
 
   String _formatCurrency(int value) {
-    // Formatear el número con puntos como separadores de miles
     String valueStr = value.toString();
     String result = '';
     
@@ -54,7 +55,7 @@ class ColombiaCurrencyInputFormatter extends TextInputFormatter {
 }
 
 class CrearProductoScreen extends StatefulWidget {
-  final String? categoryId; // Parameter to accept category ID
+  final String? categoryId;
 
   const CrearProductoScreen({super.key, this.categoryId});
 
@@ -75,7 +76,6 @@ class _CrearProductoScreenState extends State<CrearProductoScreen> {
   File? imagenSeleccionada;
 
   final List<String> subcategorias = ['Adulto', 'Niño'];
-
   final ColombiaCurrencyInputFormatter _currencyFormatter = ColombiaCurrencyInputFormatter();
 
   bool _showFab = false;
@@ -101,12 +101,10 @@ class _CrearProductoScreenState extends State<CrearProductoScreen> {
   Future<void> _inicializarProvider() async {
     final provider = context.read<ProductoProvider>();
     
-    // Solo inicializar si no hay categorías cargadas
     if (provider.categorias.isEmpty) {
       await provider.inicializar();
     }
 
-    // Preseleccionar categoría si se pasó como parámetro
     if (widget.categoryId != null && provider.categorias.isNotEmpty) {
       try {
         categoriaSeleccionada = provider.categorias.firstWhere(
@@ -119,11 +117,9 @@ class _CrearProductoScreenState extends State<CrearProductoScreen> {
     }
   }
 
-  // Función para extraer el valor numérico del precio formateado
   double _extractPriceValue(String formattedPrice) {
     if (formattedPrice.isEmpty) return 0.0;
     
-    // Remover el símbolo de peso, espacios y puntos
     String numbersOnly = formattedPrice
         .replaceAll('\$', '')
         .replaceAll(' ', '')
@@ -159,83 +155,75 @@ class _CrearProductoScreenState extends State<CrearProductoScreen> {
             Icon(
               isError ? Icons.error_outline : Icons.check_circle_outline,
               color: Colors.white,
-              size: 20,
+              size: CrearProductoDimensions.iconMedium,
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: CrearProductoDimensions.spacingMedium),
             Expanded(
-              child: Text(
-                message,
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-              ),
+              child: Text(message, style: CrearProductoTextStyles.snackBar),
             ),
           ],
         ),
-        backgroundColor: isError ? const Color(0xFFE53E3E) : const Color(0xFF38A169),
+        backgroundColor: isError ? CrearProductoColors.errorDark : CrearProductoColors.success,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
+        shape: CrearProductoDecorations.snackBarShape,
+        margin: CrearProductoDimensions.snackBarMargin,
         elevation: 8,
         duration: Duration(seconds: isError ? 4 : 3),
       ),
     );
   }
 
- // Función corregida para guardarProducto en CrearProductoScreen
+  Future<void> guardarProducto() async {
+    if (!_formKey.currentState!.validate()) return;
 
-Future<void> guardarProducto() async {
-  if (!_formKey.currentState!.validate()) return;
+    if (imagenSeleccionada == null || categoriaSeleccionada == null) {
+      _showSnackBar('Por favor, completa todos los campos requeridos.', isError: true);
+      return;
+    }
 
-  if (imagenSeleccionada == null || categoriaSeleccionada == null) {
-    _showSnackBar('Por favor, completa todos los campos requeridos.', isError: true);
-    return;
-  }
+    final provider = context.read<ProductoProvider>();
+    final int? stockGeneral = int.tryParse(stockController.text.trim());
+    final double precioValue = _extractPriceValue(precioController.text);
 
-  final provider = context.read<ProductoProvider>();
-  final int? stockGeneral = int.tryParse(stockController.text.trim());
-  final double precioValue = _extractPriceValue(precioController.text);
+    try {
+      final exito = await provider.crearProducto(
+        nombre: nombreController.text.trim(),
+        descripcion: descripcionController.text.trim(),
+        precio: precioValue,
+        categoria: categoriaSeleccionada!['_id'],
+        subcategoria: subcategoriaSeleccionada ?? '',
+        stock: stockGeneral ?? 0,
+        disponible: disponible,
+        estado: 'activo',
+        imagenLocal: imagenSeleccionada!,
+      );
 
-  try {
-    final exito = await provider.crearProducto(
-      nombre: nombreController.text.trim(),
-      descripcion: descripcionController.text.trim(),
-      precio: precioValue,
-      categoria: categoriaSeleccionada!['_id'],
-      subcategoria: subcategoriaSeleccionada ?? '',
-      stock: stockGeneral ?? 0,
-      disponible: disponible,
-      estado: 'activo',
-      imagenLocal: imagenSeleccionada!,
-    );
-
-    if (mounted) {
-      if (exito) {
-        _showSnackBar('¡Producto creado exitosamente!');
-        
-        // ✅ CORREGIDO: Forzar actualización del provider
-        debugPrint('🔄 Refrescando provider después de crear producto');
-        await provider.refrescar();
-        
-        // Pequeña pausa para mostrar el mensaje de éxito
-        await Future.delayed(const Duration(milliseconds: 1500));
-        
-        // ✅ CORREGIDO: Pop con resultado true para notificar éxito
-        if (mounted) {
-          debugPrint('✅ Producto creado exitosamente, regresando con resultado true');
-          Navigator.of(context).pop(true); // ← Esto notifica que se creó un producto
+      if (mounted) {
+        if (exito) {
+          _showSnackBar('¡Producto creado exitosamente!');
+          
+          debugPrint('🔄 Refrescando provider después de crear producto');
+          await provider.refrescar();
+          
+          await Future.delayed(const Duration(milliseconds: 1500));
+          
+          if (mounted) {
+            debugPrint('✅ Producto creado exitosamente, regresando con resultado true');
+            Navigator.of(context).pop(true);
+          }
+        } else {
+          _showSnackBar(
+            provider.errorMessage ?? 'Error al crear producto',
+            isError: true
+          );
         }
-      } else {
-        _showSnackBar(
-          provider.errorMessage ?? 'Error al crear producto',
-          isError: true
-        );
+      }
+    } catch (e) {
+      if (mounted) {
+        _showSnackBar('Error al crear producto: ${e.toString()}', isError: true);
       }
     }
-  } catch (e) {
-    if (mounted) {
-      _showSnackBar('Error al crear producto: ${e.toString()}', isError: true);
-    }
   }
-}
 
   void _resetForm() {
     nombreController.clear();
@@ -252,39 +240,28 @@ Future<void> guardarProducto() async {
 
   Widget _buildSectionHeader(String title, IconData icon) {
     return Container(
-      margin: const EdgeInsets.only(top: 32, bottom: 16),
+      margin: CrearProductoDimensions.sectionHeaderMargin,
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF6366F1).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
+            padding: CrearProductoDimensions.iconPadding,
+            decoration: CrearProductoDecorations.sectionIconContainer,
             child: Icon(
               icon,
-              color: const Color(0xFF6366F1),
-              size: 20,
+              color: CrearProductoColors.primary,
+              size: CrearProductoDimensions.iconMedium,
             ),
           ),
-          const SizedBox(width: 12),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF1F2937),
-              letterSpacing: -0.5,
-            ),
-          ),
-          const SizedBox(width: 12),
+          SizedBox(width: CrearProductoDimensions.spacingMedium),
+          Text(title, style: CrearProductoTextStyles.sectionHeader),
+          SizedBox(width: CrearProductoDimensions.spacingMedium),
           Expanded(
             child: Container(
               height: 1,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    const Color(0xFF6366F1).withOpacity(0.3),
+                    CrearProductoColors.primaryOpacity(0.3),
                     Colors.transparent,
                   ],
                 ),
@@ -307,28 +284,18 @@ Future<void> guardarProducto() async {
     List<TextInputFormatter>? inputFormatters,
   }) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
+      margin: EdgeInsets.only(bottom: CrearProductoDimensions.fieldMarginBottom),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF374151),
-                ),
-              ),
+              Text(label, style: CrearProductoTextStyles.label),
               if (obligatorio)
-                const Text(
-                  ' *',
-                  style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w600),
-                ),
+                Text(' *', style: CrearProductoTextStyles.labelRequired),
             ],
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: CrearProductoDimensions.spacingSmall),
           TextFormField(
             controller: controller,
             keyboardType: tipo,
@@ -338,7 +305,6 @@ Future<void> guardarProducto() async {
               if (obligatorio && (value == null || value.trim().isEmpty)) {
                 return 'Este campo es obligatorio';
               }
-              // Validación especial para el precio
               if (label == 'Precio' && value != null && value.isNotEmpty) {
                 double precio = _extractPriceValue(value);
                 if (precio <= 0) {
@@ -347,37 +313,9 @@ Future<void> guardarProducto() async {
               }
               return null;
             },
-            decoration: InputDecoration(
+            decoration: CrearProductoDecorations.inputDecoration(
               hintText: hint,
-              prefixIcon: icon != null
-                  ? Padding(
-                      padding: const EdgeInsets.only(left: 16, right: 12),
-                      child: Icon(icon, color: const Color(0xFF9CA3AF), size: 20),
-                    )
-                  : null,
-              filled: true,
-              fillColor: Colors.white,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: const Color(0xFFE5E7EB)),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: const Color(0xFFE5E7EB)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFF6366F1), width: 2),
-              ),
-              errorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFFEF4444)),
-              ),
-              focusedErrorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFFEF4444), width: 2),
-              ),
+              icon: icon,
             ),
           ),
         ],
@@ -395,56 +333,26 @@ Future<void> guardarProducto() async {
     String? hint,
   }) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
+      margin: EdgeInsets.only(bottom: CrearProductoDimensions.fieldMarginBottom),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF374151),
-                ),
-              ),
+              Text(label, style: CrearProductoTextStyles.label),
               if (obligatorio)
-                const Text(
-                  ' *',
-                  style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w600),
-                ),
+                Text(' *', style: CrearProductoTextStyles.labelRequired),
             ],
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: CrearProductoDimensions.spacingSmall),
           DropdownButtonFormField<T>(
             value: value,
             items: items,
             onChanged: onChanged,
             validator: (val) => obligatorio && val == null ? 'Campo obligatorio' : null,
-            decoration: InputDecoration(
+            decoration: CrearProductoDecorations.inputDecoration(
               hintText: hint,
-              prefixIcon: icon != null
-                  ? Padding(
-                      padding: const EdgeInsets.only(left: 16, right: 12),
-                      child: Icon(icon, color: const Color(0xFF9CA3AF), size: 20),
-                    )
-                  : null,
-              filled: true,
-              fillColor: Colors.white,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: const Color(0xFFE5E7EB)),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: const Color(0xFFE5E7EB)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFF6366F1), width: 2),
-              ),
+              icon: icon,
             ),
           ),
         ],
@@ -454,52 +362,30 @@ Future<void> guardarProducto() async {
 
   Widget _buildImageUploader() {
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
+      margin: EdgeInsets.only(bottom: CrearProductoDimensions.fieldMarginBottom),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Text(
-                'Imagen del producto',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF374151),
-                ),
-              ),
-              const Text(
-                ' *',
-                style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w600),
-              ),
+              Text('Imagen del producto', style: CrearProductoTextStyles.label),
+              Text(' *', style: CrearProductoTextStyles.labelRequired),
             ],
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: CrearProductoDimensions.spacingSmall),
           GestureDetector(
             onTap: seleccionarImagen,
             child: Container(
-              height: 200,
+              height: CrearProductoDimensions.imageUploadHeight,
               width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: imagenSeleccionada != null ? const Color(0xFF6366F1) : const Color(0xFFE5E7EB),
-                  width: imagenSeleccionada != null ? 2 : 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+              decoration: CrearProductoDecorations.imageContainer(
+                hasImage: imagenSeleccionada != null,
               ),
               child: imagenSeleccionada != null
                   ? Stack(
                       children: [
                         ClipRRect(
-                          borderRadius: BorderRadius.circular(15),
+                          borderRadius: BorderRadius.circular(CrearProductoDimensions.radiusLarge - 1),
                           child: Image.file(
                             imagenSeleccionada!,
                             fit: BoxFit.cover,
@@ -508,18 +394,15 @@ Future<void> guardarProducto() async {
                           ),
                         ),
                         Positioned(
-                          top: 12,
-                          right: 12,
+                          top: CrearProductoDimensions.imageEditButtonTop,
+                          right: CrearProductoDimensions.imageEditButtonRight,
                           child: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.7),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: const Icon(
+                            padding: CrearProductoDimensions.iconPadding,
+                            decoration: CrearProductoDecorations.imageEditButton,
+                            child: Icon(
                               Icons.edit,
                               color: Colors.white,
-                              size: 16,
+                              size: CrearProductoDimensions.iconSmall,
                             ),
                           ),
                         ),
@@ -529,34 +412,21 @@ Future<void> guardarProducto() async {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF6366F1).withOpacity(0.1),
-                            shape: BoxShape.circle,
-                          ),
+                          padding: CrearProductoDimensions.iconPaddingLarge,
+                          decoration: CrearProductoDecorations.uploadCircle,
                           child: Icon(
                             Icons.cloud_upload_outlined,
-                            size: 40,
-                            color: const Color(0xFF6366F1),
+                            size: CrearProductoDimensions.iconXLarge,
+                            color: CrearProductoColors.primary,
                           ),
                         ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'Seleccionar imagen',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF374151),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
+                        SizedBox(height: CrearProductoDimensions.spacingLarge),
+                        Text('Seleccionar imagen', style: CrearProductoTextStyles.imageUploadTitle),
+                        SizedBox(height: CrearProductoDimensions.spacingXSmall),
                         Text(
                           'PNG, JPG hasta 5MB\n📸 Foto clara y bien iluminada',
                           textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: const Color(0xFF6B7280),
-                          ),
+                          style: CrearProductoTextStyles.imageUploadHint,
                         ),
                       ],
                     ),
@@ -571,63 +441,55 @@ Future<void> guardarProducto() async {
     return Consumer<ProductoProvider>(
       builder: (context, provider, child) {
         return Container(
-          margin: const EdgeInsets.only(bottom: 20),
+          margin: EdgeInsets.only(bottom: CrearProductoDimensions.fieldMarginBottom),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  const Text(
-                    'Categoría',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF374151),
-                    ),
-                  ),
-                  const Text(
-                    ' *',
-                    style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w600),
-                  ),
+                  Text('Categoría', style: CrearProductoTextStyles.label),
+                  Text(' *', style: CrearProductoTextStyles.labelRequired),
                 ],
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: CrearProductoDimensions.spacingSmall),
               Container(
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                  borderRadius: BorderRadius.circular(CrearProductoDimensions.radiusMedium),
+                  border: Border.all(color: CrearProductoColors.border),
                 ),
                 child: provider.isLoading && provider.categorias.isEmpty
                     ? Container(
-                        padding: const EdgeInsets.all(20),
-                        child: const Row(
+                        padding: EdgeInsets.all(CrearProductoDimensions.spacingXLarge),
+                        child: Row(
                           children: [
                             SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                              width: CrearProductoDimensions.progressIndicatorSize,
+                              height: CrearProductoDimensions.progressIndicatorSize,
+                              child: CircularProgressIndicator(
+                                strokeWidth: CrearProductoDimensions.progressIndicatorStroke,
+                              ),
                             ),
-                            SizedBox(width: 16),
-                            Text('Cargando categorías...'),
+                            SizedBox(width: CrearProductoDimensions.spacingLarge),
+                            const Text('Cargando categorías...'),
                           ],
                         ),
                       )
                     : provider.hasError && provider.categorias.isEmpty
                         ? Container(
-                            padding: const EdgeInsets.all(20),
+                            padding: EdgeInsets.all(CrearProductoDimensions.spacingXLarge),
                             child: Column(
                               children: [
                                 Row(
                                   children: [
-                                    const Icon(Icons.error_outline, color: Color(0xFFEF4444)),
-                                    const SizedBox(width: 12),
+                                    const Icon(Icons.error_outline, color: CrearProductoColors.error),
+                                    SizedBox(width: CrearProductoDimensions.spacingMedium),
                                     Expanded(
                                       child: Text(provider.errorMessage ?? 'Error al cargar categorías')
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 12),
+                                SizedBox(height: CrearProductoDimensions.spacingMedium),
                                 SizedBox(
                                   width: double.infinity,
                                   child: TextButton(
@@ -640,19 +502,14 @@ Future<void> guardarProducto() async {
                           )
                         : DropdownButtonFormField<Map<String, dynamic>>(
                             value: categoriaSeleccionada,
-                            decoration: InputDecoration(
-                              prefixIcon: const Padding(
-                                padding: EdgeInsets.only(left: 16, right: 12),
-                                child: Icon(Icons.category_outlined, color: Color(0xFF9CA3AF), size: 20),
-                              ),
+                            decoration: CrearProductoDecorations.inputDecoration(
                               hintText: 'Seleccionar categoría',
+                              icon: Icons.category_outlined,
+                            ).copyWith(
                               border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(CrearProductoDimensions.radiusMedium),
                                 borderSide: BorderSide.none,
                               ),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                              filled: true,
-                              fillColor: Colors.white,
                             ),
                             items: provider.categorias.map((cat) {
                               return DropdownMenuItem<Map<String, dynamic>>(
@@ -681,50 +538,35 @@ Future<void> guardarProducto() async {
     return Consumer<ProductoProvider>(
       builder: (context, provider, child) {
         return Container(
-          margin: const EdgeInsets.only(top: 32, bottom: 20),
+          margin: CrearProductoDimensions.buttonMargin,
           child: SizedBox(
             width: double.infinity,
-            height: 56,
+            height: CrearProductoDimensions.buttonHeight,
             child: ElevatedButton(
               onPressed: provider.isCreating ? null : guardarProducto,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6366F1),
-                foregroundColor: Colors.white,
-                disabledBackgroundColor: const Color(0xFF9CA3AF),
-                elevation: provider.isCreating ? 0 : 8,
-                shadowColor: const Color(0xFF6366F1).withOpacity(0.4),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              ),
+              style: CrearProductoDecorations.primaryButton(isLoading: provider.isCreating),
               child: provider.isCreating
                   ? Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         SizedBox(
-                          width: 20,
-                          height: 20,
+                          width: CrearProductoDimensions.progressIndicatorSize,
+                          height: CrearProductoDimensions.progressIndicatorSize,
                           child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
+                            strokeWidth: CrearProductoDimensions.progressIndicatorStrokeButton,
                             valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                           ),
                         ),
-                        const SizedBox(width: 16),
-                        const Text(
-                          'Creando producto...',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                        ),
+                        SizedBox(width: CrearProductoDimensions.spacingLarge),
+                        Text('Creando producto...', style: CrearProductoTextStyles.buttonLoading),
                       ],
                     )
                   : Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.add_circle_outline, size: 22),
-                        const SizedBox(width: 12),
-                        const Text(
-                          'Crear Producto',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                        ),
+                        Icon(Icons.add_circle_outline, size: CrearProductoDimensions.iconLarge),
+                        SizedBox(width: CrearProductoDimensions.spacingMedium),
+                        Text('Crear Producto', style: CrearProductoTextStyles.button),
                       ],
                     ),
             ),
@@ -737,32 +579,25 @@ Future<void> guardarProducto() async {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: CrearProductoColors.background,
       appBar: AppBar(
-        title: const Text(
-          'Nuevo Producto',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 20,
-            letterSpacing: -0.5,
-          ),
-        ),
+        title: Text('Nuevo Producto', style: CrearProductoTextStyles.appBarTitle),
         centerTitle: true,
         backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF1F2937),
+        foregroundColor: CrearProductoColors.textPrimary,
         elevation: 0,
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
+          preferredSize: Size.fromHeight(CrearProductoDimensions.appBarBorderHeight),
           child: Container(
-            height: 1,
-            color: const Color(0xFFE5E7EB),
+            height: CrearProductoDimensions.appBarBorderHeight,
+            color: CrearProductoColors.border,
           ),
         ),
       ),
       body: Form(
         key: _formKey,
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+          padding: EdgeInsets.all(CrearProductoDimensions.screenPadding),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -779,7 +614,7 @@ Future<void> guardarProducto() async {
                 controller: descripcionController,
                 icon: Icons.description_outlined,
                 maxLines: 3,
-                hint: 'Describe las características del producto...',
+                hint: 'Debes ingresar una descripción del producto de al menos 15 caracteres.',
               ),
               _buildCategoriaDropdown(),
               _buildDropdownField<String>(
@@ -828,12 +663,9 @@ Future<void> guardarProducto() async {
                   ),
                 );
               },
-              label: const Text(
-                'Añadir Variaciones',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
+              label: Text('Añadir Variaciones', style: CrearProductoTextStyles.button),
               icon: const Icon(Icons.tune),
-              backgroundColor: const Color(0xFF10B981),
+              backgroundColor: CrearProductoColors.successAlt,
               foregroundColor: Colors.white,
               elevation: 8,
             )

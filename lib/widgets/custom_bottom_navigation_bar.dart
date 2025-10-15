@@ -4,7 +4,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/bottom_nav_provider.dart';
 
 class CustomBottomNavigationBar extends StatelessWidget {
-  final Function(int)? onTap; // 🔹 Función que llama la pantalla al tocar
+  final Function(int)? onTap;
 
   const CustomBottomNavigationBar({super.key, this.onTap});
 
@@ -216,7 +216,7 @@ class CustomBottomNavigationBar extends StatelessWidget {
         child: GestureDetector(
           onTap: () {
             bottomNavProvider.setIndex(2);
-            if (onTap != null) onTap!(2); // 🔹 Llama a la pantalla
+            if (onTap != null) onTap!(2);
           },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 250),
@@ -274,18 +274,23 @@ class CustomBottomNavigationBar extends StatelessWidget {
   }) {
     final bottomNavProvider = context.read<BottomNavProvider>();
     final isActive = item.index == currentIndex;
+    
+    // 🔴 Solo "Inicio" (index 0) se colorea de rojo
+    final bool isHomeItem = item.index == 0;
+    final Color activeColor = isHomeItem ? const Color(0xFFE53E3E) : const Color(0xFF757575);
+    final Color inactiveColor = const Color(0xFF757575);
 
     return Flexible(
       child: GestureDetector(
         onTap: () {
           bottomNavProvider.setIndex(item.index);
-          if (onTap != null) onTap!(item.index); // 🔹 Llama a la pantalla
+          if (onTap != null) onTap!(item.index);
         },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           padding: dimensions.itemPadding,
           decoration: BoxDecoration(
-            color: isActive ? const Color(0xFFE53E3E).withOpacity(0.08) : Colors.transparent,
+            color: Colors.transparent,
             borderRadius: BorderRadius.circular(dimensions.itemBorderRadius),
           ),
           child: Column(
@@ -293,7 +298,7 @@ class CustomBottomNavigationBar extends StatelessWidget {
             children: [
               Icon(
                 isActive ? item.activeIcon : item.icon,
-                color: isActive ? const Color(0xFFE53E3E) : const Color(0xFF757575),
+                color: isActive ? activeColor : inactiveColor,
                 size: isActive ? dimensions.activeIconSize : dimensions.iconSize,
               ),
               SizedBox(height: dimensions.spaceBetween),
@@ -305,7 +310,7 @@ class CustomBottomNavigationBar extends StatelessWidget {
                 style: TextStyle(
                   fontSize: isActive ? dimensions.activeFontSize : dimensions.fontSize,
                   fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
-                  color: isActive ? const Color(0xFFE53E3E) : const Color(0xFF757575),
+                  color: isActive ? activeColor : inactiveColor,
                 ),
               ),
             ],

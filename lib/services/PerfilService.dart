@@ -21,28 +21,103 @@ class PerfilService {
   String? get message => _errorMessage;
 
   // ==========================
-  // Logging helpers
+  // Logging helpers - SEGUROS
   // ==========================
   static const String _tag = '📘 PerfilService';
+  static const bool _isProduction = bool.fromEnvironment('dart.vm.product');
+  
   String _newRid() => DateTime.now().microsecondsSinceEpoch.toString();
+  
   void _log(String msg, {String? rid}) {
+    if (_isProduction) return; // No loggear en producción
     final ts = DateTime.now().toIso8601String();
     print('$_tag${rid != null ? ' [$rid]' : ''} $ts — $msg');
   }
 
   void _logLarge(String label, String text, {String? rid, int chunk = 800}) {
+    if (_isProduction) return; // No loggear en producción
+    
     if (text.isEmpty) {
       _log('$label: <empty>', rid: rid);
       return;
     }
-    for (var i = 0; i < text.length; i += chunk) {
-      final end = (i + chunk < text.length) ? i + chunk : text.length;
-      _log('$label [${i.toString().padLeft(4)}..${(end - 1).toString().padLeft(4)}]: ${text.substring(i, end)}', rid: rid);
+    
+    // Sanitizar el texto antes de loggearlo
+    final sanitized = _sanitizeLog(text);
+    
+    for (var i = 0; i < sanitized.length; i += chunk) {
+      final end = (i + chunk < sanitized.length) ? i + chunk : sanitized.length;
+      _log('$label [${i.toString().padLeft(4)}..${(end - 1).toString().padLeft(4)}]: ${sanitized.substring(i, end)}', rid: rid);
     }
+  }
+
+  /// Sanitiza información sensible de los logs
+  String _sanitizeLog(String text) {
+    try {
+      final data = jsonDecode(text);
+      if (data is Map) {
+        return jsonEncode(_sanitizeMap(data));
+      }
+      return text;
+    } catch (e) {
+      // Si no es JSON, buscar y ocultar patrones sensibles
+      return _maskSensitivePatterns(text);
+    }
+  }
+
+  /// Oculta información sensible en mapas
+  Map<String, dynamic> _sanitizeMap(Map data) {
+    final sanitized = <String, dynamic>{};
+    final sensitiveKeys = [
+      'credenciales', 'password', 'token', 'accessToken', 
+      'refreshToken', 'telefono', 'phone', 'email', 
+      'direccion', 'address', 'clave', 'pin'
+    ];
+    
+    data.forEach((key, value) {
+      if (sensitiveKeys.any((k) => key.toString().toLowerCase().contains(k))) {
+        sanitized[key] = '***OCULTO***';
+      } else if (value is Map) {
+        sanitized[key] = _sanitizeMap(value);
+      } else if (value is List) {
+        sanitized[key] = value.map((item) => 
+          item is Map ? _sanitizeMap(item) : item
+        ).toList();
+      } else {
+        sanitized[key] = value;
+      }
+    });
+    
+    return sanitized;
+  }
+
+  /// Enmascara patrones sensibles en texto plano
+  String _maskSensitivePatterns(String text) {
+    // Ocultar números de teléfono (ej: +57 300 123 4567)
+    text = text.replaceAllMapped(
+      RegExp(r'\+?\d{1,3}[\s-]?\d{3}[\s-]?\d{3}[\s-]?\d{4}'),
+      (match) => '***TELEFONO***'
+    );
+    
+    // Ocultar emails
+    text = text.replaceAllMapped(
+      RegExp(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'),
+      (match) => '***EMAIL***'
+    );
+    
+    // Ocultar tokens JWT (strings largos base64)
+    text = text.replaceAllMapped(
+      RegExp(r'[A-Za-z0-9-_]{20,}\.[A-Za-z0-9-_]{20,}\.[A-Za-z0-9-_]{20,}'),
+      (match) => '***TOKEN***'
+    );
+    
+    return text;
   }
 
   String _safeTokenPreview(String? token) {
     if (token == null) return 'null';
+    if (_isProduction) return '***OCULTO***';
+    
     final len = token.length;
     final shown = math.min(len, 12);
     return '${token.substring(0, shown)}…($len chars)';
@@ -54,11 +129,13 @@ class PerfilService {
         if (token != null) 'Authorization': 'Bearer $token',
       };
 
-  // Pretty print headers (only a few keys)
+  // Pretty print headers (solo keys seguras)
   void _logHeaders(Map<String, String> headers, {String? rid}) {
-    final keys = ['content-type', 'cf-ray', 'x-powered-by', 'server', 'date'];
+    if (_isProduction) return;
+    
+    final safeKeys = ['content-type', 'cf-ray', 'x-powered-by', 'server', 'date'];
     final filtered = headers.entries
-        .where((e) => keys.contains(e.key.toLowerCase()))
+        .where((e) => safeKeys.contains(e.key.toLowerCase()))
         .map((e) => '${e.key}: ${e.value}')
         .join(', ');
     _log('Headers: {$filtered}', rid: rid);
@@ -95,9 +172,11 @@ class PerfilService {
   }
 
   // ==========================
-  // JWT debug (usa base64Url)
+  // JWT debug (SEGURO - solo en desarrollo)
   // ==========================
   void _debugToken(String? token, {String? rid}) {
+    if (_isProduction) return; // NUNCA en producción
+    
     if (token == null) {
       _log('❌ No hay token', rid: rid);
       return;
@@ -120,10 +199,10 @@ class PerfilService {
   }
 
   // ==========================
-  // PERFIL - Métodos corregidos según el controller
+  // PERFIL - Métodos con logs seguros
   // ==========================
   
-  /// Crear perfil inicial - llamado desde el microservicio de autenticación
+  /// Crear perfil inicial
   Future<bool> crearPerfil(String nombre, String credenciales, {String? imagenPerfil}) async {
     _errorMessage = null;
     final rid = _newRid();
@@ -137,7 +216,7 @@ class PerfilService {
     try {
       final url = Uri.parse(baseUrl);
       _log("📤 POST $url", rid: rid);
-      _log("Payload: {nombre: '${nombre.trim()}', credenciales: '$credenciales', imagenPerfil: '${imagenPerfil ?? ''}'}", rid: rid);
+      _log("Payload: {nombre: '${nombre.trim()}', credenciales: '***OCULTO***', imagenPerfil: '${imagenPerfil != null ? '***PRESENTE***' : ''}'}", rid: rid);
 
       final response = await http
           .post(url, headers: _jsonHeaders(), body: jsonEncode({
@@ -173,13 +252,12 @@ class PerfilService {
     }
   }
 
-  /// Obtener perfil del usuario autenticado (incluye credenciales del microservicio auth)
+  /// Obtener perfil del usuario autenticado
   Future<Map<String, dynamic>?> obtenerPerfil() async {
     _errorMessage = null;
     final rid = _newRid();
 
     if (!await _tieneConexion()) {
-
       _errorMessage = 'sin_conexion';
       _log('🌐 Sin conexión', rid: rid);
       return null;
@@ -250,78 +328,75 @@ class PerfilService {
     }
   }
 
-  /// El endpoint cambió de /datos a /
- /// Actualizar datos básicos del perfil (nombre, teléfono, dirección)
-Future<bool> actualizarPerfil({String? nombre, Map<String, dynamic>? direccion, String? telefono}) async {
-  _errorMessage = null;
-  final rid = _newRid();
+  /// Actualizar datos básicos del perfil
+  Future<bool> actualizarPerfil({String? nombre, Map<String, dynamic>? direccion, String? telefono}) async {
+    _errorMessage = null;
+    final rid = _newRid();
 
-  if (!await _tieneConexion()) {
-    _errorMessage = 'sin_conexion';
-    _log('🌐 Sin conexión', rid: rid);
-    return false;
-  }
-
-  try {
-    final token = await _getToken(rid: rid);
-    if (token == null) {
-      _errorMessage = 'no_autorizado';
-      _log('🔒 No hay token de autenticación', rid: rid);
+    if (!await _tieneConexion()) {
+      _errorMessage = 'sin_conexion';
+      _log('🌐 Sin conexión', rid: rid);
       return false;
     }
 
-    // 👉 Ahora sí coincide con el backend (/perfil/datos)
-    final url = Uri.parse('$baseUrl/datos');
-    _log('📤 PUT $url', rid: rid);
-    
-    final payload = <String, dynamic>{
-      if (nombre != null) 'nombre': nombre.trim(),
-      if (direccion != null) 'direccion': direccion,
-      if (telefono != null) 'telefono': telefono.trim(),
-    };
-    
-    if (payload.isEmpty) {
-      _errorMessage = 'No hay datos para actualizar';
-      _log('⚠️ Payload vacío', rid: rid);
+    try {
+      final token = await _getToken(rid: rid);
+      if (token == null) {
+        _errorMessage = 'no_autorizado';
+        _log('🔒 No hay token de autenticación', rid: rid);
+        return false;
+      }
+
+      final url = Uri.parse('$baseUrl/datos');
+      _log('📤 PUT $url', rid: rid);
+      
+      final payload = <String, dynamic>{
+        if (nombre != null) 'nombre': nombre.trim(),
+        if (direccion != null) 'direccion': direccion,
+        if (telefono != null) 'telefono': telefono.trim(),
+      };
+      
+      if (payload.isEmpty) {
+        _errorMessage = 'No hay datos para actualizar';
+        _log('⚠️ Payload vacío', rid: rid);
+        return false;
+      }
+      
+      // Log seguro del payload
+      _log('Payload: ${_sanitizeMap(payload)}', rid: rid);
+
+      final response = await http
+          .put(url, headers: _jsonHeaders(token: token), body: jsonEncode(payload))
+          .timeout(_timeoutShort);
+
+      _log('📥 Status: ${response.statusCode}', rid: rid);
+      _logLarge('Body', response.body, rid: rid);
+
+      if (response.statusCode == 200) return true;
+
+      final data = _tryJson(response.body, rid: rid);
+      _errorMessage = (response.statusCode == 401)
+          ? 'no_autorizado'
+          : (response.statusCode == 404)
+            ? 'Perfil no encontrado'
+            : (data?['mensaje']?.toString() ?? 'Error al actualizar perfil.');
+      return false;
+    } on TimeoutException {
+      _errorMessage = 'timeout';
+      _log('⏳ Timeout actualizando perfil', rid: rid);
+      return false;
+    } on SocketException catch (e) {
+      _errorMessage = 'sin_conexion';
+      _log('🌐 Error de red actualizando perfil: $e', rid: rid);
+      return false;
+    } catch (e) {
+      _errorMessage = 'Error en actualizar perfil: $e';
+      _log('❌ Error en actualizar perfil: $e', rid: rid);
       return false;
     }
-    
-    _log('Payload: $payload', rid: rid);
-
-    final response = await http
-        .put(url, headers: _jsonHeaders(token: token), body: jsonEncode(payload))
-        .timeout(_timeoutShort);
-
-    _log('📥 Status: ${response.statusCode}', rid: rid);
-    _logLarge('Body', response.body, rid: rid);
-
-    if (response.statusCode == 200) return true;
-
-    final data = _tryJson(response.body, rid: rid);
-    _errorMessage = (response.statusCode == 401)
-        ? 'no_autorizado'
-        : (response.statusCode == 404)
-          ? 'Perfil no encontrado'
-          : (data?['mensaje']?.toString() ?? 'Error al actualizar perfil.');
-    return false;
-  } on TimeoutException {
-    _errorMessage = 'timeout';
-    _log('⏳ Timeout actualizando perfil', rid: rid);
-    return false;
-  } on SocketException catch (e) {
-    _errorMessage = 'sin_conexion';
-    _log('🌐 Error de red actualizando perfil: $e', rid: rid);
-    return false;
-  } catch (e) {
-    _errorMessage = 'Error en actualizar perfil: $e';
-    _log('❌ Error en actualizar perfil: $e', rid: rid);
-    return false;
   }
-}
 
-
-  /// Actualizar imagen de perfil usando multipart
-  /// El endpoint es /perfil/imagen con POST
+  /// Actualizar imagen de perfil
   Future<bool> actualizarImagenPerfil(String filePath) async {
     _errorMessage = null;
     final rid = _newRid();
@@ -341,11 +416,11 @@ Future<bool> actualizarPerfil({String? nombre, Map<String, dynamic>? direccion, 
       }
 
       final url = Uri.parse('$baseUrl/imagen');
-      _log('📤 POST (multipart) $url — file: $filePath', rid: rid);
+      final fileName = filePath.split('/').last;
+      _log('📤 POST (multipart) $url — file: $fileName', rid: rid);
 
       final request = http.MultipartRequest('POST', url);
       request.headers['Authorization'] = 'Bearer $token';
-      // El controller espera el campo 'imagen' (no 'file')
       request.files.add(await http.MultipartFile.fromPath('imagen', filePath));
 
       final streamed = await request.send().timeout(_timeoutLong);
@@ -383,7 +458,6 @@ Future<bool> actualizarPerfil({String? nombre, Map<String, dynamic>? direccion, 
   }
 
   /// Eliminar imagen de perfil
-  /// El endpoint es /perfil/imagen con DELETE
   Future<bool> eliminarImagenPerfil() async {
     _errorMessage = null;
     final rid = _newRid();
@@ -440,7 +514,7 @@ Future<bool> actualizarPerfil({String? nombre, Map<String, dynamic>? direccion, 
   }
 
   // ==========================
-  // USUARIO - Mantienen la misma estructura
+  // USUARIO - Con logs seguros
   // ==========================
   Future<Map<String, dynamic>?> crearUsuario({
     required String nombre,
@@ -459,12 +533,13 @@ Future<bool> actualizarPerfil({String? nombre, Map<String, dynamic>? direccion, 
     }
 
     try {
-      _log("📤 Creando usuario: nombre='${nombre.trim()}', credenciales='${credenciales.trim()}'", rid: rid);
+      _log("📤 Creando usuario: nombre='${nombre.trim()}', credenciales='***OCULTO***'", rid: rid);
       final url = Uri.parse(usuarioBaseUrl);
 
       http.Response response;
       if (imagenPerfilPath != null) {
-        _log('Usando multipart con imagen: $imagenPerfilPath', rid: rid);
+        final fileName = imagenPerfilPath.split('/').last;
+        _log('Usando multipart con imagen: $fileName', rid: rid);
         final request = http.MultipartRequest('POST', url);
         request.fields['nombre'] = nombre.trim();
         request.fields['credenciales'] = credenciales.trim();
@@ -485,7 +560,7 @@ Future<bool> actualizarPerfil({String? nombre, Map<String, dynamic>? direccion, 
           if (telefono != null) 'telefono': telefono.trim(),
         };
         _log('POST $url', rid: rid);
-        _log('Payload: $payload', rid: rid);
+        _log('Payload: ${_sanitizeMap(payload)}', rid: rid);
         response = await http
             .post(url, headers: _jsonHeaders(), body: jsonEncode(payload))
             .timeout(_timeoutShort);
@@ -526,10 +601,13 @@ Future<bool> actualizarPerfil({String? nombre, Map<String, dynamic>? direccion, 
     }
 
     try {
-      final url = Uri.parse('$usuarioBaseUrl/credencial/$credencial');
-      _log('📤 GET $url', rid: rid);
+      final url = Uri.parse('$usuarioBaseUrl/credencial/***OCULTO***');
+      _log('📤 GET ${url.toString().replaceAll(credencial, '***OCULTO***')}', rid: rid);
 
-      final response = await http.get(url, headers: {'Accept': 'application/json'}).timeout(_timeoutShort);
+      final response = await http.get(
+        Uri.parse('$usuarioBaseUrl/credencial/$credencial'), 
+        headers: {'Accept': 'application/json'}
+      ).timeout(_timeoutShort);
 
       _log('📥 Status: ${response.statusCode}', rid: rid);
       _logLarge('Body', response.body, rid: rid);
@@ -632,7 +710,8 @@ Future<bool> actualizarPerfil({String? nombre, Map<String, dynamic>? direccion, 
 
       http.Response response;
       if (imagenPerfilPath != null) {
-        _log('Usando multipart con imagen: $imagenPerfilPath', rid: rid);
+        final fileName = imagenPerfilPath.split('/').last;
+        _log('Usando multipart con imagen: $fileName', rid: rid);
         final request = http.MultipartRequest('PUT', url);
         request.headers['Authorization'] = 'Bearer $token';
         if (nombre != null) request.fields['nombre'] = nombre.trim();
@@ -651,7 +730,7 @@ Future<bool> actualizarPerfil({String? nombre, Map<String, dynamic>? direccion, 
           if (direccion != null) 'direccion': direccion.trim(),
           if (telefono != null) 'telefono': telefono.trim(),
         };
-        _log('Payload: $payload', rid: rid);
+        _log('Payload: ${_sanitizeMap(payload.map((k, v) => MapEntry(k, v)))}', rid: rid);
         response = await http
             .put(url, headers: _jsonHeaders(token: token), body: jsonEncode(payload))
             .timeout(_timeoutShort);

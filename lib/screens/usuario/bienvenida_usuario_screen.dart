@@ -40,7 +40,7 @@ class _BienvenidaUsuarioScreenState extends State<BienvenidaUsuarioScreen> {
   bool _showNoConnectionScreen = false;
   bool _hasCheckedInitialConnection = false;
   bool _isDoingRefresh = false;
-  bool _hasShownInvitationDialog = false; // 🔹 Nueva bandera para controlar el diálogo
+  bool _hasShownInvitationDialog = false;
 
   @override
   void initState() {
@@ -60,7 +60,6 @@ class _BienvenidaUsuarioScreenState extends State<BienvenidaUsuarioScreen> {
     super.dispose();
   }
 
-  // Verificación inicial mejorada
   Future<void> _checkInitialConnection() async {
     if (_hasCheckedInitialConnection) return;
     _hasCheckedInitialConnection = true;
@@ -98,7 +97,6 @@ class _BienvenidaUsuarioScreenState extends State<BienvenidaUsuarioScreen> {
         _showNoConnectionScreen = false;
       });
       
-      // 🔹 Mostrar diálogo de invitación solo una vez y con contexto verificado
       if (!_hasShownInvitationDialog && mounted) {
         _hasShownInvitationDialog = true;
         mostrarInvitacionDialog(context);
@@ -247,7 +245,6 @@ class _BienvenidaUsuarioScreenState extends State<BienvenidaUsuarioScreen> {
           _isDoingRefresh = true;
         });
         
-        // 🔹 Mostrar diálogo solo si no se ha mostrado antes y el contexto está montado
         if (!_hasShownInvitationDialog && mounted) {
           _hasShownInvitationDialog = true;
           mostrarInvitacionDialog(context);
@@ -613,37 +610,35 @@ class _BienvenidaUsuarioScreenState extends State<BienvenidaUsuarioScreen> {
                   physics: const AlwaysScrollableScrollPhysics(),
                   child: Column(
                     children: [
-                      if (!_showNoConnectionScreen)
-                        _buildBannerSection(anuncioProvider),
+                      _buildBannerSection(anuncioProvider),
                       
-                      if (!_showNoConnectionScreen)
-                        CategoriasWidget(
-                          onVerMas: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => TodasCategoriasScreen(),
-                              ),
-                            );
-                          },
-                          onCategoriaSeleccionada: (categoriaId) {
-                            final categoriaProvider = Provider.of<CategoriaProvider>(context, listen: false);
-                            final categoria = categoriaProvider.categorias.firstWhere(
-                              (cat) => cat['_id'] == categoriaId,
-                              orElse: () => {'nombre': 'Categoría'},
-                            );
+                      CategoriasWidget(
+                        onVerMas: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => TodasCategoriasScreen(),
+                            ),
+                          );
+                        },
+                        onCategoriaSeleccionada: (categoriaId) {
+                          final categoriaProvider = Provider.of<CategoriaProvider>(context, listen: false);
+                          final categoria = categoriaProvider.categorias.firstWhere(
+                            (cat) => cat['_id'] == categoriaId,
+                            orElse: () => {'nombre': 'Categoría'},
+                          );
 
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => ProductosPorCategoriaScreen(
-                                  categoriaId: categoriaId,
-                                  categoriaNombre: categoria['nombre'] ?? 'Categoría',
-                                ),
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ProductosPorCategoriaScreen(
+                                categoriaId: categoriaId,
+                                categoriaNombre: categoria['nombre'] ?? 'Categoría',
                               ),
-                            );
-                          },
-                        ),
+                            ),
+                          );
+                        },
+                      ),
                       
                       _buildHomeContent(),
                     ],
@@ -762,8 +757,7 @@ class _BienvenidaUsuarioScreenState extends State<BienvenidaUsuarioScreen> {
            
           const SizedBox(height: 16),
           
-          if (!_showNoConnectionScreen)
-            const ListaProductosWidget(),
+          const ListaProductosWidget(),
         ],
       ),
     );
@@ -785,74 +779,10 @@ class _BienvenidaUsuarioScreenState extends State<BienvenidaUsuarioScreen> {
       return const SizedBox.shrink();
     }
 
-    switch (anuncioProvider.state) {
-      case AnuncioState.loading:
-        if (_isDoingRefresh || !_isConnected) {
-          if (anuncioProvider.anuncios.isNotEmpty) {
-            return const BannerCarousel();
-          }
-          return const SizedBox.shrink();
-        }
-        
-        return Container(
-          height: 180,
-          margin: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade200,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          alignment: Alignment.center,
-          child: const CircularProgressIndicator(),
-        );
-
-      case AnuncioState.error:
-        if (!_isConnected || 
-            _showNoConnectionScreen ||
-            _isDoingRefresh ||
-            (anuncioProvider.error != null && _isErrorDeConexion(anuncioProvider.error!))) {
-          
-          if (anuncioProvider.anuncios.isNotEmpty) {
-            return const BannerCarousel();
-          }
-          
-          return const SizedBox.shrink();
-        }
-        
-        return Container(
-          height: 180,
-          margin: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade100,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey.shade300),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.error_outline, size: 40, color: Colors.red.shade400),
-              const SizedBox(height: 12),
-              Text(
-                "Error al cargar anuncios",
-                style: TextStyle(
-                  color: Colors.red.shade600,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextButton.icon(
-                onPressed: () => anuncioProvider.loadAnuncios(),
-                icon: const Icon(Icons.refresh, color: Colors.red),
-                label: const Text("Reintentar", style: TextStyle(color: Colors.red)),
-              ),
-            ],
-          ),
-        );
-
-      case AnuncioState.empty:
-        return const SizedBox.shrink();
-
-      case AnuncioState.loaded:
-        return const BannerCarousel();
+    if (anuncioProvider.anuncios.isNotEmpty) {
+      return const BannerCarousel();
     }
+
+    return const SizedBox.shrink();
   }
 }

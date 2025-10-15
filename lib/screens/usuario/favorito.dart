@@ -15,8 +15,6 @@ import 'package:provider/provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:another_flushbar/flushbar.dart';
 import 'dart:io';
-import '../../services/Carrito_Service.dart';
-import '../../models/request_models.dart';
 import '../producto/producto_screen.dart';
 
 class FavoritesPage extends StatefulWidget {
@@ -26,7 +24,6 @@ class FavoritesPage extends StatefulWidget {
 
 class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateMixin {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
-  final CarritoService _carritoService = CarritoService();
   
   bool _isLoggedIn = false;
   bool _isCheckingAuth = true;
@@ -386,101 +383,6 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
     }
   }
 
-  Future<void> _agregarAlCarrito(Map<String, dynamic> favorito) async {
-    try {
-      final token = await _secureStorage.read(key: 'accessToken');
-      if (token == null || token.isEmpty) {
-        _mostrarSnackbar(
-          'Debes iniciar sesión para agregar productos al carrito',
-          isSuccess: false,
-          duration: 3
-        );
-        Navigator.pushReplacementNamed(context, '/login');
-        return;
-      }
-
-      final producto = favorito['producto'];
-      final productoId = producto['_id'] ?? producto['id'];
-      final nombre = producto['nombre'] ?? 'Producto';
-      
-      final disponible = producto['disponible'] ?? true;
-      if (!disponible) {
-        _mostrarSnackbar(
-          'Este producto no está disponible actualmente',
-          isSuccess: false,
-          duration: 3
-        );
-        return;
-      }
-
-      _mostrarSnackbar(
-        'Agregando $nombre al carrito...',
-        isSuccess: true,
-        duration: 1
-      );
-
-      final variaciones = producto['variaciones'] as List<dynamic>?;
-      bool agregado = false;
-
-      if (variaciones != null && variaciones.isNotEmpty) {
-        final primeraVariacion = variaciones.first;
-        final variacionId = primeraVariacion['_id'] ?? primeraVariacion['id'];
-        
-        final request = AgregarAlCarritoRequest(
-          productoId: productoId,
-          cantidad: 1,
-          variacionId: variacionId,
-        );
-        
-        agregado = await _carritoService.agregarProductoCompleto(token, request);
-      } else {
-        agregado = await _carritoService.agregarProducto(token, productoId, 1);
-      }
-
-      if (agregado) {
-        HapticFeedback.lightImpact();
-        _mostrarSnackbar(
-          '$nombre agregado al carrito exitosamente',
-          isSuccess: true,
-          duration: 2
-        );
-      } else {
-        _mostrarSnackbar(
-          'No se pudo agregar $nombre al carrito. Inténtalo de nuevo.',
-          isSuccess: false,
-          duration: 3
-        );
-      }
-      
-    } catch (e) {
-      String errorMessage = 'Error al agregar al carrito';
-      
-      if (e.toString().contains('Unauthorized') || 
-          e.toString().contains('token') || 
-          e.toString().contains('401')) {
-        errorMessage = 'Sesión expirada. Inicia sesión nuevamente.';
-        await Future.delayed(FavoritoDimensions.longDelay);
-        if (mounted) {
-          Navigator.pushReplacementNamed(context, '/login');
-        }
-        return;
-      } else if (e.toString().contains('network') || 
-                 e.toString().contains('connection')) {
-        errorMessage = 'Error de conexión. Revisa tu internet.';
-      } else if (e.toString().contains('timeout')) {
-        errorMessage = 'Tiempo agotado. Inténtalo de nuevo.';
-      }
-      
-      _mostrarSnackbar(
-        errorMessage,
-        isSuccess: false,
-        duration: 3
-      );
-      
-      print('❌ Error detallado en _agregarAlCarrito: $e');
-    }
-  }
-
   Future<bool> _mostrarDialogoConfirmacion(String titulo, String mensaje) async {
     return await showDialog<bool>(
       context: context,
@@ -812,15 +714,6 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
                 borderRadius: BorderRadius.circular(FavoritoDimensions.smallBorderRadius),
               ),
             ),
-            FavoritoDimensions.smallVerticalSpace,
-            Container(
-              width: FavoritoDimensions.smallButtonSize,
-              height: FavoritoDimensions.smallButtonSize,
-              decoration: BoxDecoration(
-                color: FavoritoColors.backgroundColor,
-                borderRadius: BorderRadius.circular(FavoritoDimensions.smallBorderRadius),
-              ),
-            ),
           ],
         ),
       ],
@@ -860,29 +753,6 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
                   color: FavoritoColors.backgroundColor,
                   borderRadius: BorderRadius.circular(12),
                 ),
-              ),
-              const Spacer(),
-              Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      height: 16,
-                      decoration: BoxDecoration(
-                        color: FavoritoColors.backgroundColor,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Container(
-                    width: FavoritoDimensions.smallButtonSize,
-                    height: FavoritoDimensions.smallButtonSize,
-                    decoration: BoxDecoration(
-                      color: FavoritoColors.backgroundColor,
-                      borderRadius: BorderRadius.circular(FavoritoDimensions.smallBorderRadius),
-                    ),
-                  ),
-                ],
               ),
             ],
           ),
@@ -961,9 +831,44 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
           Consumer<FavoritoProvider>(
             builder: (context, provider, child) {
               if (_isLoggedIn && !provider.isLoading && provider.favoritos.isNotEmpty) {
-                return FavoritoWidgets.favoriteCounter(
-                  count: provider.favoritos.length,
-                  isTablet: isTablet,
+                return Padding(
+                  padding: EdgeInsets.only(right: isTablet ? 20 : 12),
+                  child: Center(
+                    child: Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isTablet ? 16 : 12,
+                        vertical: isTablet ? 10 : 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: FavoritoColors.primaryColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(isTablet ? 14 : 12),
+                        border: Border.all(
+                          color: FavoritoColors.primaryColor.withOpacity(0.2),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.favorite,
+                            color: Colors.red,
+                            size: isTablet ? 22 : 18,
+                          ),
+                          SizedBox(width: isTablet ? 8 : 6),
+                          Text(
+                            '${provider.favoritos.length}',
+                            style: TextStyle(
+                              color: FavoritoColors.primaryColor,
+                              fontSize: isTablet ? 18 : 15,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 );
               }
               return const SizedBox();
@@ -1154,7 +1059,6 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
     final producto = favorito['producto'] ?? {};
     final precio = producto['precio']?.toString() ?? '0';
     final descuento = producto['descuento'] ?? 0;
-    final disponible = producto['disponible'] ?? true;
     final nombre = producto['nombre'] ?? 'Producto sin nombre';
     final imagen = producto['imagen'];
     final productoId = producto['_id'] ?? producto['id'] ?? '';
@@ -1184,11 +1088,16 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
                         topLeft: Radius.circular(FavoritoDimensions.cardBorderRadiusTablet),
                         topRight: Radius.circular(FavoritoDimensions.cardBorderRadiusTablet),
                       ),
-                      child: FavoritoWidgets.imageContainer(
-                        imageUrl: imagen,
+                      child: Container(
                         width: double.infinity,
                         height: double.infinity,
-                        fit: BoxFit.cover,
+                        color: Colors.white,
+                        child: FavoritoWidgets.imageContainer(
+                          imageUrl: imagen,
+                          width: double.infinity,
+                          height: double.infinity,
+                          fit: BoxFit.contain,
+                        ),
                       ),
                     ),
                   ),
@@ -1237,21 +1146,6 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
                       _formatCurrency(precio),
                       style: FavoritoTextStyles.productPriceTablet,
                     ),
-                    const Spacer(),
-                    
-                    // Botón de carrito centrado
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        FavoritoWidgets.cartButton(
-                          onPressed: disponible ? () {
-                            HapticFeedback.lightImpact();
-                            _agregarAlCarrito(favorito);
-                          } : null,
-                          disponible: disponible,
-                        ),
-                      ],
-                    ),
                   ],
                 ),
               ),
@@ -1266,7 +1160,6 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
     final producto = favorito['producto'] ?? {};
     final precio = producto['precio']?.toString() ?? '0';
     final descuento = producto['descuento'] ?? 0;
-    final disponible = producto['disponible'] ?? true;
     final nombre = producto['nombre'] ?? 'Producto sin nombre';
     final imagen = producto['imagen'];
     final productoId = producto['_id'] ?? producto['id'] ?? '';
@@ -1293,10 +1186,22 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
                 tag: 'product_${productoId}_$index',
                 child: Stack(
                   children: [
-                    FavoritoWidgets.imageContainer(
-                      imageUrl: imagen,
+                    Container(
                       width: FavoritoDimensions.imageSize(screenWidth),
                       height: FavoritoDimensions.imageSize(screenWidth),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(FavoritoDimensions.imageBorderRadius),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(FavoritoDimensions.imageBorderRadius),
+                        child: FavoritoWidgets.imageContainer(
+                          imageUrl: imagen,
+                          width: FavoritoDimensions.imageSize(screenWidth),
+                          height: FavoritoDimensions.imageSize(screenWidth),
+                          fit: BoxFit.contain,
+                        ),
+                      ),
                     ),
                     // Badge de descuento
                     if (descuento > 0)
@@ -1343,15 +1248,6 @@ class _FavoritesPageState extends State<FavoritesPage> with TickerProviderStateM
                       HapticFeedback.mediumImpact();
                       _eliminarFavorito(productoId, index);
                     },
-                  ),
-                  FavoritoDimensions.smallVerticalSpace,
-                  
-                  FavoritoWidgets.cartButton(
-                    onPressed: disponible ? () {
-                      HapticFeedback.lightImpact();
-                      _agregarAlCarrito(favorito);
-                    } : null,
-                    disponible: disponible,
                   ),
                 ],
               ),

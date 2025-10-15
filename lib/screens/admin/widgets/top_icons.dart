@@ -1,16 +1,19 @@
 // top_icons.dart
 import 'package:flutter/material.dart';
+import 'package:showcaseview/showcaseview.dart';
 import '../../../utils/show_settings_modal.dart';
 import '../styles/top_icons/top_icons_styles.dart'; // Import de los estilos
 
 class TopIcons extends StatelessWidget {
   final String rol;
   final bool showNotificationIcon;
+  final GlobalKey? configKey; // 👈 NUEVO: Key para el tooltip
 
   const TopIcons({
     super.key,
     required this.rol,
     this.showNotificationIcon = TopIconsTheme.defaultShowNotification,
+    this.configKey, // 👈 NUEVO: Parámetro opcional
   });
 
   @override
@@ -32,12 +35,32 @@ class TopIcons extends StatelessWidget {
   }
 
   Widget _buildSettingsButton(BuildContext context, Map<String, double> dimensions) {
-    return _buildIconButton(
+    final button = _buildIconButton(
       dimensions: dimensions,
       icon: TopIconsTheme.settingsIcon,
       color: TopIconsTheme.settingsIconColor,
       onPressed: () => _handleSettingsPressed(context),
     );
+
+    // 👇 NUEVO: Envolver con Showcase si se proporciona la key
+    if (configKey != null) {
+      return Showcase(
+        key: configKey!,
+        description: 'Accede a la configuración del panel. Gestiona permisos de usuarios, ajusta parámetros del sistema y personaliza opciones generales.',
+        targetBorderRadius: BorderRadius.circular(30),
+        tooltipBackgroundColor: Colors.deepPurple.shade700,
+        textColor: Colors.white,
+        targetPadding: const EdgeInsets.all(8),
+        descTextStyle: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          color: Colors.white,
+        ),
+        child: button,
+      );
+    }
+
+    return button;
   }
 
   Widget _buildNotificationButton(BuildContext context, Map<String, double> dimensions) {

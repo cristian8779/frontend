@@ -56,6 +56,12 @@ class ProductoProvider extends ChangeNotifier {
   // === PRODUCTOS INDIVIDUALES ===
   Map<String, dynamic>? _productoSeleccionado;
 
+  // === CONTROL DE ELIMINACIONES ===
+  final Set<String> _idsEliminadosRecientes = {};
+  final Map<String, DateTime> _timestampsEliminacion = {};
+  static const Duration _esperaPostEliminacion = Duration(milliseconds: 800);
+  static const Duration _tiempoMemoriaEliminacion = Duration(minutes: 3);
+
   // === GETTERS ===
   ProductoState get state => _state;
   List<Map<String, dynamic>> get productos => _productos;
@@ -145,6 +151,10 @@ class ProductoProvider extends ChangeNotifier {
     bool mostrarLoading = true,
   }) async {
     debugPrint('cargarProductos - forceRefresh: $forceRefresh');
+    debugPrint('  IDs eliminados activos: ${_idsEliminadosRecientes.length}');
+    if (_idsEliminadosRecientes.isNotEmpty) {
+      debugPrint('  IDs: ${_idsEliminadosRecientes.take(3).toList()}');
+    }
     
     if (forceRefresh) {
       debugPrint('Force refresh activado - limpiando datos...');
@@ -160,7 +170,18 @@ class ProductoProvider extends ChangeNotifier {
           _lastFetch != null &&
           DateTime.now().difference(_lastFetch!) < _cacheDuration) {
         debugPrint("Usando cache (ultima carga hace menos de 5 min)");
-        return;
+        
+        // Pero si hay IDs eliminados, forzar refresh
+        if (_idsEliminadosRecientes.isNotEmpty) {
+          debugPrint("⚠️  Hay productos eliminados - forzando refresh");
+          _productos.clear();
+          _productosFiltrados.clear();
+          _page = 0;
+          _hasMore = true;
+          _lastFetch = null;
+        } else {
+          return;
+        }
       }
       
       _page = 0;
@@ -200,7 +221,7 @@ class ProductoProvider extends ChangeNotifier {
       
       final response = await _productoService.obtenerProductosPaginados(filtros);
 
-      final nuevosProductos = List<Map<String, dynamic>>.from(
+      var nuevosProductos = List<Map<String, dynamic>>.from(
         response['productos'] ?? []
       );
       final total = response['total'] ?? 0;
@@ -208,16 +229,51 @@ class ProductoProvider extends ChangeNotifier {
       debugPrint('Respuesta del servidor:');
       debugPrint('  - Productos recibidos: ${nuevosProductos.length}');
       debugPrint('  - Total en servidor: $total');
-      if (nuevosProductos.isNotEmpty) {
-        debugPrint('  - IDs recibidos: ${nuevosProductos.map((p) => p['_id']).take(3).toList()}...');
+      
+      // ⭐ CRÍTICO: Filtrar productos que fueron eliminados recientemente
+      if (_idsEliminadosRecientes.isNotEmpty) {
+        final cantidadOriginal = nuevosProductos.length;
+        
+        nuevosProductos = nuevosProductos.where((producto) {
+          final productoId = producto['_id']?.toString() ?? 
+                            producto['id']?.toString() ?? '';
+          
+          if (productoId.isEmpty) return true;
+          
+          final fueEliminado = _idsEliminadosRecientes.contains(productoId);
+          
+          if (fueEliminado) {
+            final tiempoEliminacion = _timestampsEliminacion[productoId];
+            final segundosDesdeEliminacion = tiempoEliminacion != null
+                ? DateTime.now().difference(tiempoEliminacion).inSeconds
+                : 0;
+            
+            debugPrint('🚫 BLOQUEANDO producto eliminado:');
+            debugPrint('   - Nombre: ${producto['nombre']}');
+            debugPrint('   - ID: $productoId');
+            debugPrint('   - Eliminado hace: ${segundosDesdeEliminacion}s');
+          }
+          
+          return !fueEliminado;
+        }).toList();
+        
+        if (cantidadOriginal != nuevosProductos.length) {
+          final productosEliminados = cantidadOriginal - nuevosProductos.length;
+          debugPrint('');
+          debugPrint('⚠️  PRODUCTOS FILTRADOS:');
+          debugPrint('   - Recibidos del servidor: $cantidadOriginal');
+          debugPrint('   - Bloqueados (eliminados): $productosEliminados');
+          debugPrint('   - Permitidos: ${nuevosProductos.length}');
+          debugPrint('');
+        }
       }
 
       if (isFirstLoad) {
         _productos = nuevosProductos;
-        debugPrint('Productos REEMPLAZADOS: ${nuevosProductos.length}');
+        debugPrint('✅ Productos REEMPLAZADOS: ${nuevosProductos.length}');
       } else {
         _productos.addAll(nuevosProductos);
-        debugPrint('Productos AÑADIDOS: ${nuevosProductos.length}');
+        debugPrint('✅ Productos AÑADIDOS: ${nuevosProductos.length}');
       }
 
       _hasMore = _productos.length < total;
@@ -228,6 +284,7 @@ class ProductoProvider extends ChangeNotifier {
       debugPrint('  - Total local: ${_productos.length}');
       debugPrint('  - Total servidor: $_totalProductos');
       debugPrint('  - Hay mas: $_hasMore');
+      debugPrint('  - IDs eliminados en memoria: ${_idsEliminadosRecientes.length}');
 
       if (isFirstLoad &&
           _productos.length < total &&
@@ -255,7 +312,22 @@ class ProductoProvider extends ChangeNotifier {
   }
 
   Future<void> refrescar() async {
-    debugPrint('=== REFRESH FORZADO ===');
+    debugPrint('=== REFRESH MANUAL ===');
+    
+    // Verificar si hay eliminaciones recientes
+    if (_idsEliminadosRecientes.isNotEmpty) {
+      debugPrint('⚠️  Hay ${_idsEliminadosRecientes.length} productos eliminados recientemente');
+      debugPrint('   Los filtraremos automáticamente si el servidor los devuelve');
+      
+      // Mostrar cuánto tiempo hace que se eliminaron
+      _idsEliminadosRecientes.forEach((id) {
+        final timestamp = _timestampsEliminacion[id];
+        if (timestamp != null) {
+          final segundos = DateTime.now().difference(timestamp).inSeconds;
+          debugPrint('   - ID: $id (hace ${segundos}s)');
+        }
+      });
+    }
     
     _productos.clear();
     _productosFiltrados.clear();
@@ -263,7 +335,8 @@ class ProductoProvider extends ChangeNotifier {
     _hasMore = true;
     _lastFetch = null;
     
-    debugPrint('Cache limpiado completamente');
+    debugPrint('Cache limpiado - iniciando carga...');
+    debugPrint('');
     
     await cargarProductos(forceRefresh: true);
   }
@@ -545,41 +618,78 @@ class ProductoProvider extends ChangeNotifier {
     debugPrint('ID: $id');
     
     final productoAEliminar = _encontrarProductoPorId(id, _productos);
+    String? nombreProducto;
+    
     if (productoAEliminar != null) {
-      debugPrint('Producto: ${productoAEliminar['nombre']}');
+      nombreProducto = productoAEliminar['nombre'];
+      debugPrint('Producto: $nombreProducto');
     }
     
     _setState(ProductoState.deleting);
     _limpiarError();
 
     try {
-      debugPrint('Eliminando en servidor...');
-      await _productoService.eliminarProducto(id);
-      debugPrint('Servidor confirma eliminacion');
+      // 1. REGISTRAR eliminación ANTES de eliminar (para evitar race conditions)
+      _idsEliminadosRecientes.add(id);
+      _timestampsEliminacion[id] = DateTime.now();
+      debugPrint('1. ✅ ID registrado como eliminado: $id');
       
-      debugPrint('Eliminando localmente...');
+      // 2. Eliminar del servidor
+      debugPrint('2. 🔄 Eliminando en servidor...');
+      await _productoService.eliminarProducto(id);
+      debugPrint('   ✅ Servidor confirma eliminación');
+      
+      // 3. Eliminar localmente
+      debugPrint('3. 🔄 Eliminando localmente...');
       final cantidadAntes = _productos.length;
       
       _removerProductoPorId(id, _productos);
       _removerProductoPorId(id, _productosFiltrados);
       
       final cantidadDespues = _productos.length;
-      debugPrint('Productos: $cantidadAntes -> $cantidadDespues');
+      debugPrint('   ✅ Productos: $cantidadAntes -> $cantidadDespues');
       
+      // 4. Actualizar contadores
       _totalProductos = _productos.length;
       
+      // 5. IMPORTANTE: Invalidar cache completamente
       _lastFetch = null;
+      _page = 0;
+      _hasMore = true;
       
-      debugPrint('Cache invalidado - proximo refresh traera datos frescos');
+      debugPrint('4. ✅ Cache invalidado completamente');
       
-      _state = ProductoState.loaded;
-      notifyListeners();
+      // 6. Aplicar filtros y notificar
+      _aplicarFiltrosLocales();
+      _setState(ProductoState.loaded);
       
-      debugPrint('=== ELIMINACION EXITOSA ===');
+      debugPrint('5. ✅ UI actualizada');
+      debugPrint('=== ELIMINACIÓN EXITOSA ===');
+      debugPrint('');
+      
+      // 7. Limpiar el registro después del tiempo configurado
+      Future.delayed(_tiempoMemoriaEliminacion, () {
+        if (_idsEliminadosRecientes.contains(id)) {
+          _idsEliminadosRecientes.remove(id);
+          _timestampsEliminacion.remove(id);
+          debugPrint('🧹 ID removido de memoria (expiró): $id');
+        }
+      });
+      
+      // 8. Esperar un poco antes de permitir refresh
+      // Esto da tiempo al servidor para sincronizar
+      await Future.delayed(_esperaPostEliminacion);
+      debugPrint('⏱️  Tiempo de espera completado - listo para refresh');
+      
       return true;
 
     } catch (e) {
-      debugPrint('Error eliminando: $e');
+      debugPrint('❌ Error eliminando: $e');
+      
+      // Si falla, remover de la lista de eliminados
+      _idsEliminadosRecientes.remove(id);
+      _timestampsEliminacion.remove(id);
+      
       _manejarError(e, 'Error al eliminar producto');
       return false;
     }
@@ -803,6 +913,11 @@ class ProductoProvider extends ChangeNotifier {
     _tallasFiltradas.clear();
     _precioMin = null;
     _precioMax = null;
+    
+    // Limpiar registros de eliminación
+    _idsEliminadosRecientes.clear();
+    _timestampsEliminacion.clear();
+    
     _limpiarError();
     _setState(ProductoState.initial);
   }
@@ -828,9 +943,53 @@ class ProductoProvider extends ChangeNotifier {
            _precioMax != null;
   }
 
+  // === MÉTODOS PARA CONTROL DE ELIMINACIONES ===
+
+  /// Limpia el registro de productos eliminados manualmente
+  void limpiarRegistroEliminados() {
+    final cantidad = _idsEliminadosRecientes.length;
+    if (cantidad > 0) {
+      debugPrint('🧹 Limpiando $cantidad IDs eliminados de la memoria');
+      _idsEliminadosRecientes.clear();
+      _timestampsEliminacion.clear();
+      notifyListeners();
+    }
+  }
+
+  /// Verifica si un producto fue eliminado recientemente
+  bool fueEliminadoRecientemente(String id) {
+    final eliminado = _idsEliminadosRecientes.contains(id);
+    if (eliminado) {
+      final timestamp = _timestampsEliminacion[id];
+      if (timestamp != null) {
+        final segundos = DateTime.now().difference(timestamp).inSeconds;
+        debugPrint('ℹ️  Producto $id fue eliminado hace ${segundos}s');
+      }
+    }
+    return eliminado;
+  }
+
+  /// Obtiene cuántos segundos hace que se eliminó un producto
+  int? getSegundosDesdeEliminacion(String id) {
+    if (!_idsEliminadosRecientes.contains(id)) return null;
+    
+    final timestamp = _timestampsEliminacion[id];
+    if (timestamp == null) return null;
+    
+    return DateTime.now().difference(timestamp).inSeconds;
+  }
+
+  /// Obtiene la cantidad de productos eliminados que están en memoria
+  int get cantidadProductosEliminadosEnMemoria => _idsEliminadosRecientes.length;
+
+  /// Obtiene la lista de IDs eliminados (útil para debugging)
+  List<String> get idsEliminadosActivos => _idsEliminadosRecientes.toList();
+
   @override
   void dispose() {
     debugPrint('Disposing ProductoProvider...');
+    _idsEliminadosRecientes.clear();
+    _timestampsEliminacion.clear();
     super.dispose();
   }
 }

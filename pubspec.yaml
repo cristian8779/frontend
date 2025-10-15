@@ -37,6 +37,8 @@ dependencies:
   another_flushbar: ^1.11.1
   webview_flutter: ^4.2.2
   path_provider: ^2.1.1
+  flutter_image_compress: ^2.3.0
+  showcaseview: ^3.0.0
 
 
 

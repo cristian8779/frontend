@@ -471,7 +471,7 @@ class _ProductoCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                // Información del producto
+                // Información del producto - AQUÍ ESTÁ LA CORRECCIÓN
                 Expanded(
                   flex: 3,
                   child: Padding(
@@ -486,7 +486,7 @@ class _ProductoCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: CategoriaTextStyles.getProductTitle(screenWidth),
                         ),
-                        SizedBox(height: isTablet ? 6 : 4),
+                        const Spacer(), // CAMBIO: Spacer en lugar de SizedBox fijo
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           crossAxisAlignment: CrossAxisAlignment.end,

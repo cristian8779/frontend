@@ -1,6 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:shimmer/shimmer.dart';
 import '../../services/venta_service.dart';
+import 'styles/gestion_ventas/app_colors.dart';
+import 'styles/gestion_ventas/app_styles.dart';
+import 'styles/gestion_ventas/responsive_utils.dart';
+import 'styles/gestion_ventas/venta_estado_helper.dart';
+import 'styles/gestion_ventas/venta_widgets.dart';
+import 'detalle_venta_screen.dart';
 
 class GestionVentasScreen extends StatefulWidget {
   const GestionVentasScreen({super.key});
@@ -12,6 +19,7 @@ class GestionVentasScreen extends StatefulWidget {
 class _GestionVentasScreenState extends State<GestionVentasScreen> {
   final VentaService _ventaService = VentaService();
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
 
   List<Map<String, dynamic>> _ventas = [];
   List<Map<String, dynamic>> _ventasFiltradas = [];
@@ -31,6 +39,7 @@ class _GestionVentasScreenState extends State<GestionVentasScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _scrollController.dispose();
     _ventaService.dispose();
     super.dispose();
   }
@@ -40,9 +49,7 @@ class _GestionVentasScreenState extends State<GestionVentasScreen> {
   Future<void> _cargarVentas() async {
     if (_isLoading) return;
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
       List<Map<String, dynamic>> ventas;
@@ -61,13 +68,10 @@ class _GestionVentasScreenState extends State<GestionVentasScreen> {
       });
 
       _aplicarFiltros();
-
     } catch (e) {
       _mostrarError('Error al cargar ventas: $e');
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     }
   }
 
@@ -76,7 +80,7 @@ class _GestionVentasScreenState extends State<GestionVentasScreen> {
         .map((venta) => venta['usuarioId']?.toString())
         .where((id) => id != null && id.isNotEmpty)
         .toSet();
-    
+
     for (final usuarioId in usuarioIds) {
       if (!_usuariosCache.containsKey(usuarioId)) {
         try {
@@ -94,7 +98,6 @@ class _GestionVentasScreenState extends State<GestionVentasScreen> {
   void _aplicarFiltros() {
     List<Map<String, dynamic>> ventasFiltradas = List.from(_ventas);
 
-    // Filtro por texto de búsqueda
     if (_searchController.text.isNotEmpty) {
       final busqueda = _searchController.text.toLowerCase();
       ventasFiltradas = ventasFiltradas.where((venta) {
@@ -111,7 +114,6 @@ class _GestionVentasScreenState extends State<GestionVentasScreen> {
       }).toList();
     }
 
-    // Filtro por estado
     if (_filtroEstado != 'todos') {
       ventasFiltradas = ventasFiltradas.where((venta) {
         final estadoVenta = venta['estadoPago']?.toString().toLowerCase();
@@ -119,12 +121,11 @@ class _GestionVentasScreenState extends State<GestionVentasScreen> {
       }).toList();
     }
 
-    // Filtro por rango de fechas
     if (_rangoFechas != null) {
       ventasFiltradas = ventasFiltradas.where((venta) {
         final fechaStr = venta['fechaVenta']?.toString() ?? venta['fecha']?.toString();
         final fechaVenta = fechaStr != null ? DateTime.tryParse(fechaStr) : null;
-        
+
         if (fechaVenta == null) return false;
 
         return fechaVenta.isAfter(_rangoFechas!.start.subtract(const Duration(days: 1))) &&
@@ -132,9 +133,7 @@ class _GestionVentasScreenState extends State<GestionVentasScreen> {
       }).toList();
     }
 
-    setState(() {
-      _ventasFiltradas = ventasFiltradas;
-    });
+    setState(() => _ventasFiltradas = ventasFiltradas);
   }
 
   Future<void> _seleccionarRangoFechas() async {
@@ -146,8 +145,10 @@ class _GestionVentasScreenState extends State<GestionVentasScreen> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: Theme.of(context).colorScheme.copyWith(
-              primary: const Color(0xFF3483FA),
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.primary,
+              onPrimary: Colors.white,
+              surface: Colors.white,
             ),
           ),
           child: child!,
@@ -156,9 +157,7 @@ class _GestionVentasScreenState extends State<GestionVentasScreen> {
     );
 
     if (picked != null) {
-      setState(() {
-        _rangoFechas = picked;
-      });
+      setState(() => _rangoFechas = picked);
       _aplicarFiltros();
     }
   }
@@ -172,47 +171,56 @@ class _GestionVentasScreenState extends State<GestionVentasScreen> {
         estadoPago: nuevoEstado,
       );
 
-      _mostrarExito('Estado actualizado correctamente');
-      _cargarVentas();
-    } catch (e) {
-      _mostrarError('Error al actualizar estado: $e');
-    }
-  }
-
-  Future<void> _eliminarVenta(String ventaId) async {
-    final confirmar = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: const Text('Confirmar eliminación'),
-        content: const Text('¿Estás seguro de que quieres eliminar esta venta? Esta acción no se puede deshacer.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Eliminar'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmar == true) {
-      try {
-        await _ventaService.eliminarVenta(ventaId);
-        _mostrarExito('Venta eliminada correctamente');
+      if (mounted) {
+        _mostrarExito('Estado actualizado correctamente');
         _cargarVentas();
-      } catch (e) {
-        _mostrarError('Error al eliminar venta: $e');
+      }
+    } catch (e) {
+      if (mounted) {
+        _mostrarError('Error al actualizar estado: $e');
       }
     }
   }
+
+ 
+Future<bool> _eliminarVenta(String ventaId) async {
+  final confirmar = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: AppStyles.radiusXLarge),
+      title: const Text('Confirmar eliminación'),
+      content: const Text('¿Estás seguro de que quieres eliminar esta venta?'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: Text('Cancelar', style: TextStyle(color: Colors.grey[600])),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Eliminar', style: TextStyle(color: AppColors.error)),
+        ),
+      ],
+    ),
+  );
+
+  if (confirmar == true) {
+    try {
+      await _ventaService.eliminarVenta(ventaId);
+      
+      if (mounted) {
+        _mostrarExito('Venta eliminada correctamente');
+        await _cargarVentas();
+      }
+      return true;
+    } catch (e) {
+      if (mounted) {
+        _mostrarError('Error al eliminar venta: $e');
+      }
+      return false;
+    }
+  }
+  return false;
+}
 
   // === MÉTODOS DE UI ===
 
@@ -220,20 +228,20 @@ class _GestionVentasScreenState extends State<GestionVentasScreen> {
     if (venta['nombreUsuario'] != null && venta['nombreUsuario'].toString().trim().isNotEmpty) {
       return venta['nombreUsuario'].toString().trim();
     }
-    
+
     if (venta['usuario']?['nombre'] != null) {
       return venta['usuario']['nombre'];
     }
-    
+
     final usuarioId = venta['usuarioId']?.toString();
     if (usuarioId != null && _usuariosCache.containsKey(usuarioId)) {
       return _usuariosCache[usuarioId]!;
     }
-    
+
     if (usuarioId != null) {
       return 'Usuario ${usuarioId.substring(usuarioId.length - 8)}';
     }
-    
+
     return 'Usuario desconocido';
   }
 
@@ -246,7 +254,7 @@ class _GestionVentasScreenState extends State<GestionVentasScreen> {
         return '$municipio, $departamento';
       }
     }
-    
+
     if (venta['usuario']?['direccion'] is Map) {
       final dir = venta['usuario']['direccion'] as Map;
       final municipio = dir['municipio'] ?? '';
@@ -255,32 +263,28 @@ class _GestionVentasScreenState extends State<GestionVentasScreen> {
         return '$municipio, $departamento';
       }
     }
-    
+
     final direccionStr = venta['direccionUsuario']?.toString() ?? '';
     if (direccionStr.isNotEmpty && direccionStr != '{}') {
       return direccionStr;
     }
-    
-    return 'Dirección no disponible';
+
+    return 'No disponible';
   }
 
   String _obtenerCodigoPostal(Map<String, dynamic> venta) {
     if (venta['direccionUsuario'] is Map) {
       final dir = venta['direccionUsuario'] as Map;
       final codigoPostal = dir['codigoPostal']?.toString() ?? '';
-      if (codigoPostal.isNotEmpty) {
-        return codigoPostal;
-      }
+      if (codigoPostal.isNotEmpty) return codigoPostal;
     }
-    
+
     if (venta['usuario']?['direccion'] is Map) {
       final dir = venta['usuario']['direccion'] as Map;
       final codigoPostal = dir['codigoPostal']?.toString() ?? '';
-      if (codigoPostal.isNotEmpty) {
-        return codigoPostal;
-      }
+      if (codigoPostal.isNotEmpty) return codigoPostal;
     }
-    
+
     return '';
   }
 
@@ -288,9 +292,10 @@ class _GestionVentasScreenState extends State<GestionVentasScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(mensaje),
-        backgroundColor: Colors.red,
+        backgroundColor: AppColors.error,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        shape: RoundedRectangleBorder(borderRadius: AppStyles.radiusMedium),
+        margin: AppStyles.paddingMedium,
       ),
     );
   }
@@ -299,9 +304,10 @@ class _GestionVentasScreenState extends State<GestionVentasScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(mensaje),
-        backgroundColor: Colors.green,
+        backgroundColor: AppColors.success,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        shape: RoundedRectangleBorder(borderRadius: AppStyles.radiusMedium),
+        margin: AppStyles.paddingMedium,
       ),
     );
   }
@@ -309,314 +315,305 @@ class _GestionVentasScreenState extends State<GestionVentasScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: const Color(0xFF3483FA),
-        foregroundColor: Colors.white,
-        title: const Text(
-          'Gestión de Ventas',
-          style: TextStyle(fontWeight: FontWeight.w600),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: _cargarVentas,
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Header con estadísticas
-          Container(
-            decoration: const BoxDecoration(
-              color: Color(0xFF3483FA),
-              borderRadius: BorderRadius.only(
-                bottomLeft: Radius.circular(20),
-                bottomRight: Radius.circular(20),
-              ),
-            ),
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-            child: _buildEstadisticasHeader(),
-          ),
-          const SizedBox(height: 16),
-          // Barra de búsqueda y filtros
-          _buildBarraBusqueda(),
-          const SizedBox(height: 8),
-          // Lista de ventas
-          Expanded(child: _buildListaVentas()),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEstadisticasHeader() {
-    final resumen = _ventaService.obtenerResumenVentas(_ventasFiltradas);
-    
-    return Row(
-      children: [
-        Expanded(
-          child: _buildEstadistica(
-            'Total Ventas',
-            '${resumen['totalVentas']}',
-            Icons.receipt_long_rounded,
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _buildEstadistica(
-            'Monto Total',
-            '\$${NumberFormat('#,##0', 'es_CO').format(resumen['montoTotal'])}',
-            Icons.attach_money_rounded,
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _buildEstadistica(
-            'Aprobadas',
-            '${resumen['ventasAprobadas'] ?? resumen['ventasCompletadas'] ?? 0}',
-            Icons.check_circle_rounded,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildEstadistica(String titulo, String valor, IconData icono) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: [
-          Icon(icono, color: Colors.white, size: 24),
-          const SizedBox(height: 4),
-          Text(
-            valor,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          Text(
-            titulo,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 11,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBarraBusqueda() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        children: [
-          // Campo de búsqueda
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
-                  spreadRadius: 1,
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Buscar por usuario, producto...',
-                hintStyle: TextStyle(color: Colors.grey[500]),
-                prefixIcon: Icon(Icons.search_rounded, color: Colors.grey[500]),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                        icon: Icon(Icons.clear_rounded, color: Colors.grey[500]),
-                        onPressed: () {
-                          _searchController.clear();
-                          _aplicarFiltros();
-                        },
-                      )
-                    : null,
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 16,
-                ),
-              ),
-              onChanged: (value) => _aplicarFiltros(),
-            ),
-          ),
-          const SizedBox(height: 12),
-          // Filtros
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.grey.withOpacity(0.1),
-                        spreadRadius: 1,
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
+      backgroundColor: AppColors.background,
+      resizeToAvoidBottomInset: true,
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: _cargarVentas,
+          color: AppColors.primary,
+          backgroundColor: Colors.white,
+          child: CustomScrollView(
+            controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              // Botón de volver
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 20, 0),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back_rounded),
+                        onPressed: () => Navigator.pop(context),
+                        color: AppColors.primary,
+                        iconSize: 28,
                       ),
                     ],
                   ),
-                  child: DropdownButtonFormField<String>(
-                    value: _filtroEstado,
-                    decoration: const InputDecoration(
-                      labelText: 'Estado',
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: 'todos', child: Text('Todos los estados')),
-                      DropdownMenuItem(value: 'pending', child: Text('Pendiente')),
-                      DropdownMenuItem(value: 'approved', child: Text('Aprobado')),
-                      DropdownMenuItem(value: 'failed', child: Text('Fallido')),
-                    ],
-                    onChanged: (value) {
-                      setState(() {
-                        _filtroEstado = value ?? 'todos';
-                      });
-                      _aplicarFiltros();
-                    },
-                  ),
                 ),
               ),
-              const SizedBox(width: 12),
-              Container(
-                decoration: BoxDecoration(
-                  color: _rangoFechas != null 
-                      ? const Color(0xFF3483FA) 
-                      : Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.grey.withOpacity(0.1),
-                      spreadRadius: 1,
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: TextButton.icon(
-                  onPressed: _seleccionarRangoFechas,
-                  icon: Icon(
-                    Icons.date_range_rounded,
-                    color: _rangoFechas != null ? Colors.white : const Color(0xFF3483FA),
-                  ),
-                  label: Text(
-                    _rangoFechas == null ? 'Fechas' : 'Rango',
-                    style: TextStyle(
-                      color: _rangoFechas != null ? Colors.white : const Color(0xFF3483FA),
-                    ),
-                  ),
+              // Header siempre visible
+              SliverToBoxAdapter(
+                child: VentaWidgets.buildHeader(onRefresh: _cargarVentas),
+              ),
+              // Estadísticas siempre visibles
+              SliverToBoxAdapter(
+                child: VentaWidgets.buildEstadisticasCard(
+                  _ventaService.obtenerResumenVentas(_ventasFiltradas),
                 ),
               ),
+              SliverToBoxAdapter(
+                child: const SizedBox(height: 20),
+              ),
+              // Búsqueda y filtros siempre visibles
+              SliverToBoxAdapter(
+                child: _buildSearchAndFilters(),
+              ),
+              SliverToBoxAdapter(
+                child: const SizedBox(height: 16),
+              ),
+              // Lista de ventas
+              _buildSliverListaVentas(),
             ],
           ),
-          if (_rangoFechas != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Desde: ${DateFormat('dd/MM/yyyy').format(_rangoFechas!.start)} - '
-                      'Hasta: ${DateFormat('dd/MM/yyyy').format(_rangoFechas!.end)}',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      setState(() {
-                        _rangoFechas = null;
-                      });
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchAndFilters() {
+    return Padding(
+      padding: AppStyles.paddingHorizontal,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          VentaWidgets.buildSearchField(
+            controller: _searchController,
+            onChanged: _aplicarFiltros,
+            onClear: () {
+              _searchController.clear();
+              _aplicarFiltros();
+            },
+          ),
+          const SizedBox(height: 12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                VentaWidgets.buildFilterChip(
+                  label: _filtroEstado == 'todos'
+                      ? 'Todos'
+                      : VentaEstadoHelper.getEstadoLabel(_filtroEstado),
+                  icon: Icons.filter_list_rounded,
+                  isActive: _filtroEstado != 'todos',
+                  onTap: _showEstadoFilter,
+                ),
+                const SizedBox(width: 8),
+                VentaWidgets.buildFilterChip(
+                  label: _rangoFechas == null ? 'Fechas' : 'Rango activo',
+                  icon: Icons.calendar_today_rounded,
+                  isActive: _rangoFechas != null,
+                  onTap: _seleccionarRangoFechas,
+                ),
+                if (_rangoFechas != null) ...[
+                  const SizedBox(width: 8),
+                  InkWell(
+                    onTap: () {
+                      setState(() => _rangoFechas = null);
                       _aplicarFiltros();
                     },
-                    child: const Text(
-                      'Limpiar',
-                      style: TextStyle(color: Color(0xFF3483FA)),
+                    child: Container(
+                      padding: AppStyles.paddingSmall,
+                      decoration: BoxDecoration(
+                        color: Colors.red[50],
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(Icons.close_rounded, size: 18, color: Colors.red[400]),
                     ),
                   ),
                 ],
-              ),
+              ],
             ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildListaVentas() {
+  void _showEstadoFilter() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: AppStyles.paddingLarge,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            _buildEstadoOption('todos', 'Todos los estados', Icons.list_rounded),
+            _buildEstadoOption('pending', 'Pendiente', Icons.schedule_rounded),
+            _buildEstadoOption('approved', 'Aprobado', Icons.check_circle_rounded),
+            _buildEstadoOption('failed', 'Fallido', Icons.cancel_rounded),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEstadoOption(String value, String label, IconData icon) {
+    final isSelected = _filtroEstado == value;
+    return InkWell(
+      onTap: () {
+        setState(() => _filtroEstado = value);
+        _aplicarFiltros();
+        Navigator.pop(context);
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: AppStyles.paddingMedium,
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary.withOpacity(0.1) : Colors.grey[50],
+          borderRadius: AppStyles.radiusMedium,
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: isSelected ? AppColors.primary : Colors.grey[600]),
+            const SizedBox(width: 12),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                color: isSelected ? AppColors.primary : Colors.grey[800],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSliverListaVentas() {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3483FA)),
+      return SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, index) => _buildShimmerItem(),
+          childCount: 6,
         ),
       );
     }
 
     if (_ventasFiltradas.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.receipt_long_outlined,
-              size: 80,
-              color: Colors.grey[400],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              _ventas.isEmpty 
-                  ? 'No hay ventas disponibles'
-                  : 'No se encontraron ventas',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            if (_ventas.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Intenta ajustar los filtros',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[500],
-                ),
-              ),
-            ],
-          ],
-        ),
+      return SliverToBoxAdapter(
+        child: VentaWidgets.buildEmptyState(hasVentas: _ventas.isNotEmpty),
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: _cargarVentas,
-      color: const Color(0xFF3483FA),
-      child: ListView.builder(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: _ventasFiltradas.length,
-        itemBuilder: (context, index) {
-          return _buildVentaCard(_ventasFiltradas[index]);
-        },
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, index) => _buildVentaCard(_ventasFiltradas[index]),
+          childCount: _ventasFiltradas.length,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildShimmerItem() {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey[300]!,
+      highlightColor: Colors.grey[100]!,
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: AppStyles.radiusXLarge,
+        ),
+        child: Padding(
+          padding: AppStyles.paddingMedium,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 60,
+                    child: Container(
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Container(
+                height: 16,
+                width: 200,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                height: 16,
+                width: 250,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                height: 16,
+                width: 180,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Divider(height: 1),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Container(
+                    width: 120,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  const Spacer(),
+                  Container(
+                    width: 100,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -631,849 +628,110 @@ class _GestionVentasScreenState extends State<GestionVentasScreen> {
     final nombreUsuario = _obtenerNombreUsuario(venta);
     final direccion = _obtenerDireccionCompleta(venta);
     final codigoPostal = _obtenerCodigoPostal(venta);
-    final telefono = venta['telefonoUsuario']?.toString() ?? 
-                     venta['usuario']?['telefono']?.toString() ?? '';
-
-    // Configuración de estado
-    Color estadoColor;
-    IconData estadoIcon;
-    String estadoTexto;
-
-    switch (estado.toLowerCase()) {
-      case 'approved':
-        estadoColor = const Color(0xFF00A650);
-        estadoIcon = Icons.check_circle_rounded;
-        estadoTexto = 'APROBADO';
-        break;
-      case 'failed':
-        estadoColor = Colors.red;
-        estadoIcon = Icons.cancel_rounded;
-        estadoTexto = 'FALLIDO';
-        break;
-      case 'pending':
-      default:
-        estadoColor = const Color(0xFFFF8C00);
-        estadoIcon = Icons.schedule_rounded;
-        estadoTexto = 'PENDIENTE';
-    }
+    final telefono = venta['telefonoUsuario']?.toString() ??
+        venta['usuario']?['telefono']?.toString() ??
+        '';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 1,
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        borderRadius: AppStyles.radiusXLarge,
+        boxShadow: AppStyles.cardShadow,
       ),
-      child: Theme(
-        data: Theme.of(context).copyWith(
-          dividerColor: Colors.transparent,
-        ),
-        child: ExpansionTile(
-          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          childrenPadding: const EdgeInsets.only(
-            left: 16,
-            right: 16,
-            bottom: 16,
-          ),
-          leading: Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: estadoColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: AppStyles.radiusXLarge,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => DetalleVentaScreen(
+                venta: venta,
+                nombreUsuario: nombreUsuario,
+                onUpdate: _cargarVentas,
+                isAdmin: _isAdmin,
+                onActualizarEstado: _actualizarEstadoVenta,
+                onEliminar: _eliminarVenta,
+              ),
             ),
-            child: Icon(estadoIcon, color: estadoColor, size: 26),
-          ),
-          title: Column(
+          );
+        },
+        child: Padding(
+          padding: AppStyles.paddingMedium,
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Nombre del usuario
               Row(
                 children: [
-                  Icon(
-                    Icons.person_rounded,
-                    size: 18,
-                    color: Colors.grey[600],
-                  ),
-                  const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
-                      nombreUsuario,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 16,
-                        color: Colors.black87,
-                      ),
-                    ),
+                    child: Text(nombreUsuario, style: AppStyles.heading3),
                   ),
+                  VentaWidgets.buildEstadoBadge(estado),
                 ],
               ),
-              const SizedBox(height: 8),
-              // Información de contacto
-              if (telefono.isNotEmpty) ...[
-                Row(
-                  children: [
-                    Icon(
-                      Icons.phone_rounded,
-                      size: 16,
-                      color: Colors.grey[500],
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      telefono,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[700],
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
+              const SizedBox(height: 12),
+              if (telefono.isNotEmpty)
+                VentaWidgets.buildInfoRow(
+                  Icons.phone_rounded,
+                  telefono,
+                  Colors.grey[700]!,
                 ),
-                const SizedBox(height: 6),
-              ],
-              // Dirección
-              if (direccion != 'Dirección no disponible') ...[
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      Icons.location_on_rounded,
-                      size: 16,
-                      color: Colors.grey[500],
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        direccion,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[700],
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
+              if (direccion != 'No disponible')
+                VentaWidgets.buildInfoRow(
+                  Icons.location_on_rounded,
+                  direccion,
+                  Colors.grey[700]!,
                 ),
-                const SizedBox(height: 6),
-              ],
-              // Código postal
-              if (codigoPostal.isNotEmpty) ...[
-                Row(
-                  children: [
-                    Icon(
-                      Icons.markunread_mailbox_rounded,
-                      size: 16,
-                      color: Colors.grey[500],
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      'C.P. $codigoPostal',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[700],
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
+              if (codigoPostal.isNotEmpty)
+                VentaWidgets.buildInfoRow(
+                  Icons.local_post_office_rounded,
+                  'C.P. $codigoPostal',
+                  Colors.grey[700]!,
                 ),
-                const SizedBox(height: 6),
-              ],
-              // Fecha
+              VentaWidgets.buildInfoRow(
+                Icons.access_time_rounded,
+                fechaVenta != null
+                    ? DateFormat('dd MMM yyyy, HH:mm', 'es').format(fechaVenta)
+                    : 'Sin fecha',
+                Colors.grey[500]!,
+              ),
+              const SizedBox(height: 12),
+              const Divider(height: 1),
+              const SizedBox(height: 12),
               Row(
                 children: [
-                  Icon(
-                    Icons.access_time_rounded,
-                    size: 16,
-                    color: Colors.grey[500],
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    fechaVenta != null
-                        ? DateFormat('dd/MM/yyyy - HH:mm').format(fechaVenta)
-                        : 'Fecha no disponible',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          trailing: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '\$${NumberFormat('#,##0', 'es_CO').format(total)}',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF00A650),
-                ),
-              ),
-              const SizedBox(height: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: estadoColor,
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: Text(
-                  estadoTexto,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          children: [
-            const Divider(height: 1),
-            const SizedBox(height: 16),
-            // Resumen de productos con botón
-            _buildResumenProductos(productos, venta),
-            // Acciones de administrador
-            if (_isAdmin && ventaId != 'sin-id') ...[
-              const SizedBox(height: 16),
-              _buildAccionesAdmin(ventaId, estado),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildResumenProductos(List<dynamic> productos, Map<String, dynamic> venta) {
-    final totalProductos = productos.length;
-   final totalItems = productos.fold<int>(
-  0,
-  (sum, producto) => sum + ((producto['cantidad'] ?? 0) as num).toInt(),
-);
-
-    
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.inventory_2_rounded,
-                size: 24,
-                color: Colors.grey[700],
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '$totalProductos producto${totalProductos != 1 ? 's' : ''} diferentes',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '$totalItems artículo${totalItems != 1 ? 's' : ''} en total',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => DetalleProductosScreen(
-                        productos: productos,
-                        nombreUsuario: _obtenerNombreUsuario(venta),
-                        total: (venta['total'] ?? 0).toDouble(),
-                      ),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.visibility_rounded, size: 18),
-                label: const Text('Ver productos'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF3483FA),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAccionesAdmin(String ventaId, String estado) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          if (estado.toLowerCase() == 'pending') ...[
-            // Botón Aprobar
-            Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF00A650),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF00A650).withOpacity(0.3),
-                    spreadRadius: 1,
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: IconButton(
-                onPressed: () => _actualizarEstadoVenta(ventaId, 'approved'),
-                icon: const Icon(Icons.check_rounded),
-                color: Colors.white,
-                iconSize: 24,
-                tooltip: 'Aprobar venta',
-              ),
-            ),
-            // Botón Rechazar
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.red,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.red.withOpacity(0.3),
-                    spreadRadius: 1,
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: IconButton(
-                onPressed: () => _actualizarEstadoVenta(ventaId, 'failed'),
-                icon: const Icon(Icons.close_rounded),
-                color: Colors.white,
-                iconSize: 24,
-                tooltip: 'Rechazar venta',
-              ),
-            ),
-          ],
-          // Botón Eliminar
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.orange,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.orange.withOpacity(0.3),
-                  spreadRadius: 1,
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: IconButton(
-              onPressed: () => _eliminarVenta(ventaId),
-              icon: const Icon(Icons.delete_rounded),
-              color: Colors.white,
-              iconSize: 24,
-              tooltip: 'Eliminar venta',
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ==============================
-// PANTALLA DETALLE PRODUCTOS
-// ==============================
-
-class DetalleProductosScreen extends StatelessWidget {
-  final List<dynamic> productos;
-  final String nombreUsuario;
-  final double total;
-
-  const DetalleProductosScreen({
-    super.key,
-    required this.productos,
-    required this.nombreUsuario,
-    required this.total,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: const Color(0xFF3483FA),
-        foregroundColor: Colors.white,
-        title: Text(
-          'Productos - $nombreUsuario',
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: Column(
-        children: [
-          // Header con resumen
-          Container(
-            decoration: const BoxDecoration(
-              color: Color(0xFF3483FA),
-              borderRadius: BorderRadius.only(
-                bottomLeft: Radius.circular(20),
-                bottomRight: Radius.circular(20),
-              ),
-            ),
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-            child: _buildHeaderResumen(),
-          ),
-          const SizedBox(height: 16),
-          // Lista de productos
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: productos.length,
-              itemBuilder: (context, index) {
-                return _buildProductoCard(productos[index], context);
-              },
-            ),
-          ),
-          // Footer con total
-          _buildFooterTotal(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeaderResumen() {
-    final totalItems = productos.fold<int>(
-  0,
-  (sum, producto) => sum + ((producto['cantidad'] ?? 0) as num).toInt(),
-);
-
-    
-    return Row(
-      children: [
-        Expanded(
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              children: [
-                Icon(Icons.inventory_2_rounded, color: Colors.white, size: 28),
-                const SizedBox(height: 8),
-                Text(
-                  '${productos.length}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text(
-                  'Productos',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              children: [
-                Icon(Icons.shopping_cart_rounded, color: Colors.white, size: 28),
-                const SizedBox(height: 8),
-                Text(
-                  '$totalItems',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text(
-                  'Artículos',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildProductoCard(Map<String, dynamic> producto, BuildContext context) {
-    final nombreProducto = producto['nombreProducto'] ?? 'Producto';
-    final talla = producto['talla'];
-    final color = producto['color'];
-    final cantidad = producto['cantidad'] ?? 0;
-    final precio = (producto['precioUnitario'] ?? producto['precio'] ?? 0).toDouble();
-    final subtotal = precio * cantidad;
-    
-    String colorNombre = '';
-    if (color != null) {
-      if (color is Map && color['nombre'] != null) {
-        colorNombre = color['nombre'];
-      } else if (color is String) {
-        colorNombre = color;
-      }
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 2,
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          // Imagen del producto
-          Container(
-            height: 200,
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(16),
-                topRight: Radius.circular(16),
-              ),
-            ),
-            child: producto['imagen'] != null
-                ? ClipRRect(
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(16),
-                      topRight: Radius.circular(16),
-                    ),
-                    child: Image.network(
-                      producto['imagen'],
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          decoration: BoxDecoration(
-                            color: Colors.grey[200],
-                            borderRadius: const BorderRadius.only(
-                              topLeft: Radius.circular(16),
-                              topRight: Radius.circular(16),
-                            ),
-                          ),
-                          child: Center(
-                            child: Icon(
-                              Icons.image_not_supported_rounded,
-                              color: Colors.grey[400],
-                              size: 50,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  )
-                : Container(
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: Colors.grey[200],
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(16),
-                        topRight: Radius.circular(16),
-                      ),
+                      color: AppColors.primary.withOpacity(0.1),
+                      borderRadius: AppStyles.radiusSmall,
                     ),
-                    child: Center(
-                      child: Icon(
-                        Icons.inventory_2_rounded,
-                        color: Colors.grey[400],
-                        size: 50,
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.inventory_2_rounded, size: 14, color: AppColors.primary),
+                        const SizedBox(width: 6),
+                        Text(
+                          '${productos.length} producto${productos.length != 1 ? 's' : ''}',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-          ),
-          // Información del producto
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Nombre del producto
-                Text(
-                  nombreProducto,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.black87,
+                  const Spacer(),
+                  Text(
+                    "\$${NumberFormat('#,##0', 'es_CO').format(total)}",
+                    style: AppStyles.priceText,
                   ),
-                ),
-                const SizedBox(height: 12),
-                // Características del producto
-                Row(
-                  children: [
-                    if (talla != null) ...[
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.blue[50],
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.blue[200]!),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.straighten_rounded, 
-                                 size: 16, color: Colors.blue[700]),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Talla: $talla',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.blue[700],
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    if (colorNombre.isNotEmpty) ...[
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.purple[50],
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.purple[200]!),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.palette_rounded, 
-                                 size: 16, color: Colors.purple[700]),
-                            const SizedBox(width: 4),
-                            Text(
-                              colorNombre,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.purple[700],
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 16),
-                // Cantidad y precios
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[50],
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey[200]!),
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.shopping_cart_outlined, 
-                               size: 20, color: Colors.grey[600]),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Cantidad:',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[600],
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const Spacer(),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.green[50],
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              '$cantidad',
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Colors.green[700],
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Icon(Icons.attach_money_rounded, 
-                               size: 20, color: Colors.grey[600]),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Precio unitario:',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[600],
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const Spacer(),
-                          Text(
-                            '${NumberFormat("#,##0", "es_CO").format(precio)}',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              color: Color(0xFF3483FA),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const Divider(height: 24),
-                      Row(
-                        children: [
-                          Icon(Icons.calculate_rounded, 
-                               size: 20, color: Colors.grey[700]),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Subtotal:',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.grey[700],
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const Spacer(),
-                          Text(
-                            '${NumberFormat("#,##0", "es_CO").format(subtotal)}',
-
-                            style: const TextStyle(
-                              fontSize: 20,
-                              color: Color(0xFF00A650),
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+                ],
+              ),
+            ],
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFooterTotal() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.2),
-            spreadRadius: 2,
-            blurRadius: 8,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(20),
-      child: Row(
-        children: [
-          Icon(Icons.receipt_long_rounded, 
-               size: 28, color: Colors.grey[700]),
-          const SizedBox(width: 12),
-          Text(
-            'TOTAL GENERAL:',
-            style: TextStyle(
-              fontSize: 18,
-              color: Colors.grey[700],
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const Spacer(),
-          Text(
-            '${NumberFormat("#,##0", "es_CO").format(total)}',
-            style: const TextStyle(
-              fontSize: 24,
-              color: Color(0xFF00A650),
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

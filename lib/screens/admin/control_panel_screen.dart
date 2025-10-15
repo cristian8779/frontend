@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:showcaseview/showcaseview.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../providers/categoria_admin_provider.dart';
 import 'widgets/categoria_list.dart';
@@ -10,7 +12,7 @@ import 'widgets/categoria_skeleton.dart';
 import 'widgets/connection_error_widget.dart';
 import 'styles/control_panel/control_panel_styles.dart';
 
-// 👇 AGREGAR: Importar el routeObserver
+// 👇 Importar el routeObserver
 import '../../main.dart';
 
 class ControlPanelScreen extends StatefulWidget {
@@ -23,24 +25,56 @@ class ControlPanelScreen extends StatefulWidget {
 }
 
 class _ControlPanelScreenState extends State<ControlPanelScreen> with RouteAware {
+  // GlobalKeys para los tooltips
+  final GlobalKey _categoriasKey = GlobalKey();
+  final GlobalKey _configKey = GlobalKey();
+  final GlobalKey _productosKey = GlobalKey();
+  final GlobalKey _ventasKey = GlobalKey();
+  final GlobalKey _anunciosKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
-    // Inicializar el provider
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // inicializamos el provider
       context.read<CategoriasProvider>().inicializar();
+
+      // Mostrar tutorial con tooltips
+      _maybeShowTutorial();
     });
   }
 
-  // 👇 AGREGAR: Suscribirse al RouteObserver
+  void _maybeShowTutorial() async {
+    if (!_isAllowedRole(widget.rol)) return;
+
+    // Verificar si ya se mostró el tutorial usando SharedPreferences
+    final prefs = await SharedPreferences.getInstance();
+    final tutorialMostrado = prefs.getBool('tutorial_control_panel_mostrado') ?? false;
+
+    if (!tutorialMostrado) {
+      // Delay para asegurar que todo esté renderizado
+      Future.delayed(const Duration(milliseconds: 800), () {
+        if (mounted) {
+          ShowCaseWidget.of(context).startShowCase([
+            _configKey,
+            _categoriasKey,
+            _productosKey,
+            _ventasKey,
+            _anunciosKey,
+          ]);
+          // Guardar que el tutorial ya fue mostrado
+          prefs.setBool('tutorial_control_panel_mostrado', true);
+        }
+      });
+    }
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     routeObserver.subscribe(this, ModalRoute.of(context) as PageRoute<dynamic>);
   }
 
-  // 👇 AGREGAR: Desuscribirse del RouteObserver
   @override
   void dispose() {
     routeObserver.unsubscribe(this);
@@ -49,10 +83,8 @@ class _ControlPanelScreenState extends State<ControlPanelScreen> with RouteAware
 
   @override
   void didPopNext() {
-    // Se ejecuta cuando regresamos a esta pantalla desde otra pantalla
     super.didPopNext();
     print("🔄 Regresando a ControlPanel - Recargando categorías...");
-    // Usar refresh silencioso para no mostrar skeleton
     context.read<CategoriasProvider>().refrescarSilencioso();
   }
 
@@ -145,6 +177,11 @@ class _ControlPanelScreenState extends State<ControlPanelScreen> with RouteAware
                 child: _ContenidoFijo(
                   rol: widget.rol,
                   categoriasProvider: categoriasProvider,
+                  categoriasKey: _categoriasKey,
+                  configKey: _configKey,
+                  productosKey: _productosKey,
+                  ventasKey: _ventasKey,
+                  anunciosKey: _anunciosKey,
                 ),
               ),
             );
@@ -158,10 +195,20 @@ class _ControlPanelScreenState extends State<ControlPanelScreen> with RouteAware
 class _ContenidoFijo extends StatelessWidget {
   final String rol;
   final CategoriasProvider categoriasProvider;
+  final GlobalKey categoriasKey;
+  final GlobalKey configKey;
+  final GlobalKey productosKey;
+  final GlobalKey ventasKey;
+  final GlobalKey anunciosKey;
 
   const _ContenidoFijo({
     required this.rol,
     required this.categoriasProvider,
+    required this.categoriasKey,
+    required this.configKey,
+    required this.productosKey,
+    required this.ventasKey,
+    required this.anunciosKey,
   });
 
   @override
@@ -179,20 +226,50 @@ class _ContenidoFijo extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  TopIcons(rol: rol, showNotificationIcon: false),
+                  TopIcons(
+                    rol: rol, 
+                    showNotificationIcon: false,
+                    configKey: configKey,
+                  ),
                   BannerWidget(media: media),
                   const SizedBox(height: ControlPanelStyles.defaultSpacing),
-                  Text(
-                    "Categorías",
-                    style: ControlPanelStyles.getSectionTitleStyle(
-                      dimensions['titleFontSize']!
+                  
+                  // 🎨 Showcase estilo Mercado Libre para Categorías
+                  Showcase(
+                    key: categoriasKey,
+                    title: 'Gestión de Categorías',
+                    titleTextStyle: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF333333),
+                      letterSpacing: -0.3,
+                    ),
+                    description: 'Organiza tus productos de manera eficiente. Crea, edita y ordena categorías para una mejor clasificación.',
+                    descTextStyle: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w400,
+                      color: Color(0xFF666666),
+                      height: 1.4,
+                      letterSpacing: 0,
+                    ),
+                    targetBorderRadius: BorderRadius.circular(8),
+                    tooltipBackgroundColor: Colors.white,
+                    overlayColor: Colors.black,
+                    overlayOpacity: 0.75,
+                    tooltipBorderRadius: BorderRadius.circular(12),
+                    tooltipPadding: const EdgeInsets.all(24),
+                    targetPadding: const EdgeInsets.all(8),
+                    child: Text(
+                      "Categorías",
+                      style: ControlPanelStyles.getSectionTitleStyle(
+                        dimensions['titleFontSize']!
+                      ),
                     ),
                   ),
                   const SizedBox(height: ControlPanelStyles.smallSpacing),
                   
                   // 🎯 MANEJO DE ESTADOS CON PROVIDER MEJORADO
                   if (categoriasProvider.isLoading && categoriasProvider.categorias.isEmpty)
-                    // Solo mostrar skeleton si es carga inicial (no hay datos)
                     const CategoriaSkeleton()
                   else if (categoriasProvider.hasError)
                     ImprovedErrorMessage(
@@ -232,22 +309,34 @@ class _ContenidoFijo extends StatelessWidget {
                           childAspectRatio: gridConfig['childAspectRatio'],
                           children: [
                             _AdminCard(
+                              showcaseKey: productosKey,
                               title: 'Gestión de Productos',
                               imagePath: 'assets/producto.png',
                               backgroundColor: ControlPanelStyles.productosCardBackground,
                               routeName: '/gestion-productos',
+                              tooltipTitle: 'Gestión de Productos',
+                              tooltipDescription: 'Administra tu catálogo completo. Agrega nuevos productos, edita información y mantén tu inventario actualizado.',
+                              accentColor: const Color(0xFF3483FA),
                             ),
                             _AdminCard(
+                              showcaseKey: ventasKey,
                               title: 'Gestión de Ventas',
                               imagePath: 'assets/venta.png',
                               backgroundColor: ControlPanelStyles.ventasCardBackground,
                               routeName: '/gestion-ventas',
+                              tooltipTitle: 'Gestión de Ventas',
+                              tooltipDescription: 'Visualiza y controla todas tus transacciones.',
+                              accentColor: const Color(0xFF00A650),
                             ),
                             _AdminCard(
+                              showcaseKey: anunciosKey,
                               title: 'Gestión de Anuncios',
                               imagePath: 'assets/anuncio.png',
                               backgroundColor: ControlPanelStyles.anunciosCardBackground,
                               routeName: '/anuncios-activos',
+                              tooltipTitle: 'Gestión de Anuncios',
+                              tooltipDescription: 'Crea promociones y anuncios destacados. Mantén informados a tus clientes sobre ofertas especiales.',
+                              accentColor: const Color(0xFFFF6C00),
                             ),
                           ],
                         );
@@ -266,16 +355,24 @@ class _ContenidoFijo extends StatelessWidget {
 }
 
 class _AdminCard extends StatelessWidget {
+  final GlobalKey showcaseKey;
   final String imagePath;
   final String title;
   final Color backgroundColor;
   final String routeName;
+  final String tooltipTitle;
+  final String tooltipDescription;
+  final Color accentColor;
 
   const _AdminCard({
+    required this.showcaseKey,
     required this.imagePath,
     required this.title,
     required this.backgroundColor,
     required this.routeName,
+    required this.tooltipTitle,
+    required this.tooltipDescription,
+    required this.accentColor,
   });
 
   @override
@@ -284,37 +381,62 @@ class _AdminCard extends StatelessWidget {
       builder: (context, constraints) {
         final dimensions = ControlPanelStyles.getAdminCardDimensions(context);
         
-        return GestureDetector(
-          onTap: () => Navigator.pushNamed(context, routeName),
-          child: Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: dimensions['horizontalPadding']!,
-              vertical: dimensions['verticalPadding']!,
-            ),
-            decoration: ControlPanelStyles.getAdminCardDecoration(backgroundColor),
-            child: Row(
-              children: [
-                Image.asset(
-                  imagePath,
-                  width: dimensions['imageSize']!,
-                  height: dimensions['imageSize']!,
-                  fit: BoxFit.contain,
-                ),
-                SizedBox(width: dimensions['spacing']!),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: ControlPanelStyles.getAdminCardTitleStyle(
-                      dimensions['fontSize']!
+        return Showcase(
+          key: showcaseKey,
+          title: tooltipTitle,
+          titleTextStyle: const TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF333333),
+            letterSpacing: -0.3,
+          ),
+          description: tooltipDescription,
+          descTextStyle: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w400,
+            color: Color(0xFF666666),
+            height: 1.4,
+            letterSpacing: 0,
+          ),
+          targetBorderRadius: BorderRadius.circular(8),
+          tooltipBackgroundColor: Colors.white,
+          overlayColor: Colors.black,
+          overlayOpacity: 0.75,
+          tooltipBorderRadius: BorderRadius.circular(12),
+          tooltipPadding: const EdgeInsets.all(24),
+          targetPadding: const EdgeInsets.all(8),
+          child: GestureDetector(
+            onTap: () => Navigator.pushNamed(context, routeName),
+            child: Container(
+              padding: EdgeInsets.symmetric(
+                horizontal: dimensions['horizontalPadding']!,
+                vertical: dimensions['verticalPadding']!,
+              ),
+              decoration: ControlPanelStyles.getAdminCardDecoration(backgroundColor),
+              child: Row(
+                children: [
+                  Image.asset(
+                    imagePath,
+                    width: dimensions['imageSize']!,
+                    height: dimensions['imageSize']!,
+                    fit: BoxFit.contain,
+                  ),
+                  SizedBox(width: dimensions['spacing']!),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: ControlPanelStyles.getAdminCardTitleStyle(
+                        dimensions['fontSize']!
+                      ),
                     ),
                   ),
-                ),
-                Icon(
-                  ControlPanelStyles.arrowForwardIcon,
-                  color: ControlPanelStyles.arrowColor,
-                  size: dimensions['iconSize']!,
-                ),
-              ],
+                  Icon(
+                    ControlPanelStyles.arrowForwardIcon,
+                    color: ControlPanelStyles.arrowColor,
+                    size: dimensions['iconSize']!,
+                  ),
+                ],
+              ),
             ),
           ),
         );

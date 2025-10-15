@@ -10,10 +10,10 @@ class AnuncioService {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   String? _token;
   String? _errorMessage;
-  bool _hasConnectionError = false; // Nuevo flag para errores de conexión
+  bool _hasConnectionError = false;
 
   String? get message => _errorMessage;
-  bool get hasConnectionError => _hasConnectionError; // Getter para verificar errores de conexión
+  bool get hasConnectionError => _hasConnectionError;
 
   AnuncioService() {
     print("✅ AnuncioService base URL: $_baseUrl");
@@ -93,7 +93,6 @@ class AnuncioService {
     String? token = await _getAccessToken();
     if (token == null) throw Exception('❌ El token de acceso es nulo.');
 
-    // Verificar expiración del JWT
     final payload = _decodeJwt(token);
     if (payload != null && payload.containsKey('exp')) {
       final expiry = DateTime.fromMillisecondsSinceEpoch(payload['exp'] * 1000);
@@ -114,7 +113,7 @@ class AnuncioService {
   }
 
   // ------------------------------
-  // ANUNCIOS
+  // ANUNCIOS ACTIVOS
   // ------------------------------
   Future<List<Map<String, String>>> obtenerAnunciosActivos() async {
     _clearConnectionError();
@@ -155,6 +154,7 @@ class AnuncioService {
             '_id': e['_id'],
             'imagen': e['imagen'] ?? '',
             'deeplink': e['deeplink'] ?? '',
+            'descripcion': e['descripcion'] ?? '',
             'fechaInicio': e['fechaInicio'],
             'fechaFin': e['fechaFin'],
             'productoId': e['productoId'],
@@ -175,6 +175,184 @@ class AnuncioService {
     }
   }
 
+  // ------------------------------
+  // ANUNCIOS PROGRAMADOS
+  // ------------------------------
+  Future<List<Map<String, dynamic>>> obtenerAnunciosProgramados() async {
+    _clearConnectionError();
+    _errorMessage = null;
+    
+    try {
+      final token = await _obtenerTokenValido();
+      print("🔍 Obteniendo anuncios programados...");
+      
+      final url = Uri.parse('$_baseUrl/anuncios?estado=programado');
+
+      final response = await http.get(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List<dynamic> anuncios = data['anuncios'] ?? [];
+        
+        print("✅ Anuncios programados obtenidos: ${anuncios.length}");
+        
+        return anuncios.map((e) {
+          return {
+            '_id': e['_id'],
+            'imagen': e['imagen'] ?? '',
+            'deeplink': e['deeplink'] ?? '',
+            'descripcion': e['descripcion'] ?? '',
+            'fechaInicio': e['fechaInicio'],
+            'fechaFin': e['fechaFin'],
+            'productoId': e['productoId'],
+            'categoriaId': e['categoriaId'],
+          };
+        }).toList();
+      } else {
+        final errorData = jsonDecode(response.body);
+        _errorMessage = errorData['error'] ?? 'Error al obtener anuncios programados';
+        print("❌ Error obtenerAnunciosProgramados: ${response.statusCode} - $_errorMessage");
+        return [];
+      }
+    } catch (e) {
+      if (_isConnectionError(e) || e.toString().contains('Sin conexión a Internet')) {
+        _setConnectionError("Sin conexión a Internet");
+        _errorMessage = "Sin conexión a Internet";
+        throw Exception('Sin conexión a Internet');
+      }
+      _errorMessage = "❌ Error al obtener anuncios programados: $e";
+      print(_errorMessage);
+      return [];
+    }
+  }
+
+  // ------------------------------
+  // ANUNCIOS EXPIRADOS
+  // ------------------------------
+  Future<List<Map<String, dynamic>>> obtenerAnunciosExpirados() async {
+    _clearConnectionError();
+    _errorMessage = null;
+    
+    try {
+      final token = await _obtenerTokenValido();
+      print("🔍 Obteniendo anuncios expirados...");
+      
+      final url = Uri.parse('$_baseUrl/anuncios?estado=expirado');
+
+      final response = await http.get(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List<dynamic> anuncios = data['anuncios'] ?? [];
+        
+        print("✅ Anuncios expirados obtenidos: ${anuncios.length}");
+        
+        return anuncios.map((e) {
+          return {
+            '_id': e['_id'],
+            'imagen': e['imagen'] ?? '',
+            'deeplink': e['deeplink'] ?? '',
+            'descripcion': e['descripcion'] ?? '',
+            'fechaInicio': e['fechaInicio'],
+            'fechaFin': e['fechaFin'],
+            'productoId': e['productoId'],
+            'categoriaId': e['categoriaId'],
+          };
+        }).toList();
+      } else {
+        final errorData = jsonDecode(response.body);
+        _errorMessage = errorData['error'] ?? 'Error al obtener anuncios expirados';
+        print("❌ Error obtenerAnunciosExpirados: ${response.statusCode} - $_errorMessage");
+        return [];
+      }
+    } catch (e) {
+      if (_isConnectionError(e) || e.toString().contains('Sin conexión a Internet')) {
+        _setConnectionError("Sin conexión a Internet");
+        _errorMessage = "Sin conexión a Internet";
+        throw Exception('Sin conexión a Internet');
+      }
+      _errorMessage = "❌ Error al obtener anuncios expirados: $e";
+      print(_errorMessage);
+      return [];
+    }
+  }
+
+  // ------------------------------
+  // TODOS LOS ANUNCIOS
+  // ------------------------------
+  Future<Map<String, dynamic>> obtenerTodosLosAnuncios({
+    int page = 1,
+    int limit = 10,
+    String? estado,
+  }) async {
+    _clearConnectionError();
+    _errorMessage = null;
+    
+    try {
+      final token = await _obtenerTokenValido();
+      
+      String queryParams = '?page=$page&limit=$limit';
+      if (estado != null && estado.isNotEmpty) {
+        queryParams += '&estado=$estado';
+      }
+      
+      final url = Uri.parse('$_baseUrl/anuncios$queryParams');
+
+      final response = await http.get(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        print("✅ Todos los anuncios obtenidos - Página: $page, Total: ${data['total']}");
+        return data;
+      } else {
+        final errorData = jsonDecode(response.body);
+        _errorMessage = errorData['error'] ?? 'Error al obtener todos los anuncios';
+        print("❌ Error obtenerTodosLosAnuncios: ${response.statusCode} - $_errorMessage");
+        return {
+          'anuncios': [],
+          'totalPages': 0,
+          'currentPage': page,
+          'total': 0,
+        };
+      }
+    } catch (e) {
+      if (_isConnectionError(e) || e.toString().contains('Sin conexión a Internet')) {
+        _setConnectionError("Sin conexión a Internet");
+        _errorMessage = "Sin conexión a Internet";
+        throw Exception('Sin conexión a Internet');
+      }
+      _errorMessage = "❌ Error al obtener todos los anuncios: $e";
+      print(_errorMessage);
+      return {
+        'anuncios': [],
+        'totalPages': 0,
+        'currentPage': page,
+        'total': 0,
+      };
+    }
+  }
+
+  // ------------------------------
+  // CREAR ANUNCIO
+  // ------------------------------
   Future<bool> crearAnuncio({
     required String fechaInicio,
     required String fechaFin,
@@ -230,6 +408,9 @@ class AnuncioService {
     }
   }
 
+  // ------------------------------
+  // ELIMINAR ANUNCIO
+  // ------------------------------
   Future<bool> eliminarAnuncio(String id) async {
     _clearConnectionError();
     _errorMessage = null;

@@ -4,9 +4,14 @@ import 'package:image_picker/image_picker.dart';
 import 'package:lottie/lottie.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 
 import '../../providers/categoria_admin_provider.dart';
 import '../../providers/auth_provider.dart';
+import 'styles/crear_categoria/create_category_colors.dart';
+import 'styles/crear_categoria/create_category_text_styles.dart';
+import 'styles/crear_categoria/create_category_decorations.dart';
+import 'styles/crear_categoria/create_category_dimensions.dart';
 
 class CreateCategoryScreen extends StatefulWidget {
   const CreateCategoryScreen({super.key});
@@ -18,12 +23,7 @@ class CreateCategoryScreen extends StatefulWidget {
 class _CreateCategoryScreenState extends State<CreateCategoryScreen> {
   final _nombreController = TextEditingController();
   String? _errorNombre;
-
   File? _imagenLocal;
-
-  final Color _colorPrimario = const Color(0xFF4A4A4A);
-  final Color _appBarColor = const Color(0xFFFDFDFD);
-  final Color _fondoClaro = const Color(0xFFF8F8F8);
 
   @override
   void initState() {
@@ -44,12 +44,28 @@ class _CreateCategoryScreenState extends State<CreateCategoryScreen> {
     super.dispose();
   }
 
+ Future<File?> _compressImage(File file) async {
+  final result = await FlutterImageCompress.compressAndGetFile(
+    file.absolute.path,
+    "${file.parent.path}/temp_${file.uri.pathSegments.last}",
+    quality: 70,
+  );
+
+  if (result == null) return null;
+
+  // 🔄 Convertir XFile a File
+  return File(result.path);
+}
+
+
   Future<void> _seleccionarDesdeGaleria() async {
     final picker = ImagePicker();
     final seleccion = await picker.pickImage(source: ImageSource.gallery);
     if (seleccion != null) {
+      File original = File(seleccion.path);
+      File? comprimida = await _compressImage(original);
       setState(() {
-        _imagenLocal = File(seleccion.path);
+        _imagenLocal = comprimida ?? original;
       });
     }
   }
@@ -58,32 +74,25 @@ class _CreateCategoryScreenState extends State<CreateCategoryScreen> {
     return GestureDetector(
       onTap: _seleccionarDesdeGaleria,
       child: Container(
-        height: 200,
+        height: CreateCategoryDimensions.imageContainerHeight,
         width: double.infinity,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.all(color: Colors.grey.shade300),
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black12,
-              blurRadius: 6,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
+        decoration: CreateCategoryDecorations.imageContainer,
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: CreateCategoryDecorations.imageBorderRadius,
           child: _imagenLocal != null
               ? Image.file(_imagenLocal!, fit: BoxFit.contain)
               : Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.image, size: 60, color: Colors.grey[400]),
-                    const SizedBox(height: 10),
+                    Icon(
+                      Icons.image,
+                      size: CreateCategoryDimensions.iconSize,
+                      color: CreateCategoryColors.gris400,
+                    ),
+                    CreateCategoryDimensions.spacingSmall,
                     Text(
                       'Toca para agregar imagen',
-                      style: TextStyle(color: Colors.grey[600]),
+                      style: CreateCategoryTextStyles.imagePlaceholder,
                     ),
                   ],
                 ),
@@ -107,7 +116,6 @@ class _CreateCategoryScreenState extends State<CreateCategoryScreen> {
       return;
     }
 
-    // 🎯 USAR EL PROVIDER EN LUGAR DEL SERVICE DIRECTO
     final categoriasProvider = Provider.of<CategoriasProvider>(context, listen: false);
 
     try {
@@ -122,17 +130,25 @@ class _CreateCategoryScreenState extends State<CreateCategoryScreen> {
           mensaje: "Categoría creada correctamente.",
           tipoAnimacion: 'assets/animations/Success.json',
           onAceptar: () {
-            Navigator.pop(context); // Cierra el diálogo
-            Navigator.pop(context, true); // Devuelve "true"
+            Navigator.pop(context);
+            Navigator.pop(context, true);
           },
         );
       } else {
-        // El error ya está manejado en el provider
         final errorMessage = categoriasProvider.errorMessage ?? 'Error desconocido';
-        _mostrarErrorToast("❌ $errorMessage");
+        if (errorMessage.contains("413")) {
+          _mostrarErrorToast("⚠️ La imagen es demasiado grande. Intenta con una más liviana.");
+        } else {
+          _mostrarErrorToast("❌ $errorMessage");
+        }
       }
     } catch (e) {
-      _mostrarErrorToast("❌ Ocurrió un error inesperado: ${e.toString()}");
+      final msg = e.toString();
+      if (msg.contains("413") || msg.contains("Request Entity Too Large")) {
+        _mostrarErrorToast("⚠️ La imagen supera el tamaño permitido por el servidor. Comprime o usa una imagen más pequeña.");
+      } else {
+        _mostrarErrorToast("❌ Ocurrió un error inesperado: $msg");
+      }
     }
   }
 
@@ -167,9 +183,9 @@ class _CreateCategoryScreenState extends State<CreateCategoryScreen> {
       msg: mensaje,
       toastLength: Toast.LENGTH_SHORT,
       gravity: ToastGravity.BOTTOM,
-      backgroundColor: Colors.red,
-      textColor: Colors.white,
-      fontSize: 16.0,
+      backgroundColor: CreateCategoryColors.rojo,
+      textColor: CreateCategoryColors.blanco,
+      fontSize: CreateCategoryDimensions.fontSizeToast,
     );
   }
 
@@ -182,20 +198,20 @@ class _CreateCategoryScreenState extends State<CreateCategoryScreen> {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text(titulo, style: const TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(titulo, style: CreateCategoryTextStyles.dialogTitle),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Lottie.asset(
               tipoAnimacion ?? 'assets/animations/Success.json',
-              width: 100,
-              height: 100,
+              width: CreateCategoryDimensions.lottieSize,
+              height: CreateCategoryDimensions.lottieSize,
               fit: BoxFit.fill,
             ),
             Text(mensaje),
           ],
         ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: CreateCategoryDecorations.dialogShape,
         actions: [
           TextButton(
             onPressed: onAceptar,
@@ -210,67 +226,61 @@ class _CreateCategoryScreenState extends State<CreateCategoryScreen> {
   Widget build(BuildContext context) {
     return Consumer<CategoriasProvider>(
       builder: (context, categoriasProvider, child) {
-        // 🎯 USAR EL ESTADO DEL PROVIDER PARA MOSTRAR LOADING
         final isCreating = categoriasProvider.isCreating;
 
         return Scaffold(
-          backgroundColor: _fondoClaro,
+          backgroundColor: CreateCategoryColors.fondoClaro,
           appBar: AppBar(
-            title: const Text(
+            title: Text(
               'Crear Categoría',
-              style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600),
+              style: CreateCategoryTextStyles.appBarTitle,
             ),
             centerTitle: true,
-            backgroundColor: _appBarColor,
-            iconTheme: const IconThemeData(color: Colors.black87),
-            elevation: 1,
+            backgroundColor: CreateCategoryColors.appBarColor,
+            iconTheme: const IconThemeData(color: CreateCategoryColors.negro87),
+            elevation: CreateCategoryDimensions.appBarElevation,
           ),
           body: Stack(
             children: [
               SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
+                padding: CreateCategoryDimensions.screenPadding,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Imagen de la categoría',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      style: CreateCategoryTextStyles.sectionTitle,
                     ),
-                    const SizedBox(height: 10),
+                    CreateCategoryDimensions.spacingSmall,
                     _buildContenedorImagen(),
-                    const SizedBox(height: 30),
+                    CreateCategoryDimensions.spacingLarge,
                     TextField(
                       controller: _nombreController,
-                      enabled: !isCreating, // 🎯 DESHABILITAR DURANTE CREACIÓN
-                      decoration: _inputDecoration('Nombre de la categoría', Icons.category)
-                          .copyWith(errorText: _errorNombre),
+                      enabled: !isCreating,
+                      decoration: CreateCategoryDecorations.inputDecoration(
+                        'Nombre de la categoría',
+                        Icons.category,
+                      ).copyWith(errorText: _errorNombre),
                     ),
-                    const SizedBox(height: 40),
+                    CreateCategoryDimensions.spacingXLarge,
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
                         icon: isCreating
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2,
+                            ? SizedBox(
+                                width: CreateCategoryDimensions.loadingIndicatorSize,
+                                height: CreateCategoryDimensions.loadingIndicatorSize,
+                                child: const CircularProgressIndicator(
+                                  color: CreateCategoryColors.blanco,
+                                  strokeWidth: CreateCategoryDimensions.loadingStrokeWidth,
                                 ),
                               )
                             : const Icon(Icons.check_circle_outline),
                         label: Text(
                           isCreating ? 'Creando...' : 'Crear Categoría',
-                          style: const TextStyle(fontSize: 16),
+                          style: CreateCategoryTextStyles.buttonText,
                         ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _colorPrimario,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
+                        style: CreateCategoryDecorations.primaryButtonStyle,
                         onPressed: isCreating ? null : _crearCategoria,
                       ),
                     ),
@@ -278,20 +288,22 @@ class _CreateCategoryScreenState extends State<CreateCategoryScreen> {
                 ),
               ),
               
-              // 🎯 OVERLAY DE LOADING OPCIONAL (si quieres bloquear toda la pantalla)
               if (isCreating)
                 Container(
-                  color: Colors.black26,
-                  child: const Center(
+                  color: CreateCategoryColors.negro26,
+                  child: Center(
                     child: Card(
                       child: Padding(
-                        padding: EdgeInsets.all(20),
+                        padding: CreateCategoryDimensions.cardPadding,
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            CircularProgressIndicator(),
-                            SizedBox(height: 16),
-                            Text('Creando categoría...'),
+                            const CircularProgressIndicator(),
+                            CreateCategoryDimensions.spacingMedium,
+                            Text(
+                              'Creando categoría...',
+                              style: CreateCategoryTextStyles.loadingText,
+                            ),
                           ],
                         ),
                       ),
@@ -302,20 +314,6 @@ class _CreateCategoryScreenState extends State<CreateCategoryScreen> {
           ),
         );
       },
-    );
-  }
-
-  InputDecoration _inputDecoration(String label, IconData icon) {
-    return InputDecoration(
-      labelText: label,
-      prefixIcon: Icon(icon),
-      filled: true,
-      fillColor: Colors.white,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide.none,
-      ),
     );
   }
 }

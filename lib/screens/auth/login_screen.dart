@@ -6,6 +6,7 @@ import '../../providers/auth_provider.dart';
 import '../../screens/auth/register_screen.dart';
 import 'package:crud/screens/usuario/bienvenida_usuario_screen.dart';
 import 'package:crud/theme/login/app_theme.dart';
+import 'package:crud/screens/auth/privacy_policy_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -31,13 +32,15 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _showMessage(String msg, {Color backgroundColor = AppColors.primary}) {
+    if (!mounted) return;
+
     final snackBar = SnackBarStyles.buildSnackBar(
       context,
       msg,
       backgroundColor: backgroundColor,
       action: _getSnackBarAction(backgroundColor),
     );
-    
+
     ScaffoldMessenger.of(context).showSnackBar(snackBar);
   }
 
@@ -65,7 +68,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (connectivityResult == ConnectivityResult.none) {
         _wasDisconnected = true;
         _showMessage(
-          " Sin conexión a internet\nVerifica tu WiFi o datos móviles y vuelve a intentarlo.",
+          "Sin conexión a internet\nVerifica tu WiFi o datos móviles y vuelve a intentarlo.",
           backgroundColor: AppColors.warning,
         );
         return false;
@@ -79,7 +82,7 @@ class _LoginScreenState extends State<LoginScreen> {
       return true;
     } catch (e) {
       _showMessage(
-        "⚠️ Error al verificar la conexión\nPor favor, revisa tu configuración de red.",
+        "Error al verificar la conexión\nPor favor, revisa tu configuración de red.",
         backgroundColor: AppColors.errorAccent,
       );
       return false;
@@ -115,11 +118,16 @@ class _LoginScreenState extends State<LoginScreen> {
         passwordController.text.trim(),
       );
 
+      if (!mounted) return;
+
       await _handleLoginResult(success, authProvider.rol);
     } catch (e) {
-      debugPrint('❌ Error en login: $e');
+      debugPrint('Error en login: $e');
+      
+      if (!mounted) return;
+      
       _showMessage(
-        "❌ Error inesperado al iniciar sesión\nIntenta nuevamente.",
+        "Error inesperado al iniciar sesión\nIntenta nuevamente.",
         backgroundColor: AppColors.error,
       );
     } finally {
@@ -138,23 +146,103 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      final success = await authProvider.loginConGoogle();
+      
+      // Primer intento sin términos aceptados
+      final success = await authProvider.loginConGoogle(terminosAceptados: false);
 
-      await _handleLoginResult(success, authProvider.rol, isGoogle: true);
-    } catch (e) {
-      debugPrint('❌ Error en Google login: $e');
+      if (!mounted) {
+        debugPrint('Widget desmontado después de loginConGoogle');
+        return;
+      }
+
+      // Si requiere términos, navegar a la pantalla de términos
+      if (!success && authProvider.mensaje == "requiere_terminos") {
+        setState(() => _isLoading = false);
+        
+        debugPrint('Navegando a pantalla de términos');
+        
+        // Navegar y esperar resultado
+        final terminosAceptados = await Navigator.push<bool>(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const PrivacyPolicyScreen(),
+          ),
+        );
+
+        if (!mounted) {
+          debugPrint('Widget desmontado después de navegar a términos');
+          return;
+        }
+
+        if (terminosAceptados == true) {
+          // El usuario aceptó los términos
+          debugPrint('Términos aceptados, creando cuenta...');
+          setState(() => _isLoading = true);
+          
+          // Llamar al método que acepta los términos con los datos ya guardados
+          final successConTerminos = await authProvider.aceptarTerminosYCrearCuenta();
+          
+          if (!mounted) {
+            debugPrint('Widget desmontado después de crear cuenta');
+            return;
+          }
+          
+          await _handleLoginResult(successConTerminos, authProvider.rol, isGoogle: true);
+        } else {
+          // El usuario canceló o rechazó los términos
+          debugPrint('Términos rechazados o cancelados');
+          
+          // Limpiar datos pendientes de Google
+          authProvider.limpiarDatosGooglePendientes();
+          
+          _showMessage(
+            "Debes aceptar los términos para crear una cuenta.",
+            backgroundColor: AppColors.warning,
+          );
+        }
+      } else if (success) {
+        // Usuario existente - login exitoso
+        debugPrint('Login con Google exitoso (usuario existente)');
+        await _handleLoginResult(true, authProvider.rol, isGoogle: true);
+      } else {
+        // Error diferente
+        debugPrint('Error en Google login: ${authProvider.mensaje}');
+        
+        String errorMessage = authProvider.mensaje ?? "Error al iniciar sesión con Google";
+        
+        // Personalizar mensaje según el error
+        if (errorMessage.contains("configuración del servidor")) {
+          errorMessage = "Error de configuración del servidor\nContacta al soporte técnico.";
+        } else if (errorMessage.contains("sin_conexion")) {
+          errorMessage = "Sin conexión a internet";
+        } else if (errorMessage.contains("timeout")) {
+          errorMessage = "Tiempo de espera agotado\nIntenta nuevamente.";
+        } else if (errorMessage != "Inicio de sesion cancelado") {
+          errorMessage = "Error al iniciar sesión con Google\n$errorMessage";
+        }
+        
+        _showMessage(errorMessage, backgroundColor: AppColors.error);
+      }
+    } catch (e, stackTrace) {
+      debugPrint('Error inesperado en Google login: $e');
+      debugPrint('Stack trace: $stackTrace');
+      
+      if (!mounted) return;
+      
       _showMessage(
-        "❌ Error inesperado con Google Login\nIntenta nuevamente.",
+        "Error inesperado con Google Login\nIntenta nuevamente.",
         backgroundColor: AppColors.error,
       );
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   Future<void> _handleLoginResult(bool success, String? rol, {bool isGoogle = false}) async {
     if (success) {
-      debugPrint('✅ Login exitoso ${isGoogle ? "con Google " : ""}con AuthProvider');
+      debugPrint('Login exitoso ${isGoogle ? "con Google " : ""}con AuthProvider');
       
       await Future.delayed(const Duration(milliseconds: 100));
       
@@ -162,15 +250,30 @@ class _LoginScreenState extends State<LoginScreen> {
         _navegarSegunRol(rol);
       }
     } else {
-      final errorMessage = isGoogle 
-          ? "🔐 Error al iniciar sesión con Google\nIntenta nuevamente."
-          : "❌ Correo o contraseña incorrectos.";
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final mensaje = authProvider.mensaje;
+      
+      String errorMessage;
+      
+      if (isGoogle) {
+        if (mensaje?.contains("configuración") ?? false) {
+          errorMessage = "Error de configuración del servidor\nContacta al soporte.";
+        } else if (mensaje == "Inicio de sesion cancelado") {
+          // No mostrar mensaje si el usuario canceló
+          return;
+        } else {
+          errorMessage = "Error al iniciar sesión con Google\nIntenta nuevamente.";
+        }
+      } else {
+        errorMessage = "Correo o contraseña incorrectos.";
+      }
+      
       _showMessage(errorMessage, backgroundColor: AppColors.error);
     }
   }
 
   void _navegarSegunRol(String? rol) {
-    debugPrint('🔍 Navegando según rol: $rol');
+    debugPrint('Navegando según rol: $rol');
     
     if (rol == 'admin' || rol == 'superAdmin') {
       Navigator.pushNamedAndRemoveUntil(
@@ -187,14 +290,13 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } else {
       _showMessage(
-        "⚠️ Rol no válido.\nContacta al administrador.", 
+        "Rol no válido.\nContacta al administrador.", 
         backgroundColor: AppColors.error
       );
     }
   }
 
   Widget _buildTopSection(BuildContext context) {
-    final media = MediaQuery.of(context);
     final isSmallScreen = AppDimensions.isSmallScreen(context);
     
     return Column(
