@@ -80,6 +80,8 @@ class _CrearProductoScreenState extends State<CrearProductoScreen> {
 
   bool _showFab = false;
   String? _createdProductId;
+  
+  bool _isInitializing = true;
 
   @override
   void initState() {
@@ -98,22 +100,110 @@ class _CrearProductoScreenState extends State<CrearProductoScreen> {
     super.dispose();
   }
 
+  // ⭐⭐⭐ MÉTODO CORREGIDO CON REFRESH DE CATEGORÍAS ⭐⭐⭐
   Future<void> _inicializarProvider() async {
+    if (!mounted) return;
+    
+    debugPrint('');
+    debugPrint('🔄 === INICIALIZANDO CREAR PRODUCTO ===');
+    debugPrint('   - categoryId recibido: ${widget.categoryId}');
+    
     final provider = context.read<ProductoProvider>();
     
-    if (provider.categorias.isEmpty) {
-      await provider.inicializar();
-    }
-
-    if (widget.categoryId != null && provider.categorias.isNotEmpty) {
-      try {
-        categoriaSeleccionada = provider.categorias.firstWhere(
-          (cat) => cat['_id'] == widget.categoryId
-        );
-      } catch (e) {
-        categoriaSeleccionada = provider.categorias.isNotEmpty ? provider.categorias.first : null;
+    try {
+      // PASO 1: SIEMPRE refrescar categorías desde el servidor
+      debugPrint('   - Refrescando categorías desde servidor...');
+      await provider.refrescarCategorias();
+      
+      if (!mounted) return;
+      
+      // Esperar un frame adicional para que el Consumer se actualice
+      await Future.delayed(const Duration(milliseconds: 150));
+      
+      if (!mounted) return;
+      
+      debugPrint('   - ✅ Categorías actualizadas: ${provider.categorias.length}');
+      
+      // Mostrar todas las categorías
+      if (provider.categorias.isNotEmpty) {
+        debugPrint('');
+        debugPrint('📋 CATEGORÍAS DISPONIBLES EN PANTALLA:');
+        for (var i = 0; i < provider.categorias.length; i++) {
+          final cat = provider.categorias[i];
+          debugPrint('   ${i + 1}. ID: "${cat['_id']}" | Nombre: "${cat['nombre']}"');
+        }
+        debugPrint('');
+      } else {
+        debugPrint('⚠️  No hay categorías disponibles');
       }
-      if (mounted) setState(() {});
+      
+      // PASO 2: Buscar la categoría si se proporcionó un ID
+      if (widget.categoryId != null && provider.categorias.isNotEmpty) {
+        final categoryIdBuscado = widget.categoryId!.trim();
+        debugPrint('🔍 Buscando categoría con ID: "$categoryIdBuscado"');
+        
+        try {
+          categoriaSeleccionada = provider.categorias.firstWhere(
+            (cat) {
+              final catId = cat['_id']?.toString().trim();
+              final coincide = catId == categoryIdBuscado;
+              
+              if (coincide) {
+                debugPrint('   ✅ ENCONTRADA:');
+                debugPrint('      - ID: "$catId"');
+                debugPrint('      - Nombre: "${cat['nombre']}"');
+              }
+              
+              return coincide;
+            },
+          );
+          
+          debugPrint('');
+          debugPrint('🎯 Categoría seleccionada: "${categoriaSeleccionada!['nombre']}"');
+          
+        } catch (e) {
+          debugPrint('');
+          debugPrint('⚠️  CATEGORÍA NO ENCONTRADA');
+          debugPrint('   ID buscado: "$categoryIdBuscado"');
+          debugPrint('   IDs disponibles:');
+          
+          for (var cat in provider.categorias) {
+            debugPrint('      - "${cat['_id']}"');
+          }
+          
+          debugPrint('   Usando primera categoría como fallback');
+          debugPrint('');
+          
+          if (provider.categorias.isNotEmpty) {
+            categoriaSeleccionada = provider.categorias.first;
+            debugPrint('   Fallback: "${categoriaSeleccionada!['nombre']}"');
+          }
+        }
+      } else if (widget.categoryId == null) {
+        debugPrint('ℹ️  No se proporcionó categoryId - usuario elegirá manualmente');
+      }
+      
+    } catch (e) {
+      debugPrint('❌ Error al inicializar: $e');
+      
+      // Si falla, intentar inicializar el provider completo
+      if (provider.categorias.isEmpty) {
+        debugPrint('   Intentando inicializar provider completo...');
+        try {
+          await provider.inicializar();
+        } catch (e2) {
+          debugPrint('   ❌ Error en inicializar: $e2');
+        }
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isInitializing = false;
+        });
+        debugPrint('✅ Inicialización completa');
+        debugPrint('=== FIN INICIALIZACIÓN ===');
+        debugPrint('');
+      }
     }
   }
 
@@ -173,7 +263,7 @@ class _CrearProductoScreenState extends State<CrearProductoScreen> {
     );
   }
 
-  Future<void> guardarProducto() async {
+ Future<void> guardarProducto() async {
     if (!_formKey.currentState!.validate()) return;
 
     if (imagenSeleccionada == null || categoriaSeleccionada == null) {
@@ -438,6 +528,45 @@ class _CrearProductoScreenState extends State<CrearProductoScreen> {
   }
 
   Widget _buildCategoriaDropdown() {
+    if (_isInitializing) {
+      return Container(
+        margin: EdgeInsets.only(bottom: CrearProductoDimensions.fieldMarginBottom),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text('Categoría', style: CrearProductoTextStyles.label),
+                Text(' *', style: CrearProductoTextStyles.labelRequired),
+              ],
+            ),
+            SizedBox(height: CrearProductoDimensions.spacingSmall),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(CrearProductoDimensions.radiusMedium),
+                border: Border.all(color: CrearProductoColors.border),
+              ),
+              padding: EdgeInsets.all(CrearProductoDimensions.spacingXLarge),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: CrearProductoDimensions.progressIndicatorSize,
+                    height: CrearProductoDimensions.progressIndicatorSize,
+                    child: CircularProgressIndicator(
+                      strokeWidth: CrearProductoDimensions.progressIndicatorStroke,
+                    ),
+                  ),
+                  SizedBox(width: CrearProductoDimensions.spacingLarge),
+                  const Text('Cargando categorías...'),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    
     return Consumer<ProductoProvider>(
       builder: (context, provider, child) {
         return Container(
@@ -452,80 +581,63 @@ class _CrearProductoScreenState extends State<CrearProductoScreen> {
                 ],
               ),
               SizedBox(height: CrearProductoDimensions.spacingSmall),
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(CrearProductoDimensions.radiusMedium),
-                  border: Border.all(color: CrearProductoColors.border),
-                ),
-                child: provider.isLoading && provider.categorias.isEmpty
-                    ? Container(
-                        padding: EdgeInsets.all(CrearProductoDimensions.spacingXLarge),
-                        child: Row(
-                          children: [
-                            SizedBox(
-                              width: CrearProductoDimensions.progressIndicatorSize,
-                              height: CrearProductoDimensions.progressIndicatorSize,
-                              child: CircularProgressIndicator(
-                                strokeWidth: CrearProductoDimensions.progressIndicatorStroke,
-                              ),
-                            ),
-                            SizedBox(width: CrearProductoDimensions.spacingLarge),
-                            const Text('Cargando categorías...'),
-                          ],
+              
+              if (provider.categorias.isEmpty && !provider.isLoading)
+                Container(
+                  padding: EdgeInsets.all(12),
+                  margin: EdgeInsets.only(bottom: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.warning_amber, color: Colors.orange.shade700, size: 20),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'No hay categorías disponibles',
+                          style: TextStyle(color: Colors.orange.shade900, fontSize: 12),
                         ),
-                      )
-                    : provider.hasError && provider.categorias.isEmpty
-                        ? Container(
-                            padding: EdgeInsets.all(CrearProductoDimensions.spacingXLarge),
-                            child: Column(
-                              children: [
-                                Row(
-                                  children: [
-                                    const Icon(Icons.error_outline, color: CrearProductoColors.error),
-                                    SizedBox(width: CrearProductoDimensions.spacingMedium),
-                                    Expanded(
-                                      child: Text(provider.errorMessage ?? 'Error al cargar categorías')
-                                    ),
-                                  ],
-                                ),
-                                SizedBox(height: CrearProductoDimensions.spacingMedium),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: TextButton(
-                                    onPressed: () => provider.reintentar(),
-                                    child: const Text('Reintentar'),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
-                        : DropdownButtonFormField<Map<String, dynamic>>(
-                            value: categoriaSeleccionada,
-                            decoration: CrearProductoDecorations.inputDecoration(
-                              hintText: 'Seleccionar categoría',
-                              icon: Icons.category_outlined,
-                            ).copyWith(
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(CrearProductoDimensions.radiusMedium),
-                                borderSide: BorderSide.none,
-                              ),
-                            ),
-                            items: provider.categorias.map((cat) {
-                              return DropdownMenuItem<Map<String, dynamic>>(
-                                value: cat,
-                                child: Text(cat['nombre']),
-                              );
-                            }).toList(),
-                            onChanged: widget.categoryId != null
-                                ? null
-                                : (val) => setState(() => categoriaSeleccionada = val),
-                            validator: (val) => val == null ? 'Campo obligatorio' : null,
-                            isExpanded: true,
-                            disabledHint: widget.categoryId != null && categoriaSeleccionada != null
-                                ? Text(categoriaSeleccionada!['nombre'])
-                                : null,
-                          ),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          setState(() => _isInitializing = true);
+                          await _inicializarProvider();
+                        },
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                        child: Text('Recargar', style: TextStyle(fontSize: 12)),
+                      ),
+                    ],
+                  ),
+                ),
+              
+              DropdownButtonFormField<Map<String, dynamic>>(
+                value: categoriaSeleccionada,
+                decoration: CrearProductoDecorations.inputDecoration(
+                  hintText: 'Seleccionar categoría',
+                  icon: Icons.category_outlined,
+                ),
+                items: provider.categorias.map((cat) {
+                  return DropdownMenuItem<Map<String, dynamic>>(
+                    value: cat,
+                    child: Text(cat['nombre'] ?? 'Sin nombre'),
+                  );
+                }).toList(),
+                onChanged: widget.categoryId != null
+                    ? null
+                    : (val) {
+                        debugPrint('📝 Categoría seleccionada manualmente: ${val?['nombre']}');
+                        setState(() => categoriaSeleccionada = val);
+                      },
+                validator: (val) => val == null ? 'Campo obligatorio' : null,
+                isExpanded: true,
+                disabledHint: widget.categoryId != null && categoriaSeleccionada != null
+                    ? Text(categoriaSeleccionada!['nombre'])
+                    : null,
               ),
             ],
           ),

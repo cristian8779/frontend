@@ -14,6 +14,7 @@ import '../../providers/carrito_provider.dart';
 import '../../models/request_models.dart';
 import '/utils/colores.dart';
 import '../../widgets/resena.dart';
+import '../../theme/producto/index.dart';
 
 class ProductoScreen extends StatefulWidget {
   final String productId;
@@ -58,7 +59,12 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
   bool get _isTablet => MediaQuery.of(context).size.width >= 768;
   bool get _isDesktop => MediaQuery.of(context).size.width >= 1024;
   double get _screenWidth => MediaQuery.of(context).size.width;
-  double get _horizontalPadding => _isDesktop ? 32.0 : _isTablet ? 24.0 : 16.0;
+  
+  double get _horizontalPadding => _isDesktop 
+      ? ProductoPadding.desktopHorizontal 
+      : _isTablet 
+          ? ProductoPadding.tabletHorizontal 
+          : ProductoPadding.mobileHorizontal;
 
   String _formatearPrecio(double precio) {
     final formatter = NumberFormat('#,##0', 'es_CO');
@@ -72,7 +78,7 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
     variaciones = ProductoUsuarioService().obtenerVariacionesPorProducto(widget.productId);
     
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 800),
+      duration: ProductoAnimations.fadeIn,
       vsync: this,
     );
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
@@ -112,15 +118,11 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
       final token = await _secureStorage.read(key: 'accessToken');
       
       if (token == null || token.isEmpty) {
-        setState(() {
-          _isLoggedIn = false;
-        });
+        setState(() => _isLoggedIn = false);
         return;
       }
 
-      setState(() {
-        _isLoggedIn = true;
-      });
+      setState(() => _isLoggedIn = true);
 
       if (mounted) {
         final favoritoProvider = Provider.of<FavoritoProvider>(context, listen: false);
@@ -130,9 +132,7 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
       }
     } catch (e) {
       print('ERROR en _verificarEstadoInicial: $e');
-      setState(() {
-        _isLoggedIn = false;
-      });
+      setState(() => _isLoggedIn = false);
     }
   }
 
@@ -149,31 +149,23 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
     
     try {
       final token = await _secureStorage.read(key: 'accessToken');
-      
-      if (token == null || token.isEmpty) {
-        return;
-      }
+      if (token == null || token.isEmpty) return;
       
       await _historialService.agregarAlHistorial(widget.productId);
-      
-      setState(() {
-        _historialAgregado = true;
-      });
+      setState(() => _historialAgregado = true);
       
     } catch (e) {
       if (e.toString().contains('ya existe') || e.toString().contains('already exists')) {
-        setState(() {
-          _historialAgregado = true;
-        });
+        setState(() => _historialAgregado = true);
       }
     }
   }
 
   String _obtenerImagenActual(Map<String, dynamic> productData, List<Map<String, dynamic>> variations) {
     if (coloresSeleccionados.isEmpty) {
-      final imagen = productData['imagen'] ?? '';
-      _cachedImage ??= imagen;
-      return imagen;
+      final imagenBase = productData['imagen'] ?? '';
+      _cachedImage = imagenBase;
+      return imagenBase;
     }
 
     final colorSeleccionado = coloresSeleccionados.first;
@@ -190,9 +182,9 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
       }
     }
 
-    final imagen = productData['imagen'] ?? '';
-    _cachedImage ??= imagen;
-    return imagen;
+    final imagenBase = productData['imagen'] ?? '';
+    _cachedImage = imagenBase;
+    return imagenBase;
   }
 
   int _obtenerStockActual(Map<String, dynamic> productData, List<Map<String, dynamic>> variations) {
@@ -202,8 +194,7 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
 
     for (var variacion in variations) {
       bool colorCoincide = coloresSeleccionados.isEmpty || 
-          (variacion['color'] != null && 
-           coloresSeleccionados.contains(variacion['color']['hex']));
+          (variacion['color'] != null && coloresSeleccionados.contains(variacion['color']['hex']));
       
       bool tallaCoincide = tallasSeleccionadas.isEmpty ||
           tallasSeleccionadas.contains(variacion['tallaNumero']?.toString()) ||
@@ -223,19 +214,19 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
     String stockText;
 
     if (stock <= 0) {
-      stockColor = const Color(0xFFE74C3C);
+      stockColor = ProductoColores.error;
       stockIcon = Icons.cancel_outlined;
       stockText = 'Sin stock';
     } else if (stock <= 5) {
-      stockColor = const Color(0xFFFF9500);
+      stockColor = ProductoColores.warning;
       stockIcon = Icons.warning_outlined;
       stockText = 'Últimas $stock unidades';
     } else if (stock <= 10) {
-      stockColor = const Color(0xFFFF9500);
+      stockColor = ProductoColores.warning;
       stockIcon = Icons.inventory_outlined;
       stockText = 'Pocas unidades ($stock disponibles)';
     } else {
-      stockColor = const Color(0xFF00A650);
+      stockColor = ProductoColores.success;
       stockIcon = Icons.check_circle_outlined;
       stockText = 'Stock disponible ($stock unidades)';
     }
@@ -243,13 +234,13 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
     return Row(
       children: [
         Icon(stockIcon, color: stockColor, size: 16),
-        const SizedBox(width: 4),
+        const SizedBox(width: ProductoSpacing.xs),
         Flexible(
           child: Text(
             stockText,
             style: TextStyle(
               color: stockColor,
-              fontSize: _isDesktop ? 14 : 13,
+              fontSize: _isDesktop ? ProductoFontSizes.desktopBodyMd : ProductoFontSizes.mobileBodySm,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -277,10 +268,7 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
       }
     } catch (e) {
       String errorMessage = e.toString().replaceFirst('Exception: ', '');
-      
-      if (errorMessage.contains('token') || 
-          errorMessage.contains('acceso') ||
-          errorMessage.contains('unauthorized')) {
+      if (errorMessage.contains('token') || errorMessage.contains('acceso') || errorMessage.contains('unauthorized')) {
         _mostrarDialogoLogin();
       } else {
         _mostrarSnackbar('Error: $errorMessage', isSuccess: false);
@@ -294,35 +282,35 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
       barrierDismissible: true,
       builder: (BuildContext context) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(ProductoBorderRadius.sm)),
           contentPadding: EdgeInsets.zero,
           title: Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(ProductoSpacing.lg),
             child: Text(
               'Iniciar sesión',
               style: TextStyle(
-                fontSize: _isDesktop ? 22 : 20,
+                fontSize: _isDesktop ? ProductoFontSizes.desktopHeadingMd : ProductoFontSizes.mobileHeadingMd,
                 fontWeight: FontWeight.w600,
-                color: const Color(0xFF333333),
+                color: ProductoColores.textDark,
               ),
             ),
           ),
           content: Container(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            padding: const EdgeInsets.fromLTRB(ProductoSpacing.lg, 0, ProductoSpacing.lg, ProductoSpacing.lg),
             child: Text(
               'Para agregar productos a favoritos necesitas iniciar sesión en tu cuenta.',
               style: TextStyle(
-                fontSize: _isDesktop ? 16 : 15,
-                color: const Color(0xFF666666),
+                fontSize: _isDesktop ? ProductoFontSizes.desktopBodyMd : ProductoFontSizes.mobileBodyMd,
+                color: ProductoColores.textMedium,
                 height: 1.4,
               ),
             ),
           ),
-          actionsPadding: const EdgeInsets.all(16),
+          actionsPadding: const EdgeInsets.all(ProductoSpacing.lg),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Ahora no', style: TextStyle(color: Color(0xFF3483FA))),
+              child: const Text('Ahora no', style: TextStyle(color: ProductoColores.primary)),
             ),
             ElevatedButton(
               onPressed: () {
@@ -330,7 +318,7 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
                 Navigator.pushNamed(context, '/login');
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF3483FA),
+                backgroundColor: ProductoColores.primary,
                 foregroundColor: Colors.white,
               ),
               child: const Text('Iniciar sesión'),
@@ -343,19 +331,16 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
 
   void _mostrarSnackbar(String mensaje, {required bool isSuccess}) {
     if (!mounted) return;
-    
-    // Usar el GlobalKey del ScaffoldMessenger
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      
       try {
         _scaffoldMessengerKey.currentState?.showSnackBar(
           SnackBar(
             content: Text(mensaje),
-            backgroundColor: isSuccess ? const Color(0xFF00A650) : const Color(0xFFE74C3C),
+            backgroundColor: isSuccess ? ProductoColores.success : ProductoColores.error,
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 3),
-            margin: const EdgeInsets.all(16),
+            margin: const EdgeInsets.all(ProductoSpacing.lg),
           ),
         );
       } catch (e) {
@@ -366,32 +351,27 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
 
   void _mostrarSnackbarConBotonCarrito(String mensaje) {
     if (!mounted) return;
-    
-    // Usar el GlobalKey del ScaffoldMessenger
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      
       try {
         _scaffoldMessengerKey.currentState?.showSnackBar(
           SnackBar(
             content: Row(
               children: [
                 const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-                const SizedBox(width: 12),
+                const SizedBox(width: ProductoSpacing.md),
                 Expanded(child: Text(mensaje)),
               ],
             ),
-            backgroundColor: const Color(0xFF00A650),
+            backgroundColor: ProductoColores.success,
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 5),
-            margin: const EdgeInsets.all(16),
+            margin: const EdgeInsets.all(ProductoSpacing.lg),
             action: SnackBarAction(
               label: 'Ir al carrito',
               textColor: Colors.white,
               onPressed: () {
-                if (mounted) {
-                  Navigator.pushNamed(context, '/cart');
-                }
+                if (mounted) Navigator.pushNamed(context, '/cart');
               },
             ),
           ),
@@ -404,7 +384,6 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
 
   List<Map<String, String>> _extraerColoresDisponibles(List<Map<String, dynamic>> variations) {
     final Set<Map<String, String>> coloresSet = {};
-    
     for (var variacion in variations) {
       if (variacion['color'] != null && variacion['color'] is Map) {
         final color = variacion['color'] as Map<String, dynamic>;
@@ -416,7 +395,6 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
         }
       }
     }
-    
     return coloresSet.toList();
   }
 
@@ -427,9 +405,7 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
 
     for (var variacion in variations) {
       bool colorCoincide = coloresSeleccionados.isEmpty || 
-          (variacion['color'] != null && 
-           coloresSeleccionados.contains(variacion['color']['hex']));
-      
+          (variacion['color'] != null && coloresSeleccionados.contains(variacion['color']['hex']));
       bool tallaCoincide = tallasSeleccionadas.isEmpty ||
           tallasSeleccionadas.contains(variacion['tallaNumero']?.toString()) ||
           tallasSeleccionadas.contains(variacion['tallaLetra']?.toString());
@@ -439,7 +415,6 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
                double.tryParse(productData['precio'].toString()) ?? 0.0;
       }
     }
-
     return double.tryParse(productData['precio'].toString()) ?? 0.0;
   }
 
@@ -450,9 +425,7 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
 
     for (var variacion in variations) {
       bool colorCoincide = coloresSeleccionados.isEmpty || 
-          (variacion['color'] != null && 
-           coloresSeleccionados.contains(variacion['color']['hex']));
-      
+          (variacion['color'] != null && coloresSeleccionados.contains(variacion['color']['hex']));
       bool tallaCoincide = tallasSeleccionadas.isEmpty ||
           tallasSeleccionadas.contains(variacion['tallaNumero']?.toString()) ||
           tallasSeleccionadas.contains(variacion['tallaLetra']?.toString());
@@ -461,7 +434,6 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
         return variacion;
       }
     }
-
     return null;
   }
 
@@ -485,7 +457,6 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
       }
 
       final carritoProvider = Provider.of<CarritoProvider>(context, listen: false);
-      
       if (carritoProvider.items.isEmpty) {
         await carritoProvider.obtenerCarrito(token);
       }
@@ -502,20 +473,16 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
 
       if (yaExiste) {
         final nuevaCantidad = cantidadActual + 1;
-        
         if (nuevaCantidad > stockActual) {
           _mostrarSnackbar('No hay suficiente stock disponible', isSuccess: false);
           return;
         }
         
         exito = await carritoProvider.actualizarCantidadConVariacion(
-          token, 
-          widget.productId, 
-          nuevaCantidad,
+          token, widget.productId, nuevaCantidad,
           variacionId: variacionId,
         );
         
-        // Esperar un frame antes de mostrar el SnackBar
         if (exito && mounted) {
           await Future.delayed(const Duration(milliseconds: 100));
           _mostrarSnackbarConBotonCarrito('Cantidad actualizada a $nuevaCantidad unidades');
@@ -527,17 +494,14 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
             cantidad: 1,
             variacionId: variacionId,
           );
-          
           exito = await carritoProvider.agregarProductoCompleto(token, request);
         } else {
           exito = await carritoProvider.agregarProducto(token, widget.productId, 1);
         }
 
-        // Esperar un frame antes de mostrar el SnackBar
         if (exito && mounted) {
           await Future.delayed(const Duration(milliseconds: 100));
           _mostrarSnackbarConBotonCarrito('Producto agregado al carrito');
-          
           if (mounted) {
             setState(() {
               coloresSeleccionados.clear();
@@ -549,10 +513,7 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
 
       if (!exito && mounted) {
         await Future.delayed(const Duration(milliseconds: 100));
-        _mostrarSnackbar(
-          carritoProvider.error ?? 'Error al procesar la operación', 
-          isSuccess: false
-        );
+        _mostrarSnackbar(carritoProvider.error ?? 'Error al procesar la operación', isSuccess: false);
       }
 
     } catch (e) {
@@ -574,10 +535,10 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: ProductoColores.backgroundGray,
       elevation: 1,
       leading: IconButton(
-        icon: const Icon(Icons.arrow_back, color: Color(0xFF666666)),
+        icon: const Icon(Icons.arrow_back, color: ProductoColores.textMedium),
         onPressed: () => Navigator.pop(context),
       ),
       actions: [
@@ -596,7 +557,7 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
             return IconButton(
               icon: Icon(
                 esFavorito ? Icons.favorite : Icons.favorite_border,
-                color: esFavorito ? const Color(0xFFE74C3C) : const Color(0xFF666666),
+                color: esFavorito ? ProductoColores.error : ProductoColores.textMedium,
               ),
               onPressed: _toggleFavorito,
             );
@@ -607,7 +568,11 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
   }
 
   Widget _buildPurchaseButtons(Map<String, dynamic> productData, List<Map<String, dynamic>> variations, int stockActual) {
-    final buttonHeight = _isDesktop ? 56.0 : _isTablet ? 52.0 : 48.0;
+    final buttonHeight = _isDesktop 
+        ? ProductoHeights.buttonDesktop 
+        : _isTablet 
+            ? ProductoHeights.buttonTablet 
+            : ProductoHeights.buttonMobile;
     
     return Consumer<CarritoProvider>(
       builder: (context, carritoProvider, child) {
@@ -619,9 +584,11 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
           child: ElevatedButton(
             onPressed: (isLoading || stockActual <= 0) ? null : () => _agregarAlCarrito(productData, variations),
             style: ElevatedButton.styleFrom(
-              backgroundColor: stockActual <= 0 ? Colors.grey : const Color(0xFF3483FA),
+              backgroundColor: stockActual <= 0 ? Colors.grey : ProductoColores.primary,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(ProductoBorderRadius.sm)
+              ),
               elevation: 0,
             ),
             child: isLoading
@@ -636,7 +603,7 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
                 : Text(
                     stockActual <= 0 ? 'Sin stock' : 'Agregar al carrito',
                     style: TextStyle(
-                      fontSize: _isDesktop ? 18 : 16,
+                      fontSize: _isDesktop ? ProductoFontSizes.desktopBodyLg : ProductoFontSizes.mobileBodyLg,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -650,7 +617,7 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
     return ScaffoldMessenger(
       key: _scaffoldMessengerKey,
       child: Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: ProductoColores.background,
         appBar: _buildAppBar(),
         body: FutureBuilder(
           future: Future.wait([producto, variaciones]),
@@ -681,7 +648,7 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
                         flex: 1,
                         child: _buildImageSection(productData, variations),
                       ),
-                      const SizedBox(width: 32),
+                      const SizedBox(width: ProductoSpacing.xxxl),
                       Expanded(
                         flex: 1,
                         child: SingleChildScrollView(
@@ -689,7 +656,7 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
                           child: Column(
                             children: [
                               _buildProductInfo(productData, precioActual, coloresDisponibles, variations),
-                              const SizedBox(height: 32),
+                              const SizedBox(height: ProductoSpacing.xxxl),
                               _buildAllSections(productData, variations),
                               const SizedBox(height: 80),
                             ],
@@ -711,7 +678,7 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
     return ScaffoldMessenger(
       key: _scaffoldMessengerKey,
       child: Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: ProductoColores.background,
         appBar: _buildAppBar(),
         body: FutureBuilder(
           future: Future.wait([producto, variaciones]),
@@ -739,7 +706,7 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
                   children: [
                     _buildImageSection(productData, variations),
                     _buildProductInfo(productData, precioActual, coloresDisponibles, variations),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: ProductoSpacing.lg),
                     _buildAllSections(productData, variations),
                     const SizedBox(height: 80),
                   ],
@@ -758,12 +725,14 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           const CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3483FA)),
+            valueColor: AlwaysStoppedAnimation<Color>(ProductoColores.primary),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: ProductoSpacing.lg),
           Text(
             'Cargando producto...',
-            style: TextStyle(fontSize: _isDesktop ? 18 : 16),
+            style: TextStyle(
+              fontSize: _isDesktop ? ProductoFontSizes.desktopBodyLg : ProductoFontSizes.mobileBodyLg
+            ),
           ),
         ],
       ),
@@ -778,17 +747,17 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.error_outline, size: _isDesktop ? 80 : 64, color: Colors.grey.shade400),
-            const SizedBox(height: 16),
+            const SizedBox(height: ProductoSpacing.lg),
             const Text('Ups! Algo salió mal', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
+            const SizedBox(height: ProductoSpacing.md),
             const Text('No pudimos cargar este producto.', textAlign: TextAlign.center),
-            const SizedBox(height: 20),
+            const SizedBox(height: ProductoSpacing.xl),
             ElevatedButton(
               onPressed: () => setState(() {
                 producto = ProductoUsuarioService().obtenerProductoPorId(widget.productId);
                 variaciones = ProductoUsuarioService().obtenerVariacionesPorProducto(widget.productId);
               }),
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF3483FA)),
+              style: ElevatedButton.styleFrom(backgroundColor: ProductoColores.primary),
               child: const Text('Reintentar'),
             ),
           ],
@@ -799,14 +768,18 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
 
   Widget _buildImageSection(Map<String, dynamic> productData, List<Map<String, dynamic>> variations) {
     final imagenMostrar = _obtenerImagenActual(productData, variations);
-    final imageHeight = _isDesktop ? 500.0 : _isTablet ? 450.0 : 400.0;
+    final imageHeight = _isDesktop 
+        ? ProductoHeights.imageDesktop 
+        : _isTablet 
+            ? ProductoHeights.imageTablet 
+            : ProductoHeights.imageMobile;
     
     final imagenAMostrar = _cachedImage ?? imagenMostrar;
     
     return Container(
       height: imageHeight,
       width: double.infinity,
-      color: Colors.white,
+      color: ProductoColores.background,
       child: GestureDetector(
         onTap: () => _mostrarImagenCompleta(imagenAMostrar),
         child: Image.network(
@@ -820,7 +793,7 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
                 value: loadingProgress.expectedTotalBytes != null
                     ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
                     : null,
-                valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF3483FA)),
+                valueColor: const AlwaysStoppedAnimation<Color>(ProductoColores.primary),
               ),
             );
           },
@@ -840,32 +813,26 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
     final stockActual = _obtenerStockActual(productData, variations);
     
     return Container(
-      color: Colors.white,
+      color: ProductoColores.background,
       padding: EdgeInsets.all(_horizontalPadding),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildEstrellasSuperior(productData),
-          const SizedBox(height: 12),
-          Text(
-            _formatearPrecio(precioActual),
-            style: TextStyle(
-              fontSize: _isDesktop ? 36 : 32,
-              fontWeight: FontWeight.w300,
-            ),
-          ),
-          const SizedBox(height: 16),
+          const SizedBox(height: ProductoSpacing.md),
+          Text(_formatearPrecio(precioActual), style: ProductoTextStyles.headingXLDesktop),
+          const SizedBox(height: ProductoSpacing.lg),
           Text(
             productData['nombre'],
-            style: TextStyle(fontSize: _isDesktop ? 24 : 20, fontWeight: FontWeight.w400),
+            style: _isDesktop ? ProductoTextStyles.headingLgDesktop : ProductoTextStyles.headingLgMobile,
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: ProductoSpacing.xl),
           if (variations.isNotEmpty) ...[
             _buildVariationSelectors(coloresDisponibles, variations),
-            const SizedBox(height: 20),
+            const SizedBox(height: ProductoSpacing.xl),
           ],
           _buildStockInfo(stockActual),
-          const SizedBox(height: 24),
+          const SizedBox(height: ProductoSpacing.xxl),
           _buildPurchaseButtons(productData, variations, stockActual),
         ],
       ),
@@ -878,11 +845,11 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
     final promedio = _calcularPromedioCalificacion();
     
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+      padding: const EdgeInsets.symmetric(vertical: ProductoSpacing.md, horizontal: ProductoSpacing.md),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF9E6),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: const Color(0xFFFFE5B4)),
+        color: ProductoColores.ratingBackground,
+        borderRadius: BorderRadius.circular(ProductoBorderRadius.sm),
+        border: Border.all(color: ProductoColores.ratingBorder),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -891,25 +858,25 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
             children: List.generate(5, (index) {
               return Icon(
                 index < promedio.round() ? Icons.star : Icons.star_border,
-                color: const Color(0xFFFFB800),
+                color: ProductoColores.starColor,
                 size: _isDesktop ? 18 : 16,
               );
             }),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: ProductoSpacing.md),
           Text(
             promedio.toStringAsFixed(1),
             style: TextStyle(
-              fontSize: _isDesktop ? 15 : 14,
+              fontSize: _isDesktop ? ProductoFontSizes.desktopBodyMd : ProductoFontSizes.mobileBodyMd,
               fontWeight: FontWeight.w600,
-              color: const Color(0xFF333333),
+              color: ProductoColores.textDark,
             ),
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: ProductoSpacing.xs),
           Text(
             '(${_resenas.length})',
             style: TextStyle(
-              fontSize: _isDesktop ? 14 : 13,
+              fontSize: _isDesktop ? ProductoFontSizes.desktopBodySm : ProductoFontSizes.mobileLabelSm,
               color: Colors.grey.shade600,
             ),
           ),
@@ -923,14 +890,26 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (coloresDisponibles.isNotEmpty) ...[
-          Text('Color:', style: TextStyle(fontSize: _isDesktop ? 16 : 14, fontWeight: FontWeight.w500)),
-          const SizedBox(height: 12),
+          Text(
+            'Color:',
+            style: TextStyle(
+              fontSize: _isDesktop ? ProductoFontSizes.desktopBodyMd : ProductoFontSizes.mobileBodyMd,
+              fontWeight: FontWeight.w500
+            ),
+          ),
+          const SizedBox(height: ProductoSpacing.md),
           _buildColorSelector(coloresDisponibles),
-          const SizedBox(height: 20),
+          const SizedBox(height: ProductoSpacing.xl),
         ],
         if (_tieneVariacionesDeTalla(variations)) ...[
-          Text('Talle:', style: TextStyle(fontSize: _isDesktop ? 16 : 14, fontWeight: FontWeight.w500)),
-          const SizedBox(height: 12),
+          Text(
+            'Talle:',
+            style: TextStyle(
+              fontSize: _isDesktop ? ProductoFontSizes.desktopBodyMd : ProductoFontSizes.mobileBodyMd,
+              fontWeight: FontWeight.w500
+            ),
+          ),
+          const SizedBox(height: ProductoSpacing.md),
           _buildSizeSelector(variations),
         ],
       ],
@@ -945,41 +924,76 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
   }
 
   Widget _buildColorSelector(List<Map<String, String>> coloresDisponibles) {
-    return Wrap(
-      spacing: 8,
-      children: coloresDisponibles.map((colorData) {
-        final hex = colorData['hex']!;
-        final color = Colores.hexToColor(hex);
-        final seleccionado = coloresSeleccionados.contains(hex);
-
-        return GestureDetector(
-          onTap: () {
-            setState(() {
-              if (seleccionado) {
-                coloresSeleccionados.clear();
-              } else {
-                coloresSeleccionados.clear();
-                coloresSeleccionados.add(hex);
-              }
-            });
-          },
-          child: Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: color,
-              border: Border.all(
-                color: seleccionado ? const Color(0xFF3483FA) : const Color(0xFFDDDDDD),
-                width: seleccionado ? 2 : 1,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (coloresSeleccionados.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: ProductoSpacing.md),
+            child: Text(
+              coloresDisponibles.firstWhere(
+                (c) => c['hex'] == coloresSeleccionados.first,
+                orElse: () => {'nombre': ''}
+              )['nombre']!,
+              style: TextStyle(
+                fontSize: _isDesktop ? ProductoFontSizes.desktopBodyMd : ProductoFontSizes.mobileBodyMd,
+                fontWeight: FontWeight.w400,
+                color: ProductoColores.textDark,
               ),
-              borderRadius: BorderRadius.circular(4),
             ),
-            child: seleccionado 
-                ? Icon(Icons.check, color: _getContrastColor(color), size: 16)
-                : null,
           ),
-        );
-      }).toList(),
+        Wrap(
+          spacing: ProductoSpacing.sm,
+          runSpacing: ProductoSpacing.sm,
+          children: coloresDisponibles.map((colorData) {
+            final hex = colorData['hex']!;
+            final nombre = colorData['nombre']!;
+            final color = Colores.hexToColor(hex);
+            final seleccionado = coloresSeleccionados.contains(hex);
+
+            return Tooltip(
+              message: nombre,
+              child: GestureDetector(
+                onTap: () {
+                  setState(() {
+                    if (seleccionado) {
+                      coloresSeleccionados.clear();
+                      _cachedImage = null;
+                    } else {
+                      coloresSeleccionados.clear();
+                      coloresSeleccionados.add(hex);
+                    }
+                  });
+                },
+                child: Container(
+                  width: ProductoHeights.colorSelectorSize,
+                  height: ProductoHeights.colorSelectorSize,
+                  decoration: BoxDecoration(
+                    color: ProductoColores.background,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: seleccionado ? ProductoColores.primary : Colors.transparent,
+                      width: 2.5,
+                    ),
+                  ),
+                  padding: const EdgeInsets.all(3),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.grey.shade300, width: 1),
+                      boxShadow: [ProductoShadows.small],
+                    ),
+                    child: seleccionado
+                        ? Icon(Icons.check, color: _getContrastColor(color), size: 20)
+                        : null,
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
     );
   }
 
@@ -1005,7 +1019,7 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
     final tallasList = tallas.toList()..sort();
 
     return Wrap(
-      spacing: 8,
+      spacing: ProductoSpacing.sm,
       children: tallasList.map((talla) {
         final seleccionado = tallasSeleccionadas.contains(talla);
         
@@ -1021,18 +1035,18 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
             });
           },
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: ProductoSpacing.lg, vertical: ProductoSpacing.md),
             decoration: BoxDecoration(
-              color: seleccionado ? const Color(0xFF3483FA) : Colors.white,
+              color: seleccionado ? ProductoColores.primary : ProductoColores.background,
               border: Border.all(
-                color: seleccionado ? const Color(0xFF3483FA) : const Color(0xFFDDDDDD),
+                color: seleccionado ? ProductoColores.primary : ProductoColores.borderDark,
               ),
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(ProductoBorderRadius.sm),
             ),
             child: Text(
               talla,
               style: TextStyle(
-                color: seleccionado ? Colors.white : const Color(0xFF333333),
+                color: seleccionado ? Colors.white : ProductoColores.textDark,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -1045,86 +1059,52 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
   Widget _buildAllSections(Map<String, dynamic> productData, List<Map<String, dynamic>> variations) {
     return Column(
       children: [
-        // Separador visual
-        Container(
-          height: 8,
-          color: const Color(0xFFF5F5F5),
-        ),
+        Container(height: ProductoSpacing.lg, color: ProductoColores.backgroundGray),
         
-        // Descripción
         Container(
           key: _descripcionKey,
           width: double.infinity,
           padding: EdgeInsets.all(_horizontalPadding),
-          color: Colors.white,
+          color: ProductoColores.background,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Descripción',
-                style: TextStyle(
-                  fontSize: _isDesktop ? 20 : 18,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF333333),
-                ),
-              ),
-              const SizedBox(height: 16),
+              Text('Descripción', style: _isDesktop ? ProductoTextStyles.headingMdDesktop : ProductoTextStyles.headingMdMobile),
+              const SizedBox(height: ProductoSpacing.lg),
               Text(
                 productData['descripcion'] ?? 'Sin descripción disponible.',
-                style: TextStyle(
-                  fontSize: _isDesktop ? 16 : 14,
-                  height: 1.5,
-                  color: const Color(0xFF666666),
-                ),
+                style: _isDesktop ? ProductoTextStyles.bodyLgDesktop : ProductoTextStyles.bodyLgMobile,
               ),
             ],
           ),
         ),
         
-        // Separador
-        Container(
-          height: 8,
-          color: const Color(0xFFF5F5F5),
-        ),
+        Container(height: ProductoSpacing.lg, color: ProductoColores.backgroundGray),
         
-        // Características
         Container(
           key: _especificacionesKey,
           width: double.infinity,
           padding: EdgeInsets.all(_horizontalPadding),
-          color: Colors.white,
+          color: ProductoColores.background,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Características principales',
-                style: TextStyle(
-                  fontSize: _isDesktop ? 20 : 18,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF333333),
-                ),
-              ),
-              const SizedBox(height: 16),
+              Text('Características principales', style: _isDesktop ? ProductoTextStyles.headingMdDesktop : ProductoTextStyles.headingMdMobile),
+              const SizedBox(height: ProductoSpacing.lg),
               _buildSpecItem('Producto', productData['nombre']),
               _buildSpecItem('Stock total', (productData['stock'] ?? 0).toString()),
               if (variations.isNotEmpty && _extraerColoresDisponibles(variations).isNotEmpty)
-                _buildSpecItem('Colores disponibles', 
-                  _extraerColoresDisponibles(variations).map((c) => c['nombre']).join(', ')),
+                _buildSpecItem('Colores disponibles', _extraerColoresDisponibles(variations).map((c) => c['nombre']).join(', ')),
             ],
           ),
         ),
         
-        // Separador
-        Container(
-          height: 8,
-          color: const Color(0xFFF5F5F5),
-        ),
+        Container(height: ProductoSpacing.lg, color: ProductoColores.backgroundGray),
         
-        // Reseñas
         Container(
           key: _resenasKey,
           width: double.infinity,
-          color: Colors.white,
+          color: ProductoColores.background,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1136,50 +1116,32 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          'Opiniones del producto',
-                          style: TextStyle(
-                            fontSize: _isDesktop ? 20 : 18,
-                            fontWeight: FontWeight.w600,
-                            color: const Color(0xFF333333),
-                          ),
-                        ),
+                        Text('Opiniones del producto', style: _isDesktop ? ProductoTextStyles.headingMdDesktop : ProductoTextStyles.headingMdMobile),
                         TextButton(
                           onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => ResenaWidget(
-                                  productoId: widget.productId,
-                                  nombreProducto: productData['nombre'] ?? 'Producto',
-                                ),
+                            Navigator.push(context, MaterialPageRoute(
+                              builder: (context) => ResenaWidget(
+                                productoId: widget.productId,
+                                nombreProducto: productData['nombre'] ?? 'Producto',
                               ),
-                            ).then((_) => _cargarResenas());
+                            )).then((_) => _cargarResenas());
                           },
-                          child: const Text(
-                            'Ver todas',
-                            style: TextStyle(color: Color(0xFF3483FA), fontWeight: FontWeight.w600),
-                          ),
+                          child: const Text('Ver todas', style: TextStyle(color: ProductoColores.primary, fontWeight: FontWeight.w600)),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: ProductoSpacing.lg),
                     _buildResumenCalificacion(),
                   ],
                 ),
               ),
               
-              const SizedBox(height: 16),
+              const SizedBox(height: ProductoSpacing.lg),
               
               if (_cargandoResenas)
                 Padding(
                   padding: EdgeInsets.all(_horizontalPadding),
-                  child: const Center(
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3483FA)),
-                    ),
-                  ),
+                  child: const Center(child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(ProductoColores.primary))),
                 )
               else if (_resenas.isEmpty)
                 _buildEmptyResenas()
@@ -1192,20 +1154,17 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
                         padding: EdgeInsets.all(_horizontalPadding),
                         child: OutlinedButton(
                           onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => ResenaWidget(
-                                  productoId: widget.productId,
-                                  nombreProducto: productData['nombre'] ?? 'Producto',
-                                ),
+                            Navigator.push(context, MaterialPageRoute(
+                              builder: (context) => ResenaWidget(
+                                productoId: widget.productId,
+                                nombreProducto: productData['nombre'] ?? 'Producto',
                               ),
-                            ).then((_) => _cargarResenas());
+                            )).then((_) => _cargarResenas());
                           },
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFF3483FA),
-                            side: const BorderSide(color: Color(0xFF3483FA)),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                            foregroundColor: ProductoColores.primary,
+                            side: const BorderSide(color: ProductoColores.primary),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(ProductoBorderRadius.sm)),
                             minimumSize: const Size(double.infinity, 44),
                           ),
                           child: Text('Ver las ${_resenas.length} opiniones'),
@@ -1222,17 +1181,12 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
 
   Widget _buildSpecItem(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: ProductoSpacing.md),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 140,
-            child: Text('$label:', style: const TextStyle(color: Color(0xFF999999))),
-          ),
-          Expanded(
-            child: Text(value, style: const TextStyle(color: Color(0xFF333333))),
-          ),
+          SizedBox(width: 140, child: Text('$label:', style: const TextStyle(color: ProductoColores.textLight))),
+          Expanded(child: Text(value, style: const TextStyle(color: ProductoColores.textDark))),
         ],
       ),
     );
@@ -1240,7 +1194,6 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
 
   Widget _buildResumenCalificacion() {
     if (_resenas.isEmpty) return const SizedBox.shrink();
-    
     final promedio = _calcularPromedioCalificacion();
     
     return Row(
@@ -1248,32 +1201,18 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              promedio.toStringAsFixed(1),
-              style: TextStyle(
-                fontSize: _isDesktop ? 48 : 40,
-                fontWeight: FontWeight.w300,
-                height: 1,
-              ),
-            ),
-            const SizedBox(height: 4),
+            Text(promedio.toStringAsFixed(1), style: TextStyle(fontSize: _isDesktop ? 48 : 40, fontWeight: FontWeight.w300, height: 1)),
+            const SizedBox(height: ProductoSpacing.xs),
             Row(
               children: List.generate(5, (index) {
-                return Icon(
-                  index < promedio.round() ? Icons.star : Icons.star_border,
-                  color: const Color(0xFFFFB800),
-                  size: 16,
-                );
+                return Icon(index < promedio.round() ? Icons.star : Icons.star_border, color: ProductoColores.starColor, size: 16);
               }),
             ),
-            const SizedBox(height: 4),
-            Text(
-              '${_resenas.length} opinión${_resenas.length != 1 ? 'es' : ''}',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-            ),
+            const SizedBox(height: ProductoSpacing.xs),
+            Text('${_resenas.length} opinión${_resenas.length != 1 ? 'es' : ''}', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
           ],
         ),
-        const SizedBox(width: 24),
+        const SizedBox(width: ProductoSpacing.xxl),
         Expanded(child: _buildDistribucionEstrellas()),
       ],
     );
@@ -1281,7 +1220,6 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
 
   Widget _buildDistribucionEstrellas() {
     final distribucion = _calcularDistribucionEstrellas();
-    
     return Column(
       children: List.generate(5, (index) {
         final stars = 5 - index;
@@ -1289,33 +1227,26 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
         final percentage = _resenas.isEmpty ? 0.0 : (count / _resenas.length);
         
         return Padding(
-          padding: const EdgeInsets.only(bottom: 4),
+          padding: const EdgeInsets.only(bottom: ProductoSpacing.xs),
           child: Row(
             children: [
               Text('$stars', style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
-              const SizedBox(width: 4),
+              const SizedBox(width: ProductoSpacing.xs),
               Icon(Icons.star, size: 12, color: Colors.grey.shade400),
-              const SizedBox(width: 8),
+              const SizedBox(width: ProductoSpacing.md),
               Expanded(
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(2),
                   child: LinearProgressIndicator(
                     value: percentage,
                     backgroundColor: const Color(0xFFEEEEEE),
-                    valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFFB800)),
+                    valueColor: const AlwaysStoppedAnimation<Color>(ProductoColores.starColor),
                     minHeight: 5,
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 24,
-                child: Text(
-                  '$count',
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                  textAlign: TextAlign.right,
-                ),
-              ),
+              const SizedBox(width: ProductoSpacing.md),
+              SizedBox(width: 24, child: Text('$count', style: TextStyle(fontSize: 11, color: Colors.grey.shade600), textAlign: TextAlign.right)),
             ],
           ),
         );
@@ -1340,19 +1271,13 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
     }
     
     return Container(
-      margin: EdgeInsets.only(left: _horizontalPadding, right: _horizontalPadding, bottom: 16),
-      padding: EdgeInsets.all(_isDesktop ? 16 : 14),
+      margin: EdgeInsets.only(left: _horizontalPadding, right: _horizontalPadding, bottom: ProductoSpacing.lg),
+      padding: EdgeInsets.all(_isDesktop ? ProductoSpacing.lg : ProductoSpacing.md),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: const Color(0xFFEEEEEE)),
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        color: ProductoColores.background,
+        border: Border.all(color: ProductoColores.borderColor),
+        borderRadius: BorderRadius.circular(ProductoBorderRadius.md),
+        boxShadow: [ProductoShadows.small],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1362,7 +1287,7 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
             children: [
               imagenPerfil.isNotEmpty
                   ? ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(ProductoBorderRadius.lg),
                       child: Image.network(
                         imagenPerfil,
                         width: _isDesktop ? 40 : 36,
@@ -1371,32 +1296,25 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
                         errorBuilder: (context, error, stackTrace) {
                           return CircleAvatar(
                             radius: _isDesktop ? 20 : 18,
-                            backgroundColor: const Color(0xFFE3F2FD),
-                            child: Text(
-                              usuario.isNotEmpty ? usuario[0].toUpperCase() : 'U',
-                              style: TextStyle(
-                                color: const Color(0xFF3483FA),
-                                fontWeight: FontWeight.bold,
-                                fontSize: _isDesktop ? 16 : 14,
-                              ),
-                            ),
+                            backgroundColor: ProductoColores.primaryLight,
+                            child: Text(usuario.isNotEmpty ? usuario[0].toUpperCase() : 'U', style: TextStyle(color: ProductoColores.primary, fontWeight: FontWeight.bold, fontSize: _isDesktop ? 16 : 14)),
                           );
                         },
                       ),
                     )
                   : CircleAvatar(
                       radius: _isDesktop ? 20 : 18,
-                      backgroundColor: const Color(0xFFE3F2FD),
+                      backgroundColor: ProductoColores.primaryLight,
                       child: Text(
                         usuario.isNotEmpty ? usuario[0].toUpperCase() : 'U',
                         style: TextStyle(
-                          color: const Color(0xFF3483FA),
+                          color: ProductoColores.primary,
                           fontWeight: FontWeight.bold,
                           fontSize: _isDesktop ? 16 : 14,
                         ),
                       ),
                     ),
-              const SizedBox(width: 12),
+              const SizedBox(width: ProductoSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1405,19 +1323,19 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
                       usuario,
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
-                        fontSize: _isDesktop ? 15 : 14,
-                        color: const Color(0xFF333333),
+                        fontSize: _isDesktop ? ProductoFontSizes.desktopBodyMd : ProductoFontSizes.mobileBodyMd,
+                        color: ProductoColores.textDark,
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: ProductoSpacing.xs),
                     Row(
                       children: [
                         Icon(Icons.check_circle, size: 12, color: Colors.green.shade600),
-                        const SizedBox(width: 4),
+                        const SizedBox(width: ProductoSpacing.xs),
                         Text(
                           'Compra verificada',
                           style: TextStyle(
-                            fontSize: _isDesktop ? 12 : 11,
+                            fontSize: _isDesktop ? ProductoFontSizes.desktopLabelSm : ProductoFontSizes.mobileLabelSm,
                             color: Colors.grey.shade600,
                           ),
                         ),
@@ -1430,13 +1348,13 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
                 Text(
                   _formatearFecha(fecha),
                   style: TextStyle(
-                    fontSize: _isDesktop ? 12 : 11,
+                    fontSize: _isDesktop ? ProductoFontSizes.desktopLabelSm : ProductoFontSizes.mobileLabelSm,
                     color: Colors.grey.shade500,
                   ),
                 ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: ProductoSpacing.md),
           
           Row(
             children: [
@@ -1444,21 +1362,21 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
                 children: List.generate(5, (index) {
                   return Icon(
                     index < calificacion ? Icons.star : Icons.star_border,
-                    color: const Color(0xFFFFB800),
+                    color: ProductoColores.starColor,
                     size: _isDesktop ? 16 : 14,
                   );
                 }),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: ProductoSpacing.md),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: ProductoSpacing.md, vertical: ProductoSpacing.xs),
                 decoration: BoxDecoration(
                   color: calificacion >= 4
                       ? Colors.green.shade50
                       : calificacion >= 3
                           ? Colors.orange.shade50
                           : Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(ProductoBorderRadius.sm),
                   border: Border.all(
                     color: calificacion >= 4
                         ? Colors.green.shade200
@@ -1475,7 +1393,7 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
                           ? 'Bueno'
                           : 'Regular',
                   style: TextStyle(
-                    fontSize: _isDesktop ? 11 : 10,
+                    fontSize: _isDesktop ? ProductoFontSizes.desktopLabelSm : ProductoFontSizes.mobileLabelSm,
                     fontWeight: FontWeight.w600,
                     color: calificacion >= 4
                         ? Colors.green.shade700
@@ -1489,13 +1407,13 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
           ),
           
           if (comentario.isNotEmpty) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: ProductoSpacing.md),
             Text(
               comentario,
               style: TextStyle(
-                fontSize: _isDesktop ? 14 : 13,
+                fontSize: _isDesktop ? ProductoFontSizes.desktopBodyMd : ProductoFontSizes.mobileBodyMd,
                 height: 1.6,
-                color: const Color(0xFF333333),
+                color: ProductoColores.textDark,
               ),
             ),
           ],
@@ -1508,26 +1426,33 @@ class _ProductoScreenState extends State<ProductoScreen> with TickerProviderStat
     return Padding(
       padding: EdgeInsets.all(_horizontalPadding),
       child: Container(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(ProductoSpacing.xxxl),
         decoration: BoxDecoration(
           color: Colors.grey.shade50,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(ProductoBorderRadius.md),
         ),
         child: Column(
           children: [
             Icon(Icons.rate_review_outlined, size: 40, color: Colors.grey.shade400),
-            const SizedBox(height: 12),
+            const SizedBox(height: ProductoSpacing.md),
             Text(
               'Todavía no hay opiniones',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+              style: TextStyle(
+                fontSize: ProductoFontSizes.desktopBodyMd,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade700,
+              ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: ProductoSpacing.md),
             Text(
-              _isLoggedIn 
-                ? 'Sé el primero en opinar sobre este producto'
-                : 'Iniciá sesión para escribir tu opinión',
+              _isLoggedIn
+                  ? 'Sé el primero en opinar sobre este producto'
+                  : 'Iniciá sesión para escribir tu opinión',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              style: TextStyle(
+                fontSize: ProductoFontSizes.desktopBodySm,
+                color: Colors.grey.shade600,
+              ),
             ),
           ],
         ),
@@ -1589,7 +1514,7 @@ class _ImagenZoomScreenState extends State<ImagenZoomScreen> with TickerProvider
     super.initState();
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 300),
+      duration: ProductoAnimations.zoomTransition,
     )..addListener(() {
         _transformationController.value = _animation!.value;
       });
@@ -1615,10 +1540,8 @@ class _ImagenZoomScreenState extends State<ImagenZoomScreen> with TickerProvider
     Matrix4 matrix;
     
     if (scale > 1.0) {
-      // Si está con zoom, volver a escala normal
       matrix = Matrix4.identity();
     } else {
-      // Hacer zoom x3 en el punto tocado
       final double newScale = 3.0;
       final double x = -position.dx * (newScale - 1);
       final double y = -position.dy * (newScale - 1);
@@ -1638,6 +1561,17 @@ class _ImagenZoomScreenState extends State<ImagenZoomScreen> with TickerProvider
     _animationController.forward(from: 0);
   }
 
+  void _resetZoom() {
+    _animation = Matrix4Tween(
+      begin: _transformationController.value,
+      end: Matrix4.identity(),
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeInOut,
+    ));
+    _animationController.forward(from: 0);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1646,67 +1580,112 @@ class _ImagenZoomScreenState extends State<ImagenZoomScreen> with TickerProvider
         backgroundColor: Colors.black,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.close, color: Colors.white),
+          icon: const Icon(Icons.close, color: Colors.white, size: 28),
           onPressed: () => Navigator.pop(context),
+          tooltip: 'Cerrar',
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.zoom_out_map, color: Colors.white),
-            onPressed: () {
-              // Reset zoom
-              _animation = Matrix4Tween(
-                begin: _transformationController.value,
-                end: Matrix4.identity(),
-              ).animate(CurvedAnimation(
-                parent: _animationController,
-                curve: Curves.easeInOut,
-              ));
-              _animationController.forward(from: 0);
-            },
+            icon: const Icon(Icons.zoom_out_map, color: Colors.white, size: 24),
+            onPressed: _resetZoom,
+            tooltip: 'Restablecer zoom',
           ),
         ],
       ),
       body: GestureDetector(
         onDoubleTapDown: _handleDoubleTapDown,
         onDoubleTap: _handleDoubleTap,
-        child: InteractiveViewer(
-          transformationController: _transformationController,
-          minScale: 1.0,
-          maxScale: 4.0,
-          clipBehavior: Clip.none,
-          boundaryMargin: const EdgeInsets.all(double.infinity),
-          child: Center(
-            child: Image.network(
-              widget.imageUrl,
-              fit: BoxFit.contain,
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) return child;
-                return Center(
-                  child: CircularProgressIndicator(
-                    value: loadingProgress.expectedTotalBytes != null
-                        ? loadingProgress.cumulativeBytesLoaded / 
-                          loadingProgress.expectedTotalBytes!
-                        : null,
-                    color: Colors.white,
+        child: Stack(
+          children: [
+            InteractiveViewer(
+              transformationController: _transformationController,
+              minScale: 1.0,
+              maxScale: 4.0,
+              clipBehavior: Clip.none,
+              boundaryMargin: const EdgeInsets.all(double.infinity),
+              child: Center(
+                child: Image.network(
+                  widget.imageUrl,
+                  fit: BoxFit.contain,
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          CircularProgressIndicator(
+                            value: loadingProgress.expectedTotalBytes != null
+                                ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                                : null,
+                            color: Colors.white,
+                            strokeWidth: 3,
+                          ),
+                          const SizedBox(height: ProductoSpacing.lg),
+                          Text(
+                            loadingProgress.expectedTotalBytes != null
+                                ? '${(loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes! * 100).toStringAsFixed(0)}%'
+                                : 'Cargando...',
+                            style: const TextStyle(color: Colors.white70, fontSize: 14),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                  errorBuilder: (context, error, stackTrace) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.image_not_supported_outlined, size: 80, color: Colors.white.withOpacity(0.5)),
+                          const SizedBox(height: ProductoSpacing.lg),
+                          const Text('No se pudo cargar la imagen', style: TextStyle(color: Colors.white70, fontSize: 16)),
+                          const SizedBox(height: ProductoSpacing.xxl),
+                          ElevatedButton.icon(
+                            onPressed: () => Navigator.pop(context),
+                            icon: const Icon(Icons.arrow_back),
+                            label: const Text('Volver'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: ProductoColores.primary,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+            Positioned(
+              bottom: 32,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: ProductoSpacing.xl, vertical: ProductoSpacing.md),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(ProductoBorderRadius.lg),
                   ),
-                );
-              },
-              errorBuilder: (context, error, stackTrace) {
-                return const Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.image_not_supported_outlined, 
-                           size: 64, color: Colors.white54),
-                      SizedBox(height: 16),
-                      Text('Imagen no disponible', 
-                           style: TextStyle(color: Colors.white54)),
+                      Icon(Icons.touch_app, color: Colors.white.withOpacity(0.9), size: 18),
+                      const SizedBox(width: ProductoSpacing.md),
+                      Text(
+                        'Toca dos veces para hacer zoom',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.9),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                     ],
                   ),
-                );
-              },
+                ),
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );

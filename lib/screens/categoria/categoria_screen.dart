@@ -27,16 +27,15 @@ class _CategoriaScreenState extends State<CategoriaScreen> {
   final ScrollController _scrollController = ScrollController();
   
   List<Map<String, dynamic>> productos = [];
-  List<Map<String, dynamic>> todosLosProductos = [];
   String categoriaNombre = '';
   bool isLoading = true;
   bool isLoadingMore = false;
   String? error;
   
-  // Paginación
-  static const int productsPorPagina = 10;
-  int paginaActual = 0;
-  bool tieneMasProductos = true;
+  // 🔹 Variables para paginación
+  int _page = 0;
+  final int _limit = 20;
+  bool _hasMore = true;
 
   @override
   void initState() {
@@ -47,99 +46,113 @@ class _CategoriaScreenState extends State<CategoriaScreen> {
 
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
   }
 
+  // 🔹 Detectar scroll para cargar más productos
   void _onScroll() {
     if (_scrollController.position.pixels >= 
-        _scrollController.position.maxScrollExtent - 200) {
+        _scrollController.position.maxScrollExtent * 0.8) {
       _cargarMasProductos();
     }
   }
 
   Future<void> _cargarDatos() async {
     try {
-      // Cargar categorías y productos en paralelo
-      final futures = await Future.wait([
-        _categoriaService.obtenerCategorias(),
-        _productoService.obtenerProductos(),
-      ]);
+      setState(() {
+        isLoading = true;
+        error = null;
+        _page = 0;
+        _hasMore = true;
+        productos.clear();
+      });
 
-      final categorias = futures[0] as List<Map<String, dynamic>>;
-      final allProducts = futures[1] as List<Map<String, dynamic>>;
-
-      // Buscar el nombre de la categoría
+      // Cargar nombre de categoría
+      final categorias = await _categoriaService.obtenerCategorias();
       final categoria = categorias.firstWhere(
         (cat) => cat['_id']?.toString() == widget.categoriaId,
-        orElse: () => {'nombre': 'Categoría ${widget.categoriaId}'},
+        orElse: () => {'nombre': 'Categoría'},
       );
 
-      // Filtrar productos por categoría
-      final filtered = allProducts
-          .where((p) => p['categoria']?.toString() == widget.categoriaId)
-          .toList();
+      // 🔹 Cargar productos CON FILTRO de categoría usando paginación
+      final response = await _productoService.obtenerProductosPaginados(
+        FiltrosBusqueda(
+          page: _page,
+          limit: _limit,
+          categoria: widget.categoriaId,  // ✅ Filtrar por categoría desde la API
+        ),
+      );
+
+      final productosObtenidos = List<Map<String, dynamic>>.from(
+        response['productos'] ?? []
+      );
+      final total = response['total'] ?? 0;
+
+      print('✅ Productos obtenidos para categoría ${widget.categoriaId}: ${productosObtenidos.length}');
+      print('📊 Total en esta categoría: $total');
 
       setState(() {
-        categoriaNombre = categoria['nombre'] ?? 'Categoría ${widget.categoriaId}';
-        todosLosProductos = filtered;
-        productos = _obtenerProductosPagina(0);
-        paginaActual = 0;
-        tieneMasProductos = todosLosProductos.length > productsPorPagina;
+        categoriaNombre = categoria['nombre'] ?? 'Categoría';
+        productos = productosObtenidos;
+        _hasMore = productos.length < total;
         isLoading = false;
         error = null;
       });
     } catch (e) {
+      print('❌ Error al cargar datos: $e');
       setState(() {
         error = e.toString();
-        categoriaNombre = 'Categoría ${widget.categoriaId}';
+        categoriaNombre = 'Categoría';
         isLoading = false;
       });
     }
   }
 
-  List<Map<String, dynamic>> _obtenerProductosPagina(int pagina) {
-    final inicio = pagina * productsPorPagina;
-    final fin = (inicio + productsPorPagina).clamp(0, todosLosProductos.length);
-    
-    if (inicio >= todosLosProductos.length) return [];
-    
-    return todosLosProductos.sublist(inicio, fin);
-  }
-
+  // 🔹 Cargar más productos (scroll infinito)
   Future<void> _cargarMasProductos() async {
-    if (!tieneMasProductos || isLoadingMore) return;
+    if (isLoadingMore || !_hasMore) return;
 
     setState(() {
       isLoadingMore = true;
     });
 
-    await Future.delayed(const Duration(milliseconds: 500));
+    try {
+      _page++;
+      
+      final response = await _productoService.obtenerProductosPaginados(
+        FiltrosBusqueda(
+          page: _page,
+          limit: _limit,
+          categoria: widget.categoriaId,
+        ),
+      );
 
-    final siguientePagina = paginaActual + 1;
-    final nuevosProductos = _obtenerProductosPagina(siguientePagina);
+      final nuevosProductos = List<Map<String, dynamic>>.from(
+        response['productos'] ?? []
+      );
+      final total = response['total'] ?? 0;
 
-    setState(() {
-      if (nuevosProductos.isNotEmpty) {
+      print('➡️ Página $_page: ${nuevosProductos.length} productos más');
+
+      setState(() {
         productos.addAll(nuevosProductos);
-        paginaActual = siguientePagina;
-        tieneMasProductos = (siguientePagina + 1) * productsPorPagina < todosLosProductos.length;
-      } else {
-        tieneMasProductos = false;
-      }
-      isLoadingMore = false;
-    });
+        _hasMore = productos.length < total;
+        isLoadingMore = false;
+      });
+    } catch (e) {
+      print('❌ Error cargando más productos: $e');
+      setState(() {
+        isLoadingMore = false;
+      });
+    }
   }
 
   Future<void> _refrescarLista() async {
-    setState(() {
-      isLoading = true;
-      error = null;
-    });
     await _cargarDatos();
   }
 
-  // Función para formatear el precio con $ al inicio
   String _formatPrice(double price) {
     return '\$${NumberFormat('#,##0', 'es_CO').format(price)}';
   }
@@ -180,7 +193,7 @@ class _CategoriaScreenState extends State<CategoriaScreen> {
     return CustomScrollView(
       controller: _scrollController,
       slivers: [
-        // Grid de productos responsive
+        // Grid de productos
         SliverPadding(
           padding: CategoriaDimensions.getResponsivePadding(screenWidth),
           sliver: SliverGrid(
@@ -220,18 +233,23 @@ class _CategoriaScreenState extends State<CategoriaScreen> {
             ),
           ),
         ),
-        // Indicador de carga para paginación
+        
+        // 🔹 Indicador de carga de más productos
         if (isLoadingMore)
           SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.all(CategoriaDimensions.getLoadingIndicatorPadding(screenWidth)),
-              child: const Center(
-                child: CircularProgressIndicator(),
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.blue[300],
+                ),
               ),
             ),
           ),
-        // Mensaje de fin de productos
-        if (!tieneMasProductos && productos.isNotEmpty)
+        
+        // Mensaje de fin
+        if (productos.isNotEmpty && !_hasMore)
           SliverToBoxAdapter(
             child: Container(
               margin: EdgeInsets.all(CategoriaDimensions.getEndMessagePadding(screenWidth)),
@@ -248,7 +266,7 @@ class _CategoriaScreenState extends State<CategoriaScreen> {
                   const SizedBox(width: 8),
                   Flexible(
                     child: Text(
-                      'Has visto todos los productos',
+                      'Total: ${productos.length} productos',
                       style: CategoriaTextStyles.getEndMessage(screenWidth),
                     ),
                   ),
@@ -256,6 +274,7 @@ class _CategoriaScreenState extends State<CategoriaScreen> {
               ),
             ),
           ),
+        
         // Espaciado inferior
         SliverToBoxAdapter(
           child: SizedBox(height: CategoriaDimensions.getBottomSpacing(screenWidth)),
@@ -404,7 +423,6 @@ class _ProductoCard extends StatelessWidget {
     required this.onTap,
   }) : super(key: key);
 
-  // Función para formatear el precio con $ al inicio
   String _formatPrice(double price) {
     return '\$${NumberFormat('#,##0', 'es_CO').format(price)}';
   }
@@ -412,9 +430,6 @@ class _ProductoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isTablet = CategoriaDimensions.isTablet(screenWidth);
-    final isDesktop = CategoriaDimensions.isDesktop(screenWidth);
-    
-    // Obtener padding de la card
     final cardPadding = CategoriaDimensions.getCardPadding(screenWidth);
 
     return InkWell(
@@ -429,7 +444,7 @@ class _ProductoCard extends StatelessWidget {
               children: [
                 // Imagen del producto
                 Expanded(
-                  flex: 7,
+                  flex: 6,
                   child: Container(
                     width: double.infinity,
                     padding: EdgeInsets.all(cardPadding),
@@ -471,25 +486,29 @@ class _ProductoCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                // Información del producto - AQUÍ ESTÁ LA CORRECCIÓN
+                // Información del producto
                 Expanded(
-                  flex: 3,
+                  flex: 4,
                   child: Padding(
                     padding: EdgeInsets.all(cardPadding),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          nombre,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: CategoriaTextStyles.getProductTitle(screenWidth),
+                        // Nombre del producto
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            nombre,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: CategoriaTextStyles.getProductTitle(screenWidth),
+                          ),
                         ),
-                        const Spacer(), // CAMBIO: Spacer en lugar de SizedBox fijo
+                        const SizedBox(height: 6),
+                        // Precio y stock
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          crossAxisAlignment: CrossAxisAlignment.end,
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             Expanded(
                               child: Text(
@@ -498,16 +517,19 @@ class _ProductoCard extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            // Indicador de stock
-                            if (stock <= 5 && stock > 0)
+                            if (stock <= 5 && stock > 0) ...[
+                              const SizedBox(width: 4),
                               Container(
                                 padding: CategoriaWidgetStyles.getStockWarningPadding(isTablet),
                                 decoration: CategoriaWidgetStyles.getStockWarningDecoration(),
                                 child: Text(
                                   'Últimos $stock',
                                   style: CategoriaTextStyles.getStockWarning(screenWidth),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
                                 ),
                               ),
+                            ],
                           ],
                         ),
                       ],

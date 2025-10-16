@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../providers/categoria_admin_provider.dart';
+import '../../providers/producto_admin_provider.dart';
 import '../../models/categoria.dart';
 import '../../providers/auth_provider.dart';
 import 'styles/categoria_detalle/categoria_detalle_styles.dart';
@@ -89,66 +90,32 @@ class _CategoriaDetalleScreenState extends State<CategoriaDetalleScreen>
     );
   }
 
-  Future<void> eliminarCategoria() async {
-    final confirmed = await _showConfirmationDialog(
-      title: '¿Eliminar categoría?',
-      content: 'Esta acción no se puede deshacer. Todos los datos de "${widget.categoria.nombre}" se perderán permanentemente.',
-      confirmText: 'Eliminar',
-      cancelText: 'Cancelar',
-      isDestructive: true,
-    );
+ Future<void> eliminarCategoria() async {
+  final confirmed = await _showConfirmationDialog(
+    title: '¿Eliminar categoría?',
+    content: 'Esta acción no se puede deshacer. Todos los datos de "${widget.categoria.nombre}" se perderán permanentemente.',
+    confirmText: 'Eliminar',
+    cancelText: 'Cancelar',
+    isDestructive: true,
+  );
 
-    if (confirmed == true) {
-      final categoriasProvider = Provider.of<CategoriasProvider>(context, listen: false);
-
-      try {
-        final success = await categoriasProvider.eliminarCategoria(widget.categoria.id);
-
-        if (success) {
-          await _showSuccessDialog(
-            title: "¡Categoría eliminada!",
-            message: "La categoría ha sido eliminada exitosamente.",
-            icon: Icons.check_circle_outline,
-            onAccept: () {
-              Navigator.pop(context);
-              _volverAControlPanel();
-            }
-          );
-        } else {
-          final errorMessage = categoriasProvider.errorMessage ?? 'Error desconocido al eliminar la categoría';
-          final mensajeFinal = errorMessage.startsWith('❌') ? errorMessage : '❌ $errorMessage';
-          _showErrorDialog(mensajeFinal);
-        }
-      } catch (e) {
-        _showErrorDialog("Error: ${e.toString()}");
-      }
-    }
-  }
-
-  Future<void> actualizarCategoria() async {
-    if (!_validateInputs()) return;
-    
+  if (confirmed == true) {
     final categoriasProvider = Provider.of<CategoriasProvider>(context, listen: false);
 
     try {
-      final success = await categoriasProvider.actualizarCategoria(
-        id: widget.categoria.id,
-        nombre: nombreController.text.trim(),
-        imagenLocal: _imagenLocal,
-      );
+      final success = await categoriasProvider.eliminarCategoria(widget.categoria.id);
 
       if (success) {
-        setState(() {
-          habilitarEdicion = false;
-          _hasChanges = false;
-          if (_imagenLocal != null) {
-            _imagenInternet = null;
-          }
-        });
+        // ⭐⭐⭐ NUEVO: Refrescar categorías en ProductoProvider ⭐⭐⭐
+        debugPrint('🔄 Actualizando cache de categorías después de eliminar...');
+        final productoProvider = Provider.of<ProductoProvider>(context, listen: false);
+        await productoProvider.refrescarCategorias();
+        debugPrint('✅ Cache de categorías actualizado');
+        // ⭐⭐⭐ FIN DE LA MODIFICACIÓN ⭐⭐⭐
         
         await _showSuccessDialog(
-          title: "¡Categoría actualizada!",
-          message: "Los cambios se han guardado exitosamente.",
+          title: "¡Categoría eliminada!",
+          message: "La categoría ha sido eliminada exitosamente.",
           icon: Icons.check_circle_outline,
           onAccept: () {
             Navigator.pop(context);
@@ -156,13 +123,61 @@ class _CategoriaDetalleScreenState extends State<CategoriaDetalleScreen>
           }
         );
       } else {
-        final errorMessage = categoriasProvider.errorMessage ?? 'Error desconocido';
-        _showErrorDialog("Error al actualizar: $errorMessage");
+        final errorMessage = categoriasProvider.errorMessage ?? 'Error desconocido al eliminar la categoría';
+        final mensajeFinal = errorMessage.startsWith('❌') ? errorMessage : '❌ $errorMessage';
+        _showErrorDialog(mensajeFinal);
       }
     } catch (e) {
-      _showErrorDialog("Error al actualizar: ${e.toString()}");
+      _showErrorDialog("Error: ${e.toString()}");
     }
   }
+}
+
+ Future<void> actualizarCategoria() async {
+  if (!_validateInputs()) return;
+  
+  final categoriasProvider = Provider.of<CategoriasProvider>(context, listen: false);
+
+  try {
+    final success = await categoriasProvider.actualizarCategoria(
+      id: widget.categoria.id,
+      nombre: nombreController.text.trim(),
+      imagenLocal: _imagenLocal,
+    );
+
+    if (success) {
+      setState(() {
+        habilitarEdicion = false;
+        _hasChanges = false;
+        if (_imagenLocal != null) {
+          _imagenInternet = null;
+        }
+      });
+      
+      // ⭐⭐⭐ NUEVO: Refrescar categorías en ProductoProvider ⭐⭐⭐
+      debugPrint('🔄 Actualizando cache de categorías en ProductoProvider...');
+      final productoProvider = Provider.of<ProductoProvider>(context, listen: false);
+      await productoProvider.refrescarCategorias();
+      debugPrint('✅ Cache de categorías actualizado');
+      // ⭐⭐⭐ FIN DE LA MODIFICACIÓN ⭐⭐⭐
+      
+      await _showSuccessDialog(
+        title: "¡Categoría actualizada!",
+        message: "Los cambios se han guardado exitosamente.",
+        icon: Icons.check_circle_outline,
+        onAccept: () {
+          Navigator.pop(context);
+          _volverAControlPanel();
+        }
+      );
+    } else {
+      final errorMessage = categoriasProvider.errorMessage ?? 'Error desconocido';
+      _showErrorDialog("Error al actualizar: $errorMessage");
+    }
+  } catch (e) {
+    _showErrorDialog("Error al actualizar: ${e.toString()}");
+  }
+}
 
   bool _validateInputs() {
     if (nombreController.text.trim().isEmpty) {

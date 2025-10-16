@@ -22,6 +22,7 @@ class _MorePageState extends State<MorePage> {
   Map<String, dynamic>? _perfilData;
   bool _isLoadingPerfil = false;
   bool _hasConnectionError = false;
+  bool _yaInicializado = false; // ✅ Variable para controlar la inicialización
 
   @override
   void initState() {
@@ -32,15 +33,26 @@ class _MorePageState extends State<MorePage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    
+    // Solo ejecutar la lógica de carga una vez en la primera construcción
+    if (!_yaInicializado) {
+      _yaInicializado = true;
+      final authProvider = Provider.of<AuthProvider>(context);
+      
+      if (authProvider.isAuthenticated && _perfilData == null && !_hasConnectionError) {
+        _cargarPerfilUsuario();
+      }
+    }
+    
+    // Limpiar datos solo cuando el usuario cierra sesión
     final authProvider = Provider.of<AuthProvider>(context);
     if (!authProvider.isAuthenticated && _perfilData != null) {
       setState(() {
         _perfilData = null;
         _isLoadingPerfil = false;
         _hasConnectionError = false;
+        _yaInicializado = false; // Reset para cuando vuelva a iniciar sesión
       });
-    } else if (authProvider.isAuthenticated && _perfilData == null && !_hasConnectionError) {
-      _cargarPerfilUsuario();
     }
   }
 
@@ -407,40 +419,41 @@ class _MorePageState extends State<MorePage> {
     ];
   }
 
-List<MenuItem> _getLogoutItems() {
-  return [
-    MenuItem(
-      icon: Icons.logout_outlined,
-      title: "Cerrar sesión",
-      subtitle: "Salir de tu cuenta",
-      isDestructive: true,
-      onTap: () async {
-        setState(() {
-          _perfilData = null;
-          _isLoadingPerfil = false;
-          _hasConnectionError = false;
-        });
-        
-        final authProvider = Provider.of<AuthProvider>(context, listen: false);
-        
-        // ✅ AGREGAR ESTA LÍNEA - Limpiar favoritos antes del logout
-        final favoritoProvider = Provider.of<FavoritoProvider>(context, listen: false);
-        favoritoProvider.limpiarFavoritos();
-        
-        await authProvider.cerrarSesion();
-        
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Sesión cerrada"),
-              backgroundColor: MoreStyles.successColor,
-            ),
-          );
-        }
-      },
-    ),
-  ];
-}
+  List<MenuItem> _getLogoutItems() {
+    return [
+      MenuItem(
+        icon: Icons.logout_outlined,
+        title: "Cerrar sesión",
+        subtitle: "Salir de tu cuenta",
+        isDestructive: true,
+        onTap: () async {
+          setState(() {
+            _perfilData = null;
+            _isLoadingPerfil = false;
+            _hasConnectionError = false;
+            _yaInicializado = false; // ✅ Reset al cerrar sesión
+          });
+          
+          final authProvider = Provider.of<AuthProvider>(context, listen: false);
+          
+          // Limpiar favoritos antes del logout
+          final favoritoProvider = Provider.of<FavoritoProvider>(context, listen: false);
+          favoritoProvider.limpiarFavoritos();
+          
+          await authProvider.cerrarSesion();
+          
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("Sesión cerrada"),
+                backgroundColor: MoreStyles.successColor,
+              ),
+            );
+          }
+        },
+      ),
+    ];
+  }
 
   List<MenuItem> _getInformationItems() {
     return [

@@ -32,9 +32,10 @@ class ProductoProvider extends ChangeNotifier {
   bool _hasMore = true;
   static const int _pageSize = 20;
 
-  // === CACHE ===
+  // === CACHE (SOLO PARA PRODUCTOS, NO PARA CATEGORÍAS) ===
   DateTime? _lastFetch;
   static const Duration _cacheDuration = Duration(minutes: 5);
+  // ⭐ ELIMINADO: _lastCategoriasFetch y _categoriasCacheDuration
 
   // === FILTROS Y BUSQUEDA ===
   String _busqueda = '';
@@ -126,22 +127,22 @@ class ProductoProvider extends ChangeNotifier {
   Future<void> inicializar() async {
     if (_state == ProductoState.loading) return;
 
-    debugPrint('Inicializando ProductoProvider...');
+    debugPrint('🔄 Inicializando ProductoProvider...');
     _setState(ProductoState.loading);
     _limpiarError();
 
     try {
       await Future.wait([
-        _cargarCategorias(),
+        _cargarCategorias(), // ⭐ Siempre carga fresco desde el servidor
         _cargarFiltrosDisponibles(),
       ]);
-      debugPrint('Categorias y filtros cargados');
+      debugPrint('✅ Categorias y filtros cargados');
 
       await cargarProductos(forceRefresh: true);
-      debugPrint('Productos iniciales cargados');
+      debugPrint('✅ Productos iniciales cargados');
       
     } catch (e) {
-      debugPrint('Error en inicializar: $e');
+      debugPrint('❌ Error en inicializar: $e');
       _manejarError(e, 'Error al inicializar datos');
     }
   }
@@ -171,7 +172,6 @@ class ProductoProvider extends ChangeNotifier {
           DateTime.now().difference(_lastFetch!) < _cacheDuration) {
         debugPrint("Usando cache (ultima carga hace menos de 5 min)");
         
-        // Pero si hay IDs eliminados, forzar refresh
         if (_idsEliminadosRecientes.isNotEmpty) {
           debugPrint("⚠️  Hay productos eliminados - forzando refresh");
           _productos.clear();
@@ -230,7 +230,6 @@ class ProductoProvider extends ChangeNotifier {
       debugPrint('  - Productos recibidos: ${nuevosProductos.length}');
       debugPrint('  - Total en servidor: $total');
       
-      // ⭐ CRÍTICO: Filtrar productos que fueron eliminados recientemente
       if (_idsEliminadosRecientes.isNotEmpty) {
         final cantidadOriginal = nuevosProductos.length;
         
@@ -314,12 +313,10 @@ class ProductoProvider extends ChangeNotifier {
   Future<void> refrescar() async {
     debugPrint('=== REFRESH MANUAL ===');
     
-    // Verificar si hay eliminaciones recientes
     if (_idsEliminadosRecientes.isNotEmpty) {
       debugPrint('⚠️  Hay ${_idsEliminadosRecientes.length} productos eliminados recientemente');
       debugPrint('   Los filtraremos automáticamente si el servidor los devuelve');
       
-      // Mostrar cuánto tiempo hace que se eliminaron
       _idsEliminadosRecientes.forEach((id) {
         final timestamp = _timestampsEliminacion[id];
         if (timestamp != null) {
@@ -629,17 +626,14 @@ class ProductoProvider extends ChangeNotifier {
     _limpiarError();
 
     try {
-      // 1. REGISTRAR eliminación ANTES de eliminar (para evitar race conditions)
       _idsEliminadosRecientes.add(id);
       _timestampsEliminacion[id] = DateTime.now();
       debugPrint('1. ✅ ID registrado como eliminado: $id');
       
-      // 2. Eliminar del servidor
       debugPrint('2. 🔄 Eliminando en servidor...');
       await _productoService.eliminarProducto(id);
       debugPrint('   ✅ Servidor confirma eliminación');
       
-      // 3. Eliminar localmente
       debugPrint('3. 🔄 Eliminando localmente...');
       final cantidadAntes = _productos.length;
       
@@ -649,17 +643,14 @@ class ProductoProvider extends ChangeNotifier {
       final cantidadDespues = _productos.length;
       debugPrint('   ✅ Productos: $cantidadAntes -> $cantidadDespues');
       
-      // 4. Actualizar contadores
       _totalProductos = _productos.length;
       
-      // 5. IMPORTANTE: Invalidar cache completamente
       _lastFetch = null;
       _page = 0;
       _hasMore = true;
       
       debugPrint('4. ✅ Cache invalidado completamente');
       
-      // 6. Aplicar filtros y notificar
       _aplicarFiltrosLocales();
       _setState(ProductoState.loaded);
       
@@ -667,7 +658,6 @@ class ProductoProvider extends ChangeNotifier {
       debugPrint('=== ELIMINACIÓN EXITOSA ===');
       debugPrint('');
       
-      // 7. Limpiar el registro después del tiempo configurado
       Future.delayed(_tiempoMemoriaEliminacion, () {
         if (_idsEliminadosRecientes.contains(id)) {
           _idsEliminadosRecientes.remove(id);
@@ -676,8 +666,6 @@ class ProductoProvider extends ChangeNotifier {
         }
       });
       
-      // 8. Esperar un poco antes de permitir refresh
-      // Esto da tiempo al servidor para sincronizar
       await Future.delayed(_esperaPostEliminacion);
       debugPrint('⏱️  Tiempo de espera completado - listo para refresh');
       
@@ -686,7 +674,6 @@ class ProductoProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('❌ Error eliminando: $e');
       
-      // Si falla, remover de la lista de eliminados
       _idsEliminadosRecientes.remove(id);
       _timestampsEliminacion.remove(id);
       
@@ -749,16 +736,44 @@ class ProductoProvider extends ChangeNotifier {
     _setState(ProductoState.error);
   }
 
+  // ⭐⭐⭐ MÉTODO SIN CACHE - SIEMPRE CARGA DESDE SERVIDOR ⭐⭐⭐
   Future<void> _cargarCategorias() async {
-    debugPrint('Cargando categorias...');
-    _categorias = await _productoService.obtenerCategorias();
-    debugPrint('Categorias cargadas: ${_categorias.length}');
+    debugPrint('');
+    debugPrint('🔄 === CARGANDO CATEGORÍAS (SIN CACHE) ===');
+    
+    try {
+      _categorias = await _productoService.obtenerCategorias();
+      
+      debugPrint('✅ Categorías cargadas: ${_categorias.length}');
+      
+      if (_categorias.isNotEmpty) {
+        debugPrint('');
+        debugPrint('📋 LISTA COMPLETA DE CATEGORÍAS:');
+        for (var i = 0; i < _categorias.length; i++) {
+          final cat = _categorias[i];
+          debugPrint('   ${i + 1}. ID: "${cat['_id']}" | Nombre: "${cat['nombre']}"');
+        }
+        debugPrint('');
+      } else {
+        debugPrint('⚠️  No se recibieron categorías del servidor');
+      }
+      
+      debugPrint('=== FIN CARGA CATEGORÍAS ===');
+      debugPrint('');
+      
+      // Notificar cambios para que los Consumers se actualicen
+      notifyListeners();
+      
+    } catch (e) {
+      debugPrint('❌ Error cargando categorías: $e');
+      rethrow;
+    }
   }
 
   Future<void> _cargarFiltrosDisponibles() async {
-    debugPrint('Cargando filtros disponibles...');
+    debugPrint('🔄 Cargando filtros disponibles...');
     _filtrosDisponibles = await _productoService.obtenerFiltrosDisponibles();
-    debugPrint('Filtros disponibles cargados: ${_filtrosDisponibles.keys}');
+    debugPrint('✅ Filtros disponibles cargados: ${_filtrosDisponibles.keys}');
   }
 
   void _resetearPaginacion() {
@@ -896,6 +911,20 @@ class ProductoProvider extends ChangeNotifier {
     }
   }
 
+  // ⭐⭐⭐ MÉTODO PÚBLICO PARA REFRESCAR CATEGORÍAS (SIN CACHE) ⭐⭐⭐
+  Future<void> refrescarCategorias() async {
+    debugPrint('');
+    debugPrint('🔄 === REFRESCANDO CATEGORÍAS (FORZADO - SIN CACHE) ===');
+    
+    try {
+      await _cargarCategorias(); // Siempre carga fresco
+      debugPrint('✅ Categorías refrescadas exitosamente: ${_categorias.length}');
+    } catch (e) {
+      debugPrint('❌ Error refrescando categorías: $e');
+      _manejarError(e, 'Error al refrescar categorías');
+    }
+  }
+
   void limpiar() {
     debugPrint('Limpiando datos del provider...');
     _productos.clear();
@@ -914,7 +943,6 @@ class ProductoProvider extends ChangeNotifier {
     _precioMin = null;
     _precioMax = null;
     
-    // Limpiar registros de eliminación
     _idsEliminadosRecientes.clear();
     _timestampsEliminacion.clear();
     
@@ -945,7 +973,6 @@ class ProductoProvider extends ChangeNotifier {
 
   // === MÉTODOS PARA CONTROL DE ELIMINACIONES ===
 
-  /// Limpia el registro de productos eliminados manualmente
   void limpiarRegistroEliminados() {
     final cantidad = _idsEliminadosRecientes.length;
     if (cantidad > 0) {
@@ -956,7 +983,6 @@ class ProductoProvider extends ChangeNotifier {
     }
   }
 
-  /// Verifica si un producto fue eliminado recientemente
   bool fueEliminadoRecientemente(String id) {
     final eliminado = _idsEliminadosRecientes.contains(id);
     if (eliminado) {
@@ -969,7 +995,6 @@ class ProductoProvider extends ChangeNotifier {
     return eliminado;
   }
 
-  /// Obtiene cuántos segundos hace que se eliminó un producto
   int? getSegundosDesdeEliminacion(String id) {
     if (!_idsEliminadosRecientes.contains(id)) return null;
     
@@ -979,10 +1004,8 @@ class ProductoProvider extends ChangeNotifier {
     return DateTime.now().difference(timestamp).inSeconds;
   }
 
-  /// Obtiene la cantidad de productos eliminados que están en memoria
   int get cantidadProductosEliminadosEnMemoria => _idsEliminadosRecientes.length;
 
-  /// Obtiene la lista de IDs eliminados (útil para debugging)
   List<String> get idsEliminadosActivos => _idsEliminadosRecientes.toList();
 
   @override

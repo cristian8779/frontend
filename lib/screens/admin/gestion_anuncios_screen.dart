@@ -168,30 +168,29 @@ Future<void> _performCreateAnuncio(BuildContext context) async {
     imagenPath: _imagen!.path,
   );
 
-  // ✅ Verificar que el widget aún está montado antes de usar el context
+  // ✅ Verificar que el widget aún está montado
   if (!mounted) return;
 
   if (exito) {
-    _mostrarToast("Anuncio creado exitosamente", isError: false);
-
-    // Esperar un momento para que se vea el SnackBar antes de navegar
-    await Future.delayed(const Duration(milliseconds: 500));
-
-    if (!mounted) return;
-
+    // ✅ SOLUCIÓN: Navegar PRIMERO, luego mostrar el mensaje en la nueva pantalla
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (_) => const AnunciosScreen()),
-    );
+    ).then((_) {
+      // El mensaje se mostrará en la pantalla de AnunciosScreen si es necesario
+      // O simplemente se omite porque la navegación ya indica éxito
+    });
   } else {
     _mostrarToast(provider.errorMessage ?? 'Error al crear anuncio', isError: true);
   }
 }
 
-// También actualiza _mostrarToast para que sea más seguro
+// ✅ Método actualizado para mostrar toast
 void _mostrarToast(String mensaje, {required bool isError}) {
-  // ✅ Verificar que el widget está montado antes de mostrar el SnackBar
   if (!mounted) return;
+  
+  // ✅ Limpiar mensajes previos para evitar cola
+  ScaffoldMessenger.of(context).clearSnackBars();
   
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
@@ -212,11 +211,11 @@ void _mostrarToast(String mensaje, {required bool isError}) {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(GestionAnunciosDimensions.radiusLarge)
       ),
-      duration: const Duration(seconds: 3),
+      // ✅ Reducir duración para no bloquear navegación
+      duration: const Duration(milliseconds: 1500),
     ),
   );
 }
-
   Widget _buildTipoSelector() {
     return Container(
       decoration: GestionAnunciosDecorations.containerWithShadow(),
