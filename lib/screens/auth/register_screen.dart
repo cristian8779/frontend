@@ -412,11 +412,24 @@ class _RegisterStepScreenState extends State<RegisterStepScreen>
 
       if (success) {
         HapticFeedback.mediumImpact();
-        _showSnackBar('¡Bienvenido! Tu cuenta ha sido creada exitosamente 🎉');
+        _showSnackBar('¡Cuenta creada! Ahora puedes iniciar sesión 🎉');
         setState(() => _hasUnsavedChanges = false);
         
-        await Future.delayed(const Duration(seconds: 2));
-        if (mounted) Navigator.pop(context);
+        await Future.delayed(const Duration(milliseconds: 1500));
+        
+        if (mounted) {
+          // Redirigir al login y limpiar el stack de navegación
+          Navigator.of(context).pushNamedAndRemoveUntil(
+            '/login', // Ruta del login
+            (route) => false, // Esto elimina todas las rutas anteriores
+          );
+          
+          // Si no usas rutas nombradas, usa esto en su lugar:
+          // Navigator.of(context).pushAndRemoveUntil(
+          //   MaterialPageRoute(builder: (context) => const LoginScreen()),
+          //   (route) => false,
+          // );
+        }
       } else {
         final mensaje = _getErrorMessage(_authService.message);
         _showSnackBar(mensaje, isError: true);

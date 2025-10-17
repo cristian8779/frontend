@@ -23,6 +23,47 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _wasDisconnected = false;
+  bool _hasShownSuccessMessage = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Mostrar mensaje después de que el widget se construya
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkForSuccessMessage();
+    });
+  }
+
+  void _checkForSuccessMessage() {
+    if (_hasShownSuccessMessage || !mounted) return;
+    
+    final args = ModalRoute.of(context)?.settings.arguments;
+    
+    if (args != null && args is Map) {
+      final showMessage = args['showSuccessMessage'] as bool?;
+      final message = args['message'] as String?;
+      
+      if (showMessage == true && message != null) {
+        _hasShownSuccessMessage = true;
+        
+        // Esperar a que la UI esté completamente estable
+        Future.delayed(const Duration(milliseconds: 800), () {
+          if (!mounted) return;
+          
+          try {
+            final snackBar = SnackBarStyles.buildSnackBar(
+              context,
+              message,
+              backgroundColor: AppColors.success,
+            );
+            ScaffoldMessenger.of(context).showSnackBar(snackBar);
+          } catch (e) {
+            debugPrint('Error mostrando mensaje de éxito: $e');
+          }
+        });
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -34,14 +75,19 @@ class _LoginScreenState extends State<LoginScreen> {
   void _showMessage(String msg, {Color backgroundColor = AppColors.primary}) {
     if (!mounted) return;
 
-    final snackBar = SnackBarStyles.buildSnackBar(
-      context,
-      msg,
-      backgroundColor: backgroundColor,
-      action: _getSnackBarAction(backgroundColor),
-    );
+    try {
+      final snackBar = SnackBarStyles.buildSnackBar(
+        context,
+        msg,
+        backgroundColor: backgroundColor,
+        action: _getSnackBarAction(backgroundColor),
+      );
 
-    ScaffoldMessenger.of(context).showSnackBar(snackBar);
+      ScaffoldMessenger.of(context).showSnackBar(snackBar);
+    } catch (e) {
+      debugPrint('Error mostrando SnackBar: $e');
+      // No propagar el error, solo loguearlo
+    }
   }
 
   SnackBarAction? _getSnackBarAction(Color backgroundColor) {
@@ -109,6 +155,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (!await _checkConnectivity()) return;
 
+    // Capturar la referencia al ScaffoldMessenger ANTES de operaciones async
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
     setState(() => _isLoading = true);
 
     try {
@@ -120,18 +169,61 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (!mounted) return;
 
-      await _handleLoginResult(success, authProvider.rol);
+      if (success) {
+        // Login exitoso - navegar inmediatamente sin mostrar mensaje
+        debugPrint('Login exitoso con AuthProvider');
+        await Future.delayed(const Duration(milliseconds: 100));
+        if (mounted) {
+          _navegarSegunRol(authProvider.rol);
+        }
+      } else {
+        // Login fallido - actualizar estado y mostrar error
+        if (mounted) {
+          setState(() => _isLoading = false);
+        }
+        
+        // Construir y mostrar el SnackBar usando la referencia capturada
+        try {
+          scaffoldMessenger.showSnackBar(
+            SnackBar(
+              content: const Text("Correo o contraseña incorrectos."),
+              backgroundColor: AppColors.error,
+              behavior: SnackBarBehavior.floating,
+              action: SnackBarAction(
+                label: 'Reintentar',
+                textColor: Colors.white,
+                onPressed: _login,
+              ),
+            ),
+          );
+        } catch (e) {
+          debugPrint('Error mostrando SnackBar: $e');
+        }
+      }
     } catch (e) {
       debugPrint('Error en login: $e');
       
-      if (!mounted) return;
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
       
-      _showMessage(
-        "Error inesperado al iniciar sesión\nIntenta nuevamente.",
-        backgroundColor: AppColors.error,
-      );
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+      // Mostrar mensaje de error usando la referencia capturada
+      try {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: const Text("Error inesperado al iniciar sesión\nIntenta nuevamente."),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            action: SnackBarAction(
+              label: 'Reintentar',
+              textColor: Colors.white,
+              onPressed: _login,
+            ),
+          ),
+        );
+      } catch (e) {
+        debugPrint('Error mostrando SnackBar de error: $e');
+      }
     }
   }
 
@@ -141,6 +233,9 @@ class _LoginScreenState extends State<LoginScreen> {
     FocusScope.of(context).unfocus();
 
     if (!await _checkConnectivity()) return;
+
+    // Capturar la referencia al ScaffoldMessenger ANTES de operaciones async
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
 
     setState(() => _isLoading = true);
 
@@ -195,10 +290,21 @@ class _LoginScreenState extends State<LoginScreen> {
           // Limpiar datos pendientes de Google
           authProvider.limpiarDatosGooglePendientes();
           
-          _showMessage(
-            "Debes aceptar los términos para crear una cuenta.",
-            backgroundColor: AppColors.warning,
-          );
+          if (mounted) {
+            setState(() => _isLoading = false);
+            
+            try {
+              scaffoldMessenger.showSnackBar(
+                const SnackBar(
+                  content: Text("Debes aceptar los términos para crear una cuenta."),
+                  backgroundColor: AppColors.warning,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            } catch (e) {
+              debugPrint('Error mostrando SnackBar de términos: $e');
+            }
+          }
         }
       } else if (success) {
         // Usuario existente - login exitoso
@@ -221,21 +327,40 @@ class _LoginScreenState extends State<LoginScreen> {
           errorMessage = "Error al iniciar sesión con Google\n$errorMessage";
         }
         
-        _showMessage(errorMessage, backgroundColor: AppColors.error);
+        if (mounted) {
+          setState(() => _isLoading = false);
+          
+          try {
+            scaffoldMessenger.showSnackBar(
+              SnackBar(
+                content: Text(errorMessage),
+                backgroundColor: AppColors.error,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          } catch (e) {
+            debugPrint('Error mostrando SnackBar de error Google: $e');
+          }
+        }
       }
     } catch (e, stackTrace) {
       debugPrint('Error inesperado en Google login: $e');
       debugPrint('Stack trace: $stackTrace');
       
-      if (!mounted) return;
-      
-      _showMessage(
-        "Error inesperado con Google Login\nIntenta nuevamente.",
-        backgroundColor: AppColors.error,
-      );
-    } finally {
       if (mounted) {
         setState(() => _isLoading = false);
+        
+        try {
+          scaffoldMessenger.showSnackBar(
+            const SnackBar(
+              content: Text("Error inesperado con Google Login\nIntenta nuevamente."),
+              backgroundColor: AppColors.error,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        } catch (e) {
+          debugPrint('Error mostrando SnackBar de error inesperado: $e');
+        }
       }
     }
   }

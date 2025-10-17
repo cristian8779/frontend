@@ -22,36 +22,53 @@ class _MorePageState extends State<MorePage> {
   Map<String, dynamic>? _perfilData;
   bool _isLoadingPerfil = false;
   bool _hasConnectionError = false;
-  bool _yaInicializado = false; // ✅ Variable para controlar la inicialización
+  bool _yaInicializado = false;
 
   @override
   void initState() {
     super.initState();
-    _cargarPerfilUsuario();
+    // Cargar el perfil después de que el widget se construya
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _cargarPerfilUsuario();
+      }
+    });
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     
+    if (!mounted) return;
+    
     // Solo ejecutar la lógica de carga una vez en la primera construcción
     if (!_yaInicializado) {
       _yaInicializado = true;
-      final authProvider = Provider.of<AuthProvider>(context);
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
       
       if (authProvider.isAuthenticated && _perfilData == null && !_hasConnectionError) {
-        _cargarPerfilUsuario();
+        // Usar addPostFrameCallback para evitar problemas durante el build
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _cargarPerfilUsuario();
+          }
+        });
       }
     }
     
     // Limpiar datos solo cuando el usuario cierra sesión
-    final authProvider = Provider.of<AuthProvider>(context);
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (!authProvider.isAuthenticated && _perfilData != null) {
-      setState(() {
-        _perfilData = null;
-        _isLoadingPerfil = false;
-        _hasConnectionError = false;
-        _yaInicializado = false; // Reset para cuando vuelva a iniciar sesión
+      // Usar addPostFrameCallback para actualizar el estado de forma segura
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _perfilData = null;
+            _isLoadingPerfil = false;
+            _hasConnectionError = false;
+            _yaInicializado = false;
+          });
+        }
       });
     }
   }
@@ -78,14 +95,18 @@ class _MorePageState extends State<MorePage> {
   }
 
   Future<void> _cargarPerfilUsuario() async {
+    if (!mounted) return;
+    
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     
     if (!authProvider.isAuthenticated) return;
 
-    setState(() {
-      _isLoadingPerfil = true;
-      _hasConnectionError = false;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoadingPerfil = true;
+        _hasConnectionError = false;
+      });
+    }
 
     try {
       final perfil = await _perfilService.obtenerPerfil();
@@ -98,21 +119,21 @@ class _MorePageState extends State<MorePage> {
         });
       }
     } catch (e) {
+      debugPrint('Error en _cargarPerfilUsuario: $e');
+      debugPrint('Tipo de error: ${e.runtimeType}');
+      
       if (mounted) {
         setState(() {
           _isLoadingPerfil = false;
-          // Usar detección específica de errores de conexión
           _hasConnectionError = _isConnectionError(e);
         });
-        
-        // Debug: imprimir el error para ver qué tipo es
-        print('Error en _cargarPerfilUsuario: $e');
-        print('Tipo de error: ${e.runtimeType}');
       }
     }
   }
 
   void _mostrarOpcionesPerfil() {
+    if (!mounted) return;
+    
     if (_hasConnectionError) {
       _mostrarOpcionesConexion();
       return;
@@ -135,6 +156,8 @@ class _MorePageState extends State<MorePage> {
   }
 
   void _mostrarOpcionesConexion() {
+    if (!mounted) return;
+    
     MoreWidgets.showOptionsBottomSheet(
       context: context,
       title: 'Sin conexión',
@@ -160,6 +183,8 @@ class _MorePageState extends State<MorePage> {
   }
 
   void _mostrarConsejosConexion() {
+    if (!mounted) return;
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -194,6 +219,8 @@ class _MorePageState extends State<MorePage> {
   }
 
   void _navegarEditarPerfil() {
+    if (!mounted) return;
+    
     if (_hasConnectionError) {
       _mostrarMensajeConexionSutil();
       return;
@@ -204,11 +231,15 @@ class _MorePageState extends State<MorePage> {
       '/profile',
       arguments: _perfilData,
     ).then((_) {
-      _cargarPerfilUsuario();
+      if (mounted) {
+        _cargarPerfilUsuario();
+      }
     });
   }
 
   void _mostrarMensajeConexionSutil() {
+    if (!mounted) return;
+    
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Row(
@@ -230,6 +261,8 @@ class _MorePageState extends State<MorePage> {
   }
 
   void _navegarTerminosCondiciones() {
+    if (!mounted) return;
+    
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -239,6 +272,8 @@ class _MorePageState extends State<MorePage> {
   }
 
   void _mostrarOpcionesImagen() {
+    if (!mounted) return;
+    
     if (_hasConnectionError) {
       _mostrarMensajeConexionSutil();
       return;
@@ -285,18 +320,24 @@ class _MorePageState extends State<MorePage> {
   }
 
   void _tomarFoto() {
+    if (!mounted) return;
+    
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Función de cámara pendiente de implementar')),
     );
   }
 
   void _seleccionarDeGaleria() {
+    if (!mounted) return;
+    
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Función de galería pendiente de implementar')),
     );
   }
 
   Future<void> _eliminarImagenPerfil() async {
+    if (!mounted) return;
+    
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -316,7 +357,7 @@ class _MorePageState extends State<MorePage> {
       ),
     );
 
-    if (confirmed == true) {
+    if (confirmed == true && mounted) {
       MoreWidgets.showLoadingDialog(context, 'Eliminando imagen...');
       
       final success = await _perfilService.eliminarImagenPerfil();
@@ -427,29 +468,51 @@ class _MorePageState extends State<MorePage> {
         subtitle: "Salir de tu cuenta",
         isDestructive: true,
         onTap: () async {
+          if (!mounted) return;
+          
+          // Mostrar diálogo de confirmación
+          final confirmed = await showDialog<bool>(
+            context: context,
+            builder: (BuildContext dialogContext) => AlertDialog(
+              title: const Text('Cerrar sesión'),
+              content: const Text('¿Estás seguro de que deseas cerrar tu sesión?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.red,
+                  ),
+                  child: const Text('Cerrar sesión'),
+                ),
+              ],
+            ),
+          );
+          
+          if (confirmed != true || !mounted) return;
+          
+          // Limpiar estado local
           setState(() {
             _perfilData = null;
             _isLoadingPerfil = false;
             _hasConnectionError = false;
-            _yaInicializado = false; // ✅ Reset al cerrar sesión
+            _yaInicializado = false;
           });
           
           final authProvider = Provider.of<AuthProvider>(context, listen: false);
-          
-          // Limpiar favoritos antes del logout
           final favoritoProvider = Provider.of<FavoritoProvider>(context, listen: false);
+          
+          // Limpiar favoritos
           favoritoProvider.limpiarFavoritos();
           
+          // Cerrar sesión
           await authProvider.cerrarSesion();
           
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text("Sesión cerrada"),
-                backgroundColor: MoreStyles.successColor,
-              ),
-            );
-          }
+          // El mensaje lo mostrará el AuthProvider o no es necesario mostrarlo aquí
+          // ya que el cambio de estado será visible inmediatamente en la UI
         },
       ),
     ];
@@ -483,7 +546,7 @@ class _MorePageState extends State<MorePage> {
     String? imagenUrl;
     if (isLoggedIn) {
       if (_hasConnectionError) {
-        imagenUrl = 'connection_error'; // Valor especial para indicar error de conexión
+        imagenUrl = 'connection_error';
       } else if (_perfilData != null) {
         imagenUrl = _perfilData!['imagenPerfil']?.toString();
       }
@@ -510,7 +573,6 @@ class _MorePageState extends State<MorePage> {
             ),
             child: Column(
               children: [
-                // Header del usuario con nuevo parámetro hasConnectionError
                 MoreWidgets.buildUserHeader(
                   context: context,
                   nombre: nombre,
@@ -524,7 +586,6 @@ class _MorePageState extends State<MorePage> {
                 
                 MoreStyles.verticalSpacing(isTablet, MoreStyles.getSectionSpacing(isTablet)),
 
-                // Layout según el dispositivo
                 if (isDesktop) ...[
                   _buildDesktopLayout(isLoggedIn, isTablet),
                 ] else ...[
@@ -583,7 +644,6 @@ class _MorePageState extends State<MorePage> {
   Widget _buildMobileLayout(bool isLoggedIn, bool isTablet) {
     return Column(
       children: [
-        // Navegación
         MoreWidgets.buildSectionCard(
           context: context,
           title: "Navegación",
@@ -592,7 +652,6 @@ class _MorePageState extends State<MorePage> {
 
         MoreStyles.verticalSpacing(isTablet, MoreStyles.getSectionSpacing(isTablet)),
 
-        // Sección según estado de login
         if (!isLoggedIn) ...[
           MoreWidgets.buildSectionCard(
             context: context,
@@ -617,7 +676,6 @@ class _MorePageState extends State<MorePage> {
 
         MoreStyles.verticalSpacing(isTablet, MoreStyles.getSectionSpacing(isTablet)),
 
-        // Información
         MoreWidgets.buildSectionCard(
           context: context,
           title: "Información",
